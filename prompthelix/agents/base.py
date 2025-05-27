@@ -1,4 +1,5 @@
 import abc
+import logging
 
 class BaseAgent(abc.ABC):
     """
@@ -41,8 +42,8 @@ class BaseAgent(abc.ABC):
             message_content: A dictionary containing the message content.
         """
         # Placeholder for message sending logic
-        print(f"Agent {self.agent_id} sending message to {recipient_agent_id}: {message_content}")
-        pass
+        logging.info(f"Agent {self.agent_id} sending message to {recipient_agent_id}: {message_content}")
+        raise NotImplementedError("Inter-agent communication is not fully implemented yet.")
 
     def receive_message(self, sender_agent_id: str, message_content: dict):
         """
@@ -55,5 +56,5 @@ class BaseAgent(abc.ABC):
             message_content: A dictionary containing the message content.
         """
         # Placeholder for message receiving logic
-        print(f"Agent {self.agent_id} received message from {sender_agent_id}: {message_content}")
-        pass
+        logging.info(f"Agent {self.agent_id} received message from {sender_agent_id}: {message_content}")
+        raise NotImplementedError("Inter-agent communication is not fully implemented yet.")

@@ -73,3 +73,15 @@ PromptHelix also provides an API endpoint to trigger the genetic algorithm.
     }
     ```
     Note: The actual prompt and fitness score will vary with each run due to the nature of the genetic algorithm.
+
+### Running Tests
+
+You can run all automated tests (unit and integration tests) using the PromptHelix CLI. This command will discover and execute all tests located within the `prompthelix/tests` directory and its subdirectories.
+
+Execute the following command from the root of the project:
+
+```bash
+python -m prompthelix.cli test
+```
+
+The output will show the progress of the tests and a summary of the results.
