@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+psycopg2-binary
+pydantic
+celery
+redis
+# Add other potential dependencies like openai, anthropic, google-generativeai later
