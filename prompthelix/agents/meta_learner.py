@@ -13,6 +13,7 @@ class MetaLearnerAgent(BaseAgent):
         Sets up the knowledge base and data log.
         """
         super().__init__(agent_id="MetaLearner")
+
         self.knowledge_base = {
             "successful_patterns": [], # Stores features of successful prompts
             "common_pitfalls": {},     # Stores common critique feedback points and their counts
@@ -223,3 +224,4 @@ class MetaLearnerAgent(BaseAgent):
         recommendations = self._generate_recommendations()
         
         return {"status": "Data processed successfully.", "recommendations": recommendations}
+

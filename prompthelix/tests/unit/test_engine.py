@@ -1,4 +1,5 @@
 import unittest
+
 import uuid
 import copy
 from prompthelix.genetics.engine import PromptChromosome
@@ -126,6 +127,7 @@ class TestPromptChromosome(unittest.TestCase):
         self.assertIn(f"genes={self.genes1!r}", chromosome_repr, "__repr__ should include repr of genes.")
         self.assertIn(f"fitness_score={self.fitness1:.4f}", chromosome_repr, "__repr__ should include formatted fitness.")
         self.assertTrue(chromosome_repr.endswith(")"), "__repr__ should end with a parenthesis.")
+
 
 if __name__ == '__main__':
     unittest.main()

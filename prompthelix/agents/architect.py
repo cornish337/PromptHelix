@@ -12,7 +12,14 @@ class PromptArchitectAgent(BaseAgent):
         Loads prompt templates.
         """
         super().__init__(agent_id="PromptArchitect")
-        self.templates = self._load_templates()
+
+        self.recommendations = [
+            "Consider a ReAct-style prompt structure: Thought, Action, Observation.",
+            "Explore a Chain-of-Thought approach: break down the problem into sequential steps.",
+            "For classification tasks, try a few-shot prompt with clear examples for each category.",
+            "Use XML-like tags to delineate different parts of the prompt, like <context>, <question>, <output_format>.",
+        ]
+
 
     def _load_templates(self) -> dict:
         """
@@ -145,6 +152,7 @@ class PromptArchitectAgent(BaseAgent):
             PromptChromosome: An initial prompt chromosome.
         """
         print(f"{self.agent_id} processing request: {request_data}")
+
         
         task_desc = request_data.get("task_description", "Default task description")
         keywords = request_data.get("keywords", [])
@@ -173,3 +181,4 @@ class PromptArchitectAgent(BaseAgent):
         
         print(f"{self.agent_id} - Created PromptChromosome: {str(prompt_chromosome)}")
         return prompt_chromosome
+

@@ -1,5 +1,7 @@
 import abc
 from datetime import datetime
+import logging
+
 
 class BaseAgent(abc.ABC):
     """
@@ -53,6 +55,7 @@ class BaseAgent(abc.ABC):
             bool: True if the message was sent or attempted to be sent, False otherwise.
                   In this implementation, it always returns True after attempting.
         """
+
         message = {
             "sender_id": self.agent_id,
             "recipient_id": recipient_agent_id,
@@ -77,6 +80,7 @@ class BaseAgent(abc.ABC):
             # unless a direct P2P mechanism was implemented here.
             return True
 
+
     def receive_message(self, message: dict):
         """
         Handles an incoming message received by this agent.
@@ -93,6 +97,7 @@ class BaseAgent(abc.ABC):
             The result of `self.process_request(payload)` if the message_type
             is "direct_request", or None for other message types in this basic setup.
         """
+
         sender_id = message.get('sender_id', 'UnknownSender')
         msg_type = message.get('message_type', 'UnknownType')
         payload = message.get('payload', {})
@@ -109,3 +114,4 @@ class BaseAgent(abc.ABC):
         else:
             print(f"{self.agent_id} logged message of type '{msg_type}' or will handle differently.")
             return {"status": "message_logged", "type": msg_type}
+

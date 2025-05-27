@@ -11,6 +11,7 @@ class DomainExpertAgent(BaseAgent):
         Loads domain-specific knowledge.
         """
         super().__init__(agent_id="DomainExpert")
+
         self.knowledge_base = self._load_domain_knowledge()
 
     def _load_domain_knowledge(self) -> dict:
@@ -132,3 +133,4 @@ class DomainExpertAgent(BaseAgent):
             return {"error": f"Query type '{query_type}' not found for domain '{domain}'."}
         
         return {"domain": domain, "query_type": query_type, "data": requested_data}
+

@@ -44,6 +44,7 @@ class Settings:
     # Add other relevant system parameters here
 
     # Security settings
+    # TODO: Uncomment and set a strong, unique SECRET_KEY for production environments.
     # SECRET_KEY: str = os.getenv("SECRET_KEY", "a_very_secret_key") # For JWT, session management etc.
     # ALGORITHM: str = "HS256" # For JWT
 

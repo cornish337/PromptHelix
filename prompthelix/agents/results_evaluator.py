@@ -13,6 +13,7 @@ class ResultsEvaluatorAgent(BaseAgent):
         Loads evaluation metric configurations.
         """
         super().__init__(agent_id="ResultsEvaluator")
+
         self.evaluation_metrics_config = self._load_metrics_config()
 
     def _load_metrics_config(self) -> dict:
@@ -226,3 +227,4 @@ class ResultsEvaluatorAgent(BaseAgent):
             "detailed_metrics": metrics,
             "error_analysis": errors
         }
+

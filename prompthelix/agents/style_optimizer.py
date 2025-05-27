@@ -12,6 +12,7 @@ class StyleOptimizerAgent(BaseAgent):
         Loads style transformation rules or lexicons.
         """
         super().__init__(agent_id="StyleOptimizer")
+
         self.style_rules = self._load_style_rules()
 
     def _load_style_rules(self) -> dict:
@@ -201,3 +202,4 @@ class StyleOptimizerAgent(BaseAgent):
             print(f"{self.agent_id} - No stylistic changes applied for target style '{target_style}'.")
 
         return optimized_chromosome
+

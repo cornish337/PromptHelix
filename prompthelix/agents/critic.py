@@ -13,6 +13,7 @@ class PromptCriticAgent(BaseAgent):
         Loads critique rules or heuristics.
         """
         super().__init__(agent_id="PromptCritic")
+
         self.critique_rules = self._load_critique_rules()
 
     def _load_critique_rules(self) -> list:
@@ -163,3 +164,4 @@ class PromptCriticAgent(BaseAgent):
         }
         print(f"{self.agent_id} - Critique result: Score={critique_score}, Feedback#={len(feedback_points)}")
         return result
+

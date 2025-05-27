@@ -146,6 +146,7 @@ class GeneticOperators:
         If random.random() < crossover_rate, crossover occurs. Otherwise, children
         are clones of the parents.
 
+
         Args:
             parent1 (PromptChromosome): The first parent chromosome.
             parent2 (PromptChromosome): The second parent chromosome.
@@ -335,6 +336,7 @@ class PopulationManager:
         self.population_size = population_size
         self.elitism_count = elitism_count
         
+
         self.population: list[PromptChromosome] = []
         self.generation_number: int = 0
 
@@ -368,6 +370,7 @@ class PopulationManager:
             if not isinstance(chromosome, PromptChromosome):
                 print(f"PopulationManager: Warning - PromptArchitectAgent did not return a PromptChromosome. Got: {type(chromosome)}. Skipping.")
                 continue
+
             self.population.append(chromosome)
         
         if len(self.population) != self.population_size:
@@ -430,8 +433,10 @@ class PopulationManager:
                 generated_offspring_count += 1
         
         self.population = new_population[:self.population_size] # Ensure population size is maintained
+
         self.generation_number += 1
         print(f"PopulationManager: Evolution complete. New generation: {self.generation_number}. Population size: {len(self.population)}")
+
 
     def get_fittest_individual(self) -> PromptChromosome | None:
         """
@@ -449,4 +454,4 @@ class PopulationManager:
         # Assuming population is sorted by evolve_population or needs sorting if called ad-hoc
         # For safety, re-sort if evolve_population isn't guaranteed to have just run
         # self.population.sort(key=lambda chromo: chromo.fitness_score, reverse=True)
-        return self.population[0]
+
