@@ -1,10 +1,6 @@
-from fastapi import APIRouter
 from prompthelix.genetics.engine import PopulationManager
 
-router = APIRouter()
-
-@router.get("/run-ga")
-async def run_ga_endpoint():
+if __name__ == "__main__":
     # Define parameters for the PopulationManager
     population_size = 50
     gene_pool_characters = "abcdefghijklmnopqrstuvwxyz "
@@ -26,11 +22,14 @@ async def run_ga_endpoint():
     manager.initialize_population()
 
     # Loop for num_generations
-    for _ in range(num_generations):
+    for i in range(num_generations):
         manager.evolve_population()
+        fittest_individual = manager.get_fittest_individual()
+        print(f"Generation {i+1}: Best Prompt: '{fittest_individual}', Fitness: {fittest_individual.fitness_score}")
 
-    # Get the fittest individual from the manager
-    fittest_individual = manager.get_fittest_individual()
+    # Get the overall fittest individual from the final population
+    overall_fittest_individual = manager.get_fittest_individual()
 
-    # Return a dictionary
-    return {"best_prompt": str(fittest_individual), "fitness": fittest_individual.fitness_score}
+    # Print the final results
+    print("Finished Genetic Algorithm.")
+    print(f"Best prompt found: '{overall_fittest_individual}', Fitness: {overall_fittest_individual.fitness_score}")
