@@ -19,6 +19,6 @@ async def root():
     """
     return {"message": "Welcome to PromptHelix API"}
 
-# Placeholder for including API routes from prompthelix.api.routes
-# For example: from prompthelix.api import routes as api_routes
-# app.include_router(api_routes.router)
+# Include API routes from prompthelix.api.routes
+from prompthelix.api import routes as api_routes
+app.include_router(api_routes.router, prefix="/api")
