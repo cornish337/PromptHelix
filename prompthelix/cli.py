@@ -10,6 +10,7 @@ import sys
 import os
 import unittest
 
+
 def main_cli():
     """
     Main function for the PromptHelix CLI.
@@ -30,6 +31,7 @@ def main_cli():
     # "run" command
     run_parser = subparsers.add_parser("run", help="Run the PromptHelix application or a specific module")
     run_parser.add_argument("module", nargs="?", default="ga", help="Module to run (e.g., 'ga')")
+
 
     args = parser.parse_args()
 
@@ -152,6 +154,7 @@ def main_cli():
         else:
             print(f"Error: Unknown module '{args.module}'. Currently, only 'ga' module is supported for the run command.", file=sys.stderr)
             sys.exit(1)
+
     # No specific action needed for --version as argparse handles it
     elif hasattr(args, 'version') and args.version:
         pass
