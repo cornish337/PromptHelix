@@ -7,9 +7,9 @@ from fastapi import FastAPI
 # Initialize FastAPI application
 app = FastAPI()
 
-# Placeholder for WebSocket support (to be added)
-# Placeholder for Authentication (to be added)
-# Placeholder for Rate Limiting (to be added)
+# TODO: Implement WebSocket support for real-time communication (future feature).
+# TODO: Implement robust authentication and authorization mechanisms (future feature).
+# TODO: Implement rate limiting to protect the API (future feature).
 
 @app.get("/")
 async def root():

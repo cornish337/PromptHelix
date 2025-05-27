@@ -25,6 +25,7 @@ def main_cli():
     # Subcommand for "test"
     test_parser = subparsers.add_parser("test", help="Run all tests")
     # The --all argument is removed, test command will now always run all tests.
+    # TODO: Future enhancement could allow specifying individual test files or modules.
 
     # "run" command
     run_parser = subparsers.add_parser("run", help="Run the PromptHelix application or a specific module")

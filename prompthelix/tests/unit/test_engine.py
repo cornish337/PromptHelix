@@ -3,7 +3,7 @@ from unittest.mock import patch
 import random
 import string
 
-from prompthelix.genetics.engine import PromptChromosome, GeneticOperators, PopulationManager
+from prompthelix.genetics.engine import PromptChromosome, GeneticOperators, PopulationManager, FitnessEvaluator
 
 class TestPromptChromosome(unittest.TestCase):
     """Test suite for the PromptChromosome class."""
@@ -217,6 +217,210 @@ class TestPopulationManager(unittest.TestCase):
         # Test with population having one individual
         self.manager.population = [fittest_chromosome]
         retrieved_single = self.manager.get_fittest_individual()
+        self.assertEqual(retrieved_single.genes, fitter_gene)
+
+
+class TestFitnessEvaluator(unittest.TestCase):
+    """Test suite for the FitnessEvaluator class."""
+
+    def setUp(self):
+        self.evaluator = FitnessEvaluator()
+
+    def test_evaluate_basic_score(self):
+        """Test basic score calculation (just length)."""
+        genes = "test"
+        chromosome = PromptChromosome(genes)
+        expected_score = float(len(genes))
+        
+        score = self.evaluator.evaluate(chromosome)
+        
+        self.assertEqual(score, expected_score)
+        self.assertEqual(chromosome.fitness_score, expected_score)
+
+    def test_evaluate_with_char_bonuses(self):
+        """Test score calculation with character bonuses."""
+        genes = "lazy fox" # x, z
+        chromosome = PromptChromosome(genes)
+        expected_score = float(len(genes)) + 5.0 (for 'x') + 5.0 (for 'z')
+        
+        score = self.evaluator.evaluate(chromosome)
+        
+        self.assertEqual(score, expected_score)
+        self.assertEqual(chromosome.fitness_score, expected_score)
+
+    def test_evaluate_with_keyword_bonuses(self):
+        """Test score calculation with keyword bonuses."""
+        genes = "my prompthelix project" # prompt, helix
+        chromosome = PromptChromosome(genes)
+        expected_score = float(len(genes)) + 10.0 (for 'helix') + 8.0 (for 'prompt')
+        
+        score = self.evaluator.evaluate(chromosome)
+        
+        self.assertEqual(score, expected_score)
+        self.assertEqual(chromosome.fitness_score, expected_score)
+
+    def test_evaluate_all_bonuses(self):
+        """Test score calculation with all types of bonuses."""
+        genes = "quiz helix prompt" # q, z, helix, prompt
+        chromosome = PromptChromosome(genes)
+        expected_score = float(len(genes)) + 5.0 (for 'q') + 5.0 (for 'z') + 10.0 (for 'helix') + 8.0 (for 'prompt')
+        
+        score = self.evaluator.evaluate(chromosome)
+        
+        self.assertEqual(score, expected_score)
+        self.assertEqual(chromosome.fitness_score, expected_score)
+
+    def test_evaluate_case_insensitivity(self):
+        """Test that bonuses are case-insensitive."""
+        genes = "QuIz HeLiX pRoMpT"
+        chromosome = PromptChromosome(genes)
+        expected_score = float(len(genes)) + 5.0 (for 'q') + 5.0 (for 'z') + 10.0 (for 'helix') + 8.0 (for 'prompt')
+        score = self.evaluator.evaluate(chromosome)
+        self.assertEqual(score, expected_score)
+
+
+class TestPopulationManager(unittest.TestCase):
+    """Test suite for the PopulationManager class."""
+
+    def setUp(self):
+        self.base_params = {
+            "population_size": 10,
+            "gene_pool_characters": "abcxyzprompthelix", # Ensure bonus chars are possible
+            "gene_length": 15, # Long enough for keywords
+            "mutation_rate": 0.1,
+            "num_parents_for_selection": 4
+        }
+        # Manager without external evaluator
+        self.manager_default_fitness = PopulationManager(**self.base_params)
+        
+        # Manager with external evaluator
+        self.fitness_evaluator = FitnessEvaluator()
+        self.manager_with_evaluator = PopulationManager(**self.base_params, fitness_evaluator=self.fitness_evaluator)
+
+
+    def test_initialize_population_default_fitness(self):
+        """Test population initialization using default chromosome.calculate_fitness()."""
+        self.manager_default_fitness.initialize_population()
+        
+        self.assertEqual(len(self.manager_default_fitness.population), self.base_params["population_size"])
+        for chromosome in self.manager_default_fitness.population:
+            self.assertIsInstance(chromosome, PromptChromosome)
+            self.assertEqual(len(chromosome.genes), self.base_params["gene_length"])
+            # Fitness should be calculated by PromptChromosome.calculate_fitness()
+            self.assertEqual(chromosome.fitness_score, float(len(chromosome.genes)))
+            for gene_char in chromosome.genes:
+                self.assertIn(gene_char, self.base_params["gene_pool_characters"])
+
+    def test_initialize_population_with_evaluator(self):
+        """Test population initialization using the external FitnessEvaluator."""
+        self.manager_with_evaluator.initialize_population()
+        
+        self.assertEqual(len(self.manager_with_evaluator.population), self.base_params["population_size"])
+        # Check at least one chromosome to see if FitnessEvaluator was likely used
+        # This is probabilistic but simpler than mocking gene generation for specific bonuses
+        found_bonus_score = False
+        for chromosome in self.manager_with_evaluator.population:
+            self.assertIsInstance(chromosome, PromptChromosome)
+            self.assertEqual(len(chromosome.genes), self.base_params["gene_length"])
+            # Fitness should be calculated by FitnessEvaluator
+            # It's hard to predict exact score without knowing the genes,
+            # but if it has bonus characters/keywords, it should be > len(genes)
+            expected_eval_score = self.fitness_evaluator.evaluate(PromptChromosome(chromosome.genes)) # Recalculate to compare
+            self.assertEqual(chromosome.fitness_score, expected_eval_score)
+            if chromosome.fitness_score > len(chromosome.genes):
+                found_bonus_score = True
+        
+        # Given the gene pool, it's highly probable some chromosomes get bonuses
+        # If gene_length is small or pool is limited, this might need adjustment
+        self.assertTrue(found_bonus_score, "Expected at least one chromosome to have a bonus-affected score by FitnessEvaluator.")
+
+
+    @patch.object(GeneticOperators, 'selection')
+    @patch.object(GeneticOperators, 'crossover')
+    @patch.object(GeneticOperators, 'mutate')
+    def test_evolve_population_default_fitness(self, mock_mutate, mock_crossover, mock_selection):
+        """Test population evolution with default fitness calculation."""
+        self.manager_default_fitness.initialize_population()
+        initial_population_size = len(self.manager_default_fitness.population)
+
+        dummy_parent = PromptChromosome("parentgenes")
+        dummy_parent.calculate_fitness()
+        dummy_offspring_before_mutation = PromptChromosome("crossovergenes")
+        dummy_offspring_after_mutation = PromptChromosome("mutatedgenes")
+        # Fitness calculated by PromptChromosome.calculate_fitness()
+        dummy_offspring_after_mutation.calculate_fitness() 
+
+        mock_selection.return_value = [dummy_parent] * self.base_params["num_parents_for_selection"]
+        mock_crossover.return_value = dummy_offspring_before_mutation
+        mock_mutate.return_value = dummy_offspring_after_mutation
+        
+        self.manager_default_fitness.evolve_population()
+        
+        self.assertEqual(len(self.manager_default_fitness.population), initial_population_size)
+        self.assertEqual(self.manager_default_fitness.generation_number, 1)
+        
+        for chrom in self.manager_default_fitness.population:
+            self.assertEqual(chrom.genes, "mutatedgenes")
+            self.assertEqual(chrom.fitness_score, len("mutatedgenes")) # Default fitness
+
+    @patch.object(GeneticOperators, 'selection')
+    @patch.object(GeneticOperators, 'crossover')
+    @patch.object(GeneticOperators, 'mutate')
+    def test_evolve_population_with_evaluator(self, mock_mutate, mock_crossover, mock_selection):
+        """Test population evolution with external FitnessEvaluator."""
+        self.manager_with_evaluator.initialize_population() # Uses evaluator
+        initial_population_size = len(self.manager_with_evaluator.population)
+
+        dummy_parent = PromptChromosome("parentgenesXQZ") # Contains bonus chars
+        self.fitness_evaluator.evaluate(dummy_parent) # Evaluated by FitnessEvaluator
+
+        dummy_offspring_before_mutation = PromptChromosome("crossoverPROMPT") # Contains bonus word
+        dummy_offspring_after_mutation = PromptChromosome("mutatedHELIX")    # Contains bonus word
+        # Fitness will be calculated by FitnessEvaluator inside evolve_population
+
+        mock_selection.return_value = [dummy_parent] * self.base_params["num_parents_for_selection"]
+        mock_crossover.return_value = dummy_offspring_before_mutation
+        mock_mutate.return_value = dummy_offspring_after_mutation
+        
+        self.manager_with_evaluator.evolve_population()
+        
+        self.assertEqual(len(self.manager_with_evaluator.population), initial_population_size)
+        self.assertEqual(self.manager_with_evaluator.generation_number, 1)
+        
+        expected_fitness_for_mutated_helix = self.fitness_evaluator.evaluate(PromptChromosome("mutatedHELIX"))
+        for chrom in self.manager_with_evaluator.population:
+            self.assertEqual(chrom.genes, "mutatedHELIX")
+            # Fitness should reflect FitnessEvaluator's calculation
+            self.assertEqual(chrom.fitness_score, expected_fitness_for_mutated_helix)
+
+
+    def test_get_fittest_individual(self):
+        """Test retrieving the fittest individual from the population (applies to both managers)."""
+        # This test uses the default fitness for simplicity, but logic is same for manager_with_evaluator
+        # as get_fittest_individual only sorts based on pre-calculated fitness_score
+        self.manager_default_fitness.initialize_population() 
+        
+        fitter_gene = "abcdef" 
+        fittest_chromosome = PromptChromosome(fitter_gene)
+        fittest_chromosome.calculate_fitness() # Default fitness
+        self.manager_default_fitness.population.append(fittest_chromosome)
+        
+        less_fit_gene = "abc" 
+        less_fit_chromosome = PromptChromosome(less_fit_gene)
+        less_fit_chromosome.calculate_fitness() # Default fitness
+        self.manager_default_fitness.population.append(less_fit_chromosome)
+
+        retrieved_fittest = self.manager_default_fitness.get_fittest_individual()
+        self.assertEqual(retrieved_fittest.genes, fitter_gene)
+
+        # Test with an empty population
+        self.manager_default_fitness.population = []
+        with self.assertRaises(IndexError):
+            self.manager_default_fitness.get_fittest_individual()
+        
+        # Test with population having one individual
+        self.manager_default_fitness.population = [fittest_chromosome]
+        retrieved_single = self.manager_default_fitness.get_fittest_individual()
         self.assertEqual(retrieved_single.genes, fitter_gene)
 
 
