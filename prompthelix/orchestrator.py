@@ -31,6 +31,9 @@ def main_ga_loop(
     # 2. Instantiate GA Components
     print("Initializing GA components...")
     genetic_ops = GeneticOperators()
+    # Ensure OPENAI_API_KEY (and other necessary keys for LLMs like ANTHROPIC_API_KEY, GOOGLE_API_KEY if used)
+    # are set in the environment for the FitnessEvaluator to function correctly with actual LLM calls.
+    # FitnessEvaluator handles its own OpenAI client initialization using settings from config.py.
     fitness_eval = FitnessEvaluator(results_evaluator_agent=results_evaluator)
     pop_manager = PopulationManager(
         genetic_operators=genetic_ops, 

@@ -2,6 +2,12 @@ import uuid
 import copy
 import random
 from typing import TYPE_CHECKING
+import openai
+from openai import OpenAIError
+from prompthelix.config import settings
+import logging
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:  # pragma: no cover - only for type hints
     from prompthelix.agents.architect import PromptArchitectAgent
@@ -259,8 +265,59 @@ class FitnessEvaluator:
         if not isinstance(results_evaluator_agent, ResultsEvaluatorAgent):
             raise TypeError("results_evaluator_agent must be an instance of ResultsEvaluatorAgent.")
         self.results_evaluator_agent = results_evaluator_agent
+        self.openai_client = None  # Initialize to None
 
-    def evaluate(self, chromosome: PromptChromosome, task_description: str, 
+        if not settings.OPENAI_API_KEY:
+            logger.error("OPENAI_API_KEY not found in settings. FitnessEvaluator will not be able to make LLM calls.")
+            # The print warning can be removed or kept for immediate console feedback if desired.
+            # print("Warning: OPENAI_API_KEY not found in settings. FitnessEvaluator may not function correctly.")
+        else:
+            try:
+                self.openai_client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
+                logger.info("OpenAI client initialized successfully.")
+            except Exception as e: # Catch a broader exception during client initialization
+                logger.error(f"Error initializing OpenAI client: {e}", exc_info=True)
+                # Depending on the desired behavior, either raise an error or ensure client remains None
+                # and is handled in _call_llm_api
+                # For robustness, we'll let it remain None and _call_llm_api will handle it.
+                # raise RuntimeError(f"Failed to initialize OpenAI client: {e}") # Or re-raise
+
+    def _call_llm_api(self, prompt_string: str, model_name: str = "gpt-3.5-turbo") -> str:
+        """
+        Calls the LLM API with the given prompt string.
+        Args:
+            prompt_string (str): The prompt to send to the LLM.
+            model_name (str, optional): The model to use. Defaults to "gpt-3.5-turbo".
+        Returns:
+            str: The LLM's response content, or an error message string if the call fails.
+        """
+        if not self.openai_client: # Check if client was initialized
+            logger.error("OpenAI client is not initialized. Cannot call LLM API.")
+            return "Error: LLM client not initialized."
+
+        logger.info(f"Calling OpenAI API model {model_name} for prompt (first 100 chars): {prompt_string[:100]}...")
+        try:
+            response = self.openai_client.chat.completions.create(
+                model=model_name,
+                messages=[
+                    {"role": "user", "content": prompt_string}
+                ]
+            )
+            if response.choices and response.choices[0].message and response.choices[0].message.content:
+                content = response.choices[0].message.content.strip()
+                logger.info(f"OpenAI API call successful. Response (first 100 chars): {content[:100]}...")
+                return content
+            else:
+                logger.warning(f"OpenAI API call for prompt '{prompt_string[:50]}...' returned no content or unexpected response structure.")
+                return "Error: No content from LLM."
+        except OpenAIError as e:
+            logger.error(f"OpenAI API error for prompt '{prompt_string[:50]}...': {e}", exc_info=True)
+            return f"Error: LLM API call failed. Details: {str(e)}"
+        except Exception as e: # Catch any other unexpected errors
+            logger.critical(f"Unexpected error during OpenAI API call for prompt '{prompt_string[:50]}...': {e}", exc_info=True)
+            return f"Error: Unexpected issue during LLM API call. Details: {str(e)}"
+
+    def evaluate(self, chromosome: PromptChromosome, task_description: str,
                  success_criteria: dict | None = None) -> float:
         """
         Evaluates the fitness of a given chromosome.
@@ -279,16 +336,21 @@ class FitnessEvaluator:
         if not isinstance(chromosome, PromptChromosome):
             raise TypeError("chromosome must be an instance of PromptChromosome.")
         prompt_string = chromosome.to_prompt_string()
-        print(f"FitnessEvaluator: Simulating LLM call for prompt: {prompt_string[:100]}...")
-        mock_llm_output = (
-            f"Mock LLM output for: {prompt_string}[:50]. "
-            f"Keywords found: {', '.join(str(g) for g in chromosome.genes[:2]) if chromosome.genes else 'N/A'}. "
-            f"Random number: {random.randint(0, 100)}"
-        )
-        print(f"FitnessEvaluator: Mock LLM Output: {mock_llm_output[:150]}...")
+
+        # The call to _call_llm_api is now logged within that method.
+        llm_output = self._call_llm_api(prompt_string)
+
+        if llm_output.startswith("Error:"):
+            logger.warning(f"LLM call for prompt ID {chromosome.id} (text: {prompt_string[:50]}...) failed. Output: {llm_output}")
+        # else:
+            # Successful LLM output is logged in _call_llm_api.
+            # If further logging of the output snippet is desired here, it can be added.
+            # logger.debug(f"FitnessEvaluator: LLM Output for prompt ID {chromosome.id}: {llm_output[:150]}...")
+
+
         request_data = {
             "prompt_chromosome": chromosome,
-            "llm_output": mock_llm_output,
+            "llm_output": llm_output, # Pass the actual or error string from LLM
             "task_description": task_description,
             "success_criteria": success_criteria if success_criteria else {}
         }

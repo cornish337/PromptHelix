@@ -11,4 +11,5 @@ pydantic
 celery
 redis
 httpx
+openai
 # Add other potential dependencies like openai, anthropic, google-generativeai later
