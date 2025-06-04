@@ -28,7 +28,7 @@ class TestCli(unittest.TestCase):
             # Check for expected output fragments
             self.assertIn("CLI: Running Genetic Algorithm...", result.stdout, "CLI start message not found.")
             self.assertIn("Generation", result.stdout, "Generation keyword not found in output.")
-            self.assertIn("Best prompt found:", result.stdout, "Final best prompt message not found.")
+            self.assertIn("Overall Best Prompt Found", result.stdout, "Final best prompt message not found.") # Changed this line
             self.assertTrue(len(result.stdout.splitlines()) > 5, "Output seems too short.") # Basic check for some iteration
 
         except subprocess.CalledProcessError as e:

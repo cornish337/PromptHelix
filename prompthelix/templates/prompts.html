@@ -1,22 +1,23 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Prompt Manager</title>
-</head>
-<body>
-    <h1>Prompt Manager</h1>
-    <form action="/ui/prompts" method="post">
-        <textarea name="content" rows="4" cols="60" placeholder="Enter prompt text"></textarea><br>
-        <button type="submit">Add Prompt</button>
-    </form>
 
-    <h2>Existing Prompts</h2>
-    <ul>
-    {% for p in prompts %}
-        <li><pre>{{ p.content }}</pre></li>
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Available Prompts</h1>
+<p>
+    <a href="#">Create New Prompt</a> <!-- Placeholder URL -->
+</p>
+<ul>
+    {% for prompt in prompts %}
+    <li>
+        <h2><a href="{{ url_for('view_prompt_ui', prompt_id=prompt.id) }}">{{ prompt.name }}</a></h2>
+        {% if prompt.description %}
+        <p>{{ prompt.description }}</p>
+        {% endif %}
+        <p><small>Created: {{ prompt.created_at.strftime('%Y-%m-%d %H:%M') }}</small></p>
+        <p><small>Versions: {{ prompt.versions | length }}</small></p>
+    </li>
     {% else %}
-        <li>No prompts yet.</li>
+    <li>No prompts available yet.</li>
     {% endfor %}
-    </ul>
-</body>
-</html>
+</ul>
+{% endblock %}

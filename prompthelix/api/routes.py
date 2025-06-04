@@ -1,55 +1,126 @@
-from pathlib import Path
-from fastapi import APIRouter, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from typing import List
+from datetime import datetime # For default prompt name
+
+from prompthelix.database import get_db
+from prompthelix.api import crud
+from prompthelix import schemas
 from prompthelix.orchestrator import main_ga_loop
-from prompthelix.genetics.engine import PromptChromosome
-from prompthelix.services.prompt_manager import PromptManager
+from prompthelix.genetics.engine import PromptChromosome # To check instance type
 
 router = APIRouter()
 
-# Template configuration for simple HTML interface
-templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent.parent / "templates"))
+@router.post("/api/prompts", response_model=schemas.Prompt)
+def create_prompt_route(prompt: schemas.PromptCreate, db: Session = Depends(get_db)):
+    return crud.create_prompt(db=db, prompt=prompt)
 
-# In-memory prompt manager instance
-prompt_manager = PromptManager()
+@router.get("/api/prompts", response_model=List[schemas.Prompt])
+def read_prompts_route(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    prompts = crud.get_prompts(db, skip=skip, limit=limit)
+    return prompts
 
-@router.get("/api/run-ga")
-async def run_ga_endpoint():
-    """Run the placeholder genetic algorithm and return the best prompt."""
-    # Capture printed output? We'll run and capture best result by running orchestrator and capturing return value? main_ga_loop prints but doesn't return best. We'll modify orchestrator maybe.
-    best = main_ga_loop(return_best=True)
-    if isinstance(best, PromptChromosome):
-        return {"best_prompt": best.to_prompt_string(), "fitness": best.fitness_score}
-    return {"best_prompt": "", "fitness": 0.0}
+@router.get("/api/prompts/{prompt_id}", response_model=schemas.Prompt)
+def read_prompt_route(prompt_id: int, db: Session = Depends(get_db)):
+    db_prompt = crud.get_prompt(db, prompt_id=prompt_id)
+    if db_prompt is None:
+        raise HTTPException(status_code=404, detail="Prompt not found")
+    return db_prompt
+
+@router.put("/api/prompts/{prompt_id}", response_model=schemas.Prompt)
+def update_prompt_route(prompt_id: int, prompt: schemas.PromptCreate, db: Session = Depends(get_db)):
+    db_prompt = crud.update_prompt(db, prompt_id=prompt_id, prompt_update=prompt)
+    if db_prompt is None:
+        raise HTTPException(status_code=404, detail="Prompt not found")
+    return db_prompt
+
+@router.delete("/api/prompts/{prompt_id}", response_model=schemas.Prompt)
+def delete_prompt_route(prompt_id: int, db: Session = Depends(get_db)):
+    db_prompt = crud.delete_prompt(db, prompt_id=prompt_id)
+    if db_prompt is None:
+        raise HTTPException(status_code=404, detail="Prompt not found")
+    return db_prompt
+
+@router.post("/api/prompts/{prompt_id}/versions", response_model=schemas.PromptVersion)
+def create_prompt_version_route(prompt_id: int, version: schemas.PromptVersionCreate, db: Session = Depends(get_db)):
+    db_prompt = crud.get_prompt(db, prompt_id=prompt_id)
+    if db_prompt is None:
+        raise HTTPException(status_code=404, detail="Prompt not found to associate version with")
+
+    created_version = crud.create_prompt_version(db=db, version=version, prompt_id=prompt_id)
+    if created_version is None: # Should not happen if prompt was found, but as a safeguard
+        raise HTTPException(status_code=500, detail="Could not create prompt version")
+    return created_version
 
 
-@router.get("/api/prompts")
-async def list_prompts():
-    """Return all stored prompts."""
-    return {"prompts": prompt_manager.list_prompts()}
-
-
-@router.post("/api/prompts")
-async def create_prompt(prompt: dict):
-    """Create a new prompt from posted JSON."""
-    content = prompt.get("content", "")
-    if not content:
-        return {"error": "content required"}
-    return prompt_manager.add_prompt(content)
-
-
-@router.get("/ui/prompts", response_class=HTMLResponse)
-async def prompts_page(request: Request):
-    """Render the HTML interface for managing prompts."""
-    return templates.TemplateResponse(
-        "prompts.html",
-        {"request": request, "prompts": prompt_manager.list_prompts()},
+@router.post("/api/experiments/run-ga", response_model=schemas.PromptVersion, name="api_run_ga_experiment")
+def run_ga_experiment(params: schemas.GAExperimentParams, db: Session = Depends(get_db)):
+    best_chromosome = main_ga_loop(
+        task_desc=params.task_description,
+        keywords=params.keywords,
+        num_generations=params.num_generations,
+        population_size=params.population_size,
+        elitism_count=params.elitism_count,
+        return_best=True
     )
 
+    if not isinstance(best_chromosome, PromptChromosome):
+        raise HTTPException(status_code=500, detail="GA did not return a valid prompt chromosome.")
 
-@router.post("/ui/prompts", response_class=RedirectResponse)
-async def add_prompt_page(content: str = Form(...)):
-    """Handle form submission from the HTML interface."""
-    prompt_manager.add_prompt(content)
-    return RedirectResponse(url="/ui/prompts", status_code=303)
+    target_prompt = None
+    if params.parent_prompt_id:
+        target_prompt = crud.get_prompt(db, prompt_id=params.parent_prompt_id)
+        if not target_prompt:
+            raise HTTPException(status_code=404, detail=f"Parent prompt with id {params.parent_prompt_id} not found.")
+    elif params.prompt_name:
+        prompt_create_data = schemas.PromptCreate(name=params.prompt_name, description=params.prompt_description)
+        target_prompt = crud.create_prompt(db, prompt=prompt_create_data)
+    else:
+        default_name = f"GA Generated Prompt - {datetime.utcnow().isoformat()}"
+        prompt_create_data = schemas.PromptCreate(name=default_name, description=params.prompt_description or "Generated by GA experiment")
+        target_prompt = crud.create_prompt(db, prompt=prompt_create_data)
+
+    if not target_prompt: # Should be caught by logic above, but as a safeguard
+        raise HTTPException(status_code=500, detail="Could not determine or create target prompt for GA result.")
+
+    # Prepare parameters_used: exclude fields used for prompt association
+    ga_params_for_version = params.model_dump(exclude={"parent_prompt_id", "prompt_name", "prompt_description"})
+
+
+    version_create_data = schemas.PromptVersionCreate(
+        content=best_chromosome.to_prompt_string(),
+        parameters_used=ga_params_for_version,
+        fitness_score=best_chromosome.fitness_score
+    )
+
+    created_version = crud.create_prompt_version(db, version=version_create_data, prompt_id=target_prompt.id)
+
+    if not created_version:
+        # This might happen if create_prompt_version itself fails for some reason (e.g. DB error not caught inside)
+        raise HTTPException(status_code=500, detail="Failed to save GA experiment result as a prompt version.")
+
+    return created_version
+
+
+# Existing GA route (can be kept, deprecated, or removed)
+# from prompthelix.orchestrator import main_ga_loop # already imported
+# from prompthelix.genetics.engine import PromptChromosome # already imported
+# @router.get("/api/run-ga") # This is an old endpoint, consider deprecating
+# async def old_run_ga_endpoint(db: Session = Depends(get_db)): # Added db session for consistency if it were to be updated
+#     """Placeholder: Run the genetic algorithm with default parameters and return the best prompt."""
+#     # This is a simplified call, assumes default parameters for main_ga_loop if it still supports them,
+#     # or requires an update to call the new main_ga_loop with fixed defaults.
+#     # For now, this just illustrates where it is. It will likely fail if main_ga_loop's signature
+#     # is strictly as refactored (no default values for task_desc, keywords etc.)
+#     try:
+#         # A more robust implementation would define default params here
+#         # and potentially save the result as well, similar to the new endpoint.
+#         best = main_ga_loop(task_desc="Default task", keywords=[], num_generations=5, population_size=10, elitism_count=1, return_best=True)
+#         if isinstance(best, PromptChromosome):
+#             # Not saving this to DB, just returning raw for this old endpoint
+#             return {"best_prompt": best.to_prompt_string(), "fitness": best.fitness_score}
+#     except Exception as e:
+#         # Catch if main_ga_loop fails due to changed signature / missing params
+#         raise HTTPException(status_code=500, detail=f"Old GA endpoint failed: {e}")
+#     raise HTTPException(status_code=404, detail="Old GA endpoint: No best prompt found or error in execution.")
