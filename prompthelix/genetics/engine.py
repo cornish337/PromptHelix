@@ -459,10 +459,27 @@ class PopulationManager:
         print(f"PopulationManager: Evolving population for generation {self.generation_number + 1}. Evaluating current population...")
         
         # 1. Evaluate Population
-        for chromosome in self.population:
-            self.fitness_evaluator.evaluate(chromosome, task_description, success_criteria)
+        futures = []
+        # Ensure ProcessPoolExecutor is imported
+        from concurrent.futures import ProcessPoolExecutor
+        with ProcessPoolExecutor() as executor:
+            for chromosome in self.population:
+                # Submit evaluation task to the executor
+                future = executor.submit(self.fitness_evaluator.evaluate, chromosome, task_description, success_criteria)
+                futures.append((future, chromosome)) # Store future and chromosome
+
+            # Retrieve results and update fitness scores
+            for future, chromosome in futures:
+                try:
+                    fitness_score = future.result()  # This will block until the future is complete
+                    chromosome.fitness_score = fitness_score
+                except Exception as e:
+                    logger.error(f"Error evaluating chromosome {chromosome.id} in parallel: {e}", exc_info=True)
+                    chromosome.fitness_score = 0.0 # Assign a default low fitness on error
+
 
         # 2. Sort Population by fitness (descending) without mutating original list reference
+        # Population is now updated with fitness scores from parallel execution
         sorted_population = sorted(self.population, key=lambda c: c.fitness_score, reverse=True)
         
         print(
