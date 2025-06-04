@@ -1,17 +1,36 @@
 from prompthelix.agents.base import BaseAgent
 from prompthelix.genetics.engine import PromptChromosome
+from prompthelix.utils.llm_utils import call_llm_api
+from prompthelix.config import AGENT_SETTINGS # Import AGENT_SETTINGS
+import json # For parsing LLM response
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Default provider from config if specific agent setting is not found
+FALLBACK_LLM_PROVIDER = AGENT_SETTINGS.get("StyleOptimizerAgent", {}).get("default_llm_provider", "openai")
+FALLBACK_LLM_MODEL = AGENT_SETTINGS.get("StyleOptimizerAgent", {}).get("default_llm_model", "gpt-3.5-turbo")
+
 
 class StyleOptimizerAgent(BaseAgent):
     """
     Refines prompts to enhance their style, tone, clarity, and persuasiveness,
     often based on specific target audience or desired communication effect.
     """
-    def __init__(self):
+    def __init__(self, message_bus=None):
         """
         Initializes the StyleOptimizerAgent.
-        Loads style transformation rules or lexicons.
+        Loads style transformation rules or lexicons and agent configuration.
+
+        Args:
+            message_bus (object, optional): The message bus for inter-agent communication.
         """
-        super().__init__(agent_id="StyleOptimizer")
+        super().__init__(agent_id="StyleOptimizer", message_bus=message_bus)
+
+        agent_config = AGENT_SETTINGS.get(self.agent_id, {})
+        self.llm_provider = agent_config.get("default_llm_provider", FALLBACK_LLM_PROVIDER)
+        self.llm_model = agent_config.get("default_llm_model", FALLBACK_LLM_MODEL)
+        logger.info(f"Agent '{self.agent_id}' initialized with LLM provider: {self.llm_provider} and model: {self.llm_model}")
 
         self.style_rules = self._load_style_rules()
 
@@ -53,7 +72,7 @@ class StyleOptimizerAgent(BaseAgent):
         Returns:
             list: The list of genes, potentially modified for tone.
         """
-        print(f"{self.agent_id} - (Placeholder) Analyzing/adjusting tone for: {target_tone}")
+        logger.info(f"Agent '{self.agent_id}': (Placeholder) Analyzing/adjusting tone for: {target_tone}")
         # Future: Implement NLP techniques for tone detection and rule-based or
         # model-based transformations.
         return genes
@@ -68,7 +87,7 @@ class StyleOptimizerAgent(BaseAgent):
         Returns:
             list: The list of genes, potentially modified for clarity.
         """
-        print(f"{self.agent_id} - (Placeholder) Enhancing clarity.")
+        logger.info(f"Agent '{self.agent_id}': (Placeholder) Enhancing clarity.")
         # Future: Implement checks for ambiguity, complex sentences, jargon reduction, etc.
         # Example:
         # for i, gene in enumerate(genes):
@@ -86,7 +105,7 @@ class StyleOptimizerAgent(BaseAgent):
         Returns:
             list: The list of genes, potentially modified for persuasiveness.
         """
-        print(f"{self.agent_id} - (Placeholder) Improving persuasiveness.")
+        logger.info(f"Agent '{self.agent_id}': (Placeholder) Improving persuasiveness.")
         # Future: Implement techniques like adding rhetorical questions, benefit statements, etc.
         return genes
 
@@ -141,65 +160,123 @@ class StyleOptimizerAgent(BaseAgent):
         target_style = request_data.get("target_style")
 
         if not isinstance(original_chromosome, PromptChromosome):
-            print(f"{self.agent_id} - Error: Invalid or missing 'prompt_chromosome' object provided.")
-            # Consider raising ValueError or returning original if appropriate
+            logger.error(f"Agent '{self.agent_id}': Invalid or missing 'prompt_chromosome' object provided.")
             return original_chromosome 
         
-        if not target_style or target_style not in self.style_rules:
-            print(f"{self.agent_id} - Warning: Target style '{target_style}' not recognized or not provided. Returning original prompt.")
+        if not target_style : # Removed check against self.style_rules as LLM might handle undefined styles
+            logger.warning(f"Agent '{self.agent_id}': Target style not provided. Returning original prompt.")
             return original_chromosome
-
-        print(f"{self.agent_id} - Optimizing prompt (ID: {original_chromosome}) for style: {target_style}")
         
-        modified_genes = [str(gene) for gene in original_chromosome.genes] # Work on a copy of gene strings
+        # If target_style is not in self.style_rules, only LLM can handle it. Fallback won't work.
+        # This is acceptable as LLM is the primary, rules are fallback.
 
-        style_config = self.style_rules[target_style]
+        logger.info(f"Agent '{self.agent_id}': Optimizing prompt (ID: {original_chromosome.id if original_chromosome else 'N/A'}) for style: {target_style}")
         
-        # Apply transformations based on target_style
-        if "replace" in style_config:
-            for i, gene_str in enumerate(modified_genes):
-                for old, new in style_config["replace"].items():
-                    modified_genes[i] = gene_str.replace(old, new)
-                    if modified_genes[i] != gene_str: # Log change for this specific replacement
-                        gene_str = modified_genes[i] # Update gene_str for further replacements in the same gene
+        original_genes_str_list = [str(g) for g in original_chromosome.genes]
 
-        if "prepend_politeness" in style_config and modified_genes:
-            # Prepend to the first gene if it looks like an instruction.
-            # This is a simplified heuristic.
-            first_gene_lower = modified_genes[0].lower()
-            instruction_keywords = ["summarize", "generate", "write", "answer", "explain", "describe", "list", "create", "instruct:"]
-            if any(keyword in first_gene_lower for keyword in instruction_keywords) and \
-               not modified_genes[0].startswith(style_config["prepend_politeness"]):
-                modified_genes[0] = style_config["prepend_politeness"] + modified_genes[0]
-        
-        if "append_request_marker" in style_config and modified_genes:
-            # Append to the first gene if it's an instruction that should be a question
-            first_gene_lower = modified_genes[0].lower()
-            if not modified_genes[0].endswith(style_config["append_request_marker"]):
-                 modified_genes[0] = modified_genes[0].rstrip('.!') + style_config["append_request_marker"]
+        # Attempt LLM-based style optimization first
+        llm_optimized_genes = None
+        llm_prompt = f"""
+Rewrite the following prompt segments to adopt a '{target_style}' style.
+Ensure the core meaning and placeholders (like [PLACEHOLDER]) are preserved.
+Return the rewritten prompt segments as a JSON list of strings, with the same number of segments as the original.
 
+Original Prompt Segments:
+{json.dumps(original_genes_str_list, indent=2)}
 
-        if style_config.get("ensure_ending_punctuation", False) and modified_genes:
-            for i, gene_str in enumerate(modified_genes):
-                if gene_str and gene_str[-1] not in ".!?":
-                    modified_genes[i] = gene_str + "."
+Target Style: {target_style}
 
+Rewritten Prompt Segments (JSON list of strings):
+"""
+        try:
+            response_str = call_llm_api(llm_prompt, provider=self.llm_provider, model=self.llm_model)
+            logger.info(f"Agent '{self.agent_id}': LLM raw response for style optimization: {response_str}")
 
-        # Call placeholder internal methods (they currently don't modify genes but could in future)
-        modified_genes = self._tone_analysis_adjustment(modified_genes, target_style)
-        modified_genes = self._clarity_enhancement(modified_genes)
-        modified_genes = self._persuasiveness_improvement(modified_genes)
-        
-        # Fitness score is typically reset or re-evaluated after modification.
-        optimized_chromosome = PromptChromosome(genes=modified_genes, fitness_score=0.0) 
+            parsed_genes = self._parse_llm_gene_response(response_str)
+            if parsed_genes and len(parsed_genes) == len(original_genes_str_list):
+                llm_optimized_genes = parsed_genes
+                logger.info(f"Agent '{self.agent_id}': Successfully optimized style '{target_style}' using LLM.")
+            else:
+                logger.warning(f"Agent '{self.agent_id}': LLM response for style '{target_style}' was not a valid list of genes or mismatched length. Will use rule-based fallback if rules exist. Parsed: {parsed_genes}")
+
+        except Exception as e:
+            logger.error(f"Agent '{self.agent_id}': Error during LLM style optimization for '{target_style}': {e}. Using rule-based fallback if rules exist.", exc_info=True)
+
+        if llm_optimized_genes:
+            modified_genes = llm_optimized_genes
+        else:
+            # Fallback to rule-based transformations only if target_style is in defined style_rules
+            if target_style in self.style_rules:
+                logger.info(f"Agent '{self.agent_id}': Using rule-based fallback for style: {target_style}")
+                modified_genes = list(original_genes_str_list) # Start with a fresh copy for rule-based
+                style_config = self.style_rules[target_style]
+
+                if "replace" in style_config:
+                    for i, gene_str in enumerate(modified_genes):
+                        # current_gene_val = gene_str # Not needed if replacing on modified_genes[i]
+                        for old, new in style_config["replace"].items():
+                            modified_genes[i] = modified_genes[i].replace(old, new)
+
+                if "prepend_politeness" in style_config and modified_genes:
+                    first_gene_lower = modified_genes[0].lower()
+                    instruction_keywords = ["summarize", "generate", "write", "answer", "explain", "describe", "list", "create", "instruct:"]
+                    if any(keyword in first_gene_lower for keyword in instruction_keywords) and \
+                       not modified_genes[0].startswith(style_config["prepend_politeness"]):
+                        modified_genes[0] = style_config["prepend_politeness"] + modified_genes[0]
+
+                if "append_request_marker" in style_config and modified_genes:
+                    if not modified_genes[0].endswith(style_config["append_request_marker"]):
+                         modified_genes[0] = modified_genes[0].rstrip('.!') + style_config["append_request_marker"]
+
+                if style_config.get("ensure_ending_punctuation", False) and modified_genes:
+                    for i, gene_str in enumerate(modified_genes):
+                        if gene_str and gene_str[-1] not in ".!?":
+                            modified_genes[i] = gene_str + "."
+            else:
+                # If LLM failed and no rule-based style exists, return original genes
+                logger.warning(f"Agent '{self.agent_id}': LLM failed for style '{target_style}' and no rule-based fallback exists. Returning original genes.")
+                modified_genes = list(original_genes_str_list)
+
+            # Apply placeholder adjustments after rule-based changes or if LLM failed and no rules applied
+            modified_genes = self._tone_analysis_adjustment(modified_genes, target_style)
+            modified_genes = self._clarity_enhancement(modified_genes)
+            modified_genes = self._persuasiveness_improvement(modified_genes)
+
+        optimized_chromosome = PromptChromosome(genes=modified_genes, fitness_score=0.0)
         
         diff = self._compare_chromosomes(original_chromosome, optimized_chromosome)
         if diff:
-            print(f"{self.agent_id} - Stylistic changes applied for target style '{target_style}':")
+            source = "LLM" if llm_optimized_genes else ("Rule-based Fallback" if target_style in self.style_rules and not llm_optimized_genes else "Original (No applicable rules/LLM failed)")
+            logger.info(f"Agent '{self.agent_id}': Stylistic changes applied via {source} for target style '{target_style}':")
             for d in diff:
-                print(f"  - {d}")
+                logger.info(f"  - {d}")
         else:
-            print(f"{self.agent_id} - No stylistic changes applied for target style '{target_style}'.")
+            logger.info(f"Agent '{self.agent_id}': No stylistic changes applied for target style '{target_style}'.")
 
         return optimized_chromosome
 
+    def _parse_llm_gene_response(self, response_str: str) -> list[str] | None:
+        """ Parses LLM response expected to be a JSON list of strings (genes). """
+        try:
+            # Handle cases where LLM might add explanatory text before/after JSON
+            json_start = response_str.find('[')
+            json_end = response_str.rfind(']') + 1
+            if json_start != -1 and json_end != -1 and json_start < json_end:
+                actual_json = response_str[json_start:json_end]
+                parsed_list = json.loads(actual_json)
+                if isinstance(parsed_list, list) and all(isinstance(item, str) for item in parsed_list):
+                    return parsed_list
+            print(f"{self.agent_id} - LLM response was not a valid JSON list of strings: {response_str}")
+            return None
+        except json.JSONDecodeError as e:
+            print(f"{self.agent_id} - Failed to parse LLM gene response as JSON list: {e}. Response: {response_str}")
+            # Fallback: if not JSON, try splitting by newline if it looks like a list of genes
+            # This is less reliable and should ideally be avoided by ensuring LLM sticks to JSON.
+            if "\n" in response_str:
+                lines = [line.strip() for line in response_str.split('\n') if line.strip()]
+                # Basic check if lines look like genes (e.g. not too long, no weird chars)
+                # This is very heuristic.
+                if lines and all(len(line) < 500 for line in lines): # Arbitrary length check
+                    print(f"{self.agent_id} - Attempting to use newline-separated genes from LLM response.")
+                    return lines
+            return None
