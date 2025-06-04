@@ -15,7 +15,7 @@ setup(
         "uvicorn[standard]",
         "sqlalchemy",
         "psycopg2-binary", # For PostgreSQL
-        "pydantic",
+        "pydantic==2.7.1",
         "celery",
         "redis",
         "openai",

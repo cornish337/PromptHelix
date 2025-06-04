@@ -7,9 +7,8 @@ Jinja2==3.1.3
 httpx==0.27.0
 pytest==8.1.1
 python-multipart==0.0.9
-pydantic
+pydantic==2.7.1
 celery
 redis
-httpx
 openai
 # Add other potential dependencies like openai, anthropic, google-generativeai later
