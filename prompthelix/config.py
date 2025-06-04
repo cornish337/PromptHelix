@@ -6,6 +6,9 @@ database URLs, and other operational parameters. It supports loading
 configurations from environment variables and potentially .env files.
 """
 import os
+from sqlalchemy.orm import Session
+from typing import Optional
+from prompthelix.api import crud
 # from pydantic import BaseSettings # Uncomment if Pydantic is used for settings management
 
 # Consider using a library like python-dotenv to load .env files
@@ -68,3 +71,38 @@ settings = Settings()
 
 # Example of how to access a setting:
 # print(settings.DATABASE_URL)
+
+def _get_key_from_db(db_session: Session, service_name: str) -> Optional[str]:
+    if not db_session: # Should not happen if called by the new functions correctly
+        return None
+    key_obj = crud.get_api_key(db_session, service_name=service_name)
+    return key_obj.api_key if key_obj else None
+
+def get_openai_api_key(db: Optional[Session] = None) -> Optional[str]:
+    if db:
+        key_from_db = _get_key_from_db(db, "OPENAI")
+        if key_from_db:
+            return key_from_db
+    return settings.OPENAI_API_KEY
+
+def get_anthropic_api_key(db: Optional[Session] = None) -> Optional[str]:
+    if db:
+        key_from_db = _get_key_from_db(db, "ANTHROPIC")
+        if key_from_db:
+            return key_from_db
+    return settings.ANTHROPIC_API_KEY
+
+def get_google_api_key(db: Optional[Session] = None) -> Optional[str]:
+    if db:
+        key_from_db = _get_key_from_db(db, "GOOGLE")
+        if key_from_db:
+            return key_from_db
+    return settings.GOOGLE_API_KEY
+
+# Example of a test key function to demonstrate DB lookup part
+def get_test_db_service_key(db: Optional[Session] = None) -> Optional[str]:
+    if db:
+        key_from_db = _get_key_from_db(db, "TEST_DB_SERVICE")
+        if key_from_db:
+            return key_from_db
+    return os.getenv("TEST_DB_SERVICE_API_KEY") # Fallback to env var

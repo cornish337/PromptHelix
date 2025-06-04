@@ -1,15 +1,69 @@
+import os
+import importlib
+import inspect
+from typing import List, Optional
+
 from fastapi import APIRouter, Request, Depends, HTTPException, Form, Query
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
-from typing import Optional, List
+from starlette.status import HTTP_303_SEE_OTHER # For POST redirect
 import httpx # For making API calls from UI routes
 
 from prompthelix.templating import templates # Import from templating.py
-from prompthelix.database import get_db
-from prompthelix.api import crud
+from prompthelix.database import get_db     # Ensure this is imported
+from prompthelix.api import crud            # Ensure this is imported
 from prompthelix import schemas # Import all schemas
+from prompthelix.agents.base import BaseAgent
+
 
 router = APIRouter()
+
+SUPPORTED_LLM_SERVICES = [
+    {"name": "OPENAI", "display_name": "OpenAI", "description": "API key for OpenAI models (e.g., GPT-4, GPT-3.5)."},
+    {"name": "ANTHROPIC", "display_name": "Anthropic", "description": "API key for Anthropic models (e.g., Claude)."},
+    {"name": "GOOGLE", "display_name": "Google", "description": "API key for Google AI models (e.g., Gemini)."}
+]
+
+def list_available_agents() -> List[dict[str, str]]: # Updated type hint
+    agents_info = [] # Changed variable name
+    # Assuming ui_routes.py is in the 'prompthelix' directory.
+    current_file_dir = os.path.dirname(os.path.abspath(__file__))
+    agents_dir = os.path.join(current_file_dir, "agents")
+
+    if not os.path.isdir(agents_dir):
+        print(f"Agents directory not found or is not a directory: {agents_dir}") # Consider proper logging
+        return []
+
+    for filename in os.listdir(agents_dir):
+        if filename.endswith(".py") and filename not in ["__init__.py", "base.py"]:
+            module_name = f"prompthelix.agents.{filename[:-3]}"
+            try:
+                module = importlib.import_module(module_name)
+                for attribute_name in dir(module):
+                    attribute = getattr(module, attribute_name)
+                    if inspect.isclass(attribute) and \
+                       issubclass(attribute, BaseAgent) and \
+                       attribute is not BaseAgent:
+                        agent_id_val = getattr(attribute, 'agent_id', None)
+                        description_val = getattr(attribute, 'agent_description', "No description available.")
+
+                        if agent_id_val and isinstance(agent_id_val, str):
+                            # Ensure agent_id is not duplicated if multiple classes have same id (should not happen)
+                            is_present = False
+                            for agent_entry in agents_info:
+                                if agent_entry['id'] == agent_id_val:
+                                    is_present = True
+                                    break
+                            if not is_present:
+                                agents_info.append({'id': agent_id_val, 'description': description_val})
+                        else:
+                             print(f"Agent class {attribute.__name__} in {module_name} is missing a valid string agent_id class attribute.")
+
+            except ImportError as e:
+                print(f"Error importing agent module {module_name}: {e}") # Proper logging recommended
+            except Exception as e:
+                print(f"Error processing module {module_name}: {e}") # Proper logging recommended
+    return sorted(agents_info, key=lambda x: x['id']) # Return unique (by id), sorted list of dicts
 
 @router.get("/ui/prompts", name="list_prompts_ui")
 async def list_prompts_ui(request: Request, db: Session = Depends(get_db), new_version_id: Optional[int] = Query(None)):
@@ -136,3 +190,95 @@ async def view_prompt_ui(request: Request, prompt_id: int, db: Session = Depends
         "prompt_detail.html",
         {"request": request, "prompt": db_prompt, "sorted_versions": sorted_versions, "new_version_id": new_version_id}
     )
+
+@router.get("/ui/settings", name="view_settings_ui")
+async def view_settings_ui(
+    request: Request,
+    db: Session = Depends(get_db),
+    message: Optional[str] = Query(None),
+    error: Optional[str] = Query(None)
+):
+    services_config_display = []
+    for service_spec in SUPPORTED_LLM_SERVICES:
+        service_info = service_spec.copy()
+        db_key = crud.get_api_key(db, service_name=service_spec["name"])
+        if db_key and db_key.api_key: # Check if api_key string is non-empty
+            service_info["is_set"] = True
+            service_info["api_key_hint"] = f"********{db_key.api_key[-4:]}" if len(db_key.api_key) >= 4 else "Set (short key)"
+            service_info["current_value"] = db_key.api_key
+        else:
+            service_info["is_set"] = False
+            service_info["api_key_hint"] = "Not set"
+            service_info["current_value"] = ""
+        services_config_display.append(service_info)
+
+    available_agents = list_available_agents()
+
+    return templates.TemplateResponse(
+        "settings.html",
+        {
+            "request": request,
+            "services_config": services_config_display,
+            "agents": available_agents,
+            "message": message,
+            "error": error
+        }
+    )
+
+@router.post("/ui/settings/api_keys", name="save_api_keys_settings")
+async def save_api_keys_settings(
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    form_data = await request.form()
+    processed_services_names = []
+    error_messages = []
+
+    for service_spec in SUPPORTED_LLM_SERVICES:
+        service_name_in_code = service_spec["name"]
+
+        api_key_form_field_name = f"{service_name_in_code}_api_key"
+        service_name_form_field_name = f"{service_name_in_code}_service_name"
+
+        submitted_service_name = form_data.get(service_name_form_field_name)
+        submitted_api_key_value = form_data.get(api_key_form_field_name)
+
+        if submitted_service_name == service_name_in_code:
+            if submitted_api_key_value is not None: # Field was present in form
+                try:
+                    crud.create_or_update_api_key(
+                        db,
+                        service_name=submitted_service_name,
+                        api_key_value=submitted_api_key_value
+                    )
+                    # Add to processed_services_names only if key has some value, or if you want to indicate "processed" even if cleared
+                    if submitted_api_key_value: # Key has a value
+                         processed_services_names.append(service_spec["display_name"])
+                    else: # Key was cleared
+                         processed_services_names.append(f"{service_spec['display_name']} (cleared)")
+                except Exception as e:
+                    print(f"Error saving API key for {submitted_service_name}: {e}") # Log properly
+                    error_messages.append(f"Failed to save key for {service_spec['display_name']}.")
+            # else: api_key field was not submitted, which is unlikely for this form structure
+
+    # Construct message and error status for redirect
+    final_message = ""
+    error_status = None
+
+    if error_messages:
+        final_message = " ".join(error_messages)
+        if processed_services_names:
+            final_message += f" Other keys ({', '.join(processed_services_names)}) processed."
+        error_status = "true" # Indicate an error occurred
+    elif processed_services_names:
+        final_message = f"API key settings saved for: {', '.join(processed_services_names)}."
+    else:
+        # No errors, but no services processed (e.g., form submitted with no changes to actual values, or all keys blank)
+        final_message = "No changes to API keys were applied."
+
+    redirect_url = request.url_for('view_settings_ui')
+    redirect_url += f"?message={final_message}"
+    if error_status:
+        redirect_url += f"&error={error_status}"
+
+    return RedirectResponse(url=redirect_url, status_code=HTTP_303_SEE_OTHER)

@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - PromptHelix{% endblock %}
+
+{% block content %}
+<div class="container mx-auto p-4">
+    <h1 class="text-2xl font-bold mb-6">Settings</h1>
+
+    <!-- API Key Management -->
+    <section class="mb-8">
+        <h2 class="text-xl font-semibold mb-4">API Key Management</h2>
+        {% if message %}
+            <div class="p-3 mb-4 text-sm rounded-lg {% if error %}bg-red-100 text-red-700{% else %}bg-green-100 text-green-700{% endif %}" role="alert">
+                {{ message }}
+            </div>
+        {% endif %}
+
+        <form action="{{ request.url_for('save_api_keys_settings') }}" method="post" class="space-y-4">
+            {% for service in services_config %}
+            <div class="p-4 border rounded-lg shadow-sm">
+                <h3 class="text-lg font-medium mb-2">{{ service.display_name }}</h3>
+                {% if service.description %}
+                <p class="text-sm text-gray-600 mb-2">{{ service.description }}</p>
+                {% endif %}
+
+                <label for="{{ service.name }}_api_key" class="block text-sm font-medium text-gray-700">API Key:</label>
+                <input type="password" name="{{ service.name }}_api_key" id="{{ service.name }}_api_key"
+                       placeholder="Enter {{ service.display_name }} API Key"
+                       value="{{ service.current_value | default('', true) }}"
+                       class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+
+                {% if service.is_set %}
+                <p class="text-xs text-green-600 mt-1">API key is currently set ({{ service.api_key_hint }}). Entering a new value will overwrite it.</p>
+                {% else %}
+                <p class="text-xs text-gray-500 mt-1">API key is not set.</p>
+                {% endif %}
+                 <input type="hidden" name="{{ service.name }}_service_name" value="{{ service.name }}">
+            </div>
+            {% endfor %}
+
+            <div>
+                <button type="submit"
+                        class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    Save API Keys
+                </button>
+            </div>
+        </form>
+    </section>
+
+    <!-- Available Agents -->
+    <section>
+        <h2 class="text-xl font-semibold mb-4">Available Agents</h2>
+        {% if agents and agents|length > 0 %}
+            <ul class="list-disc pl-5 space-y-1">
+                {% for agent in agents %}
+                <li class="text-gray-700">
+                    <strong>{{ agent.id }}</strong>: {{ agent.description | default('No description available.') }}
+                </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p class="text-gray-600">No agents found or an error occurred while loading agents.</p>
+        {% endif %}
+    </section>
+
+</div>
+{% endblock %}

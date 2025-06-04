@@ -2,6 +2,8 @@ from prompthelix.agents.base import BaseAgent
 from prompthelix.genetics.engine import PromptChromosome # Assuming PromptChromosome is in this path
 
 class PromptCriticAgent(BaseAgent):
+    agent_id = "PromptCritic"
+    agent_description = "Evaluates and critiques prompts for structure, clarity, and adherence to best practices."
     """
     Evaluates and critiques prompts based on their structure, content,
     and adherence to best practices, without necessarily executing them.
@@ -12,7 +14,7 @@ class PromptCriticAgent(BaseAgent):
         Initializes the PromptCriticAgent.
         Loads critique rules or heuristics.
         """
-        super().__init__(agent_id="PromptCritic")
+        super().__init__(agent_id=self.agent_id) # Use class attribute
 
         self.critique_rules = self._load_critique_rules()
 

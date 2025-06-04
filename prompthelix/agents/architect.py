@@ -2,6 +2,8 @@ from prompthelix.agents.base import BaseAgent
 from prompthelix.genetics.engine import PromptChromosome
 
 class PromptArchitectAgent(BaseAgent):
+    agent_id = "PromptArchitect"
+    agent_description = "Designs initial prompt structures based on requirements or patterns."
     """
     Designs initial prompt structures based on user requirements, 
     system goals, or existing successful prompt patterns.
@@ -11,7 +13,7 @@ class PromptArchitectAgent(BaseAgent):
         Initializes the PromptArchitectAgent.
         Loads prompt templates.
         """
-        super().__init__(agent_id="PromptArchitect")
+        super().__init__(agent_id=self.agent_id) # Use class attribute
 
         self.recommendations = [
             "Consider a ReAct-style prompt structure: Thought, Action, Observation.",
