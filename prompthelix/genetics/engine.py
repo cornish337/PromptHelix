@@ -281,7 +281,7 @@ class FitnessEvaluator:
         prompt_string = chromosome.to_prompt_string()
         print(f"FitnessEvaluator: Simulating LLM call for prompt: {prompt_string[:100]}...")
         mock_llm_output = (
-            f"Mock LLM output for: {prompt_string[:50]}. "
+            f"Mock LLM output for: {prompt_string}[:50]. "
             f"Keywords found: {', '.join(str(g) for g in chromosome.genes[:2]) if chromosome.genes else 'N/A'}. "
             f"Random number: {random.randint(0, 100)}"
         )
@@ -400,17 +400,23 @@ class PopulationManager:
         for chromosome in self.population:
             self.fitness_evaluator.evaluate(chromosome, task_description, success_criteria)
 
-        # 2. Sort Population by fitness (descending)
-        self.population.sort(key=lambda chromo: chromo.fitness_score, reverse=True)
+        # 2. Sort Population by fitness (descending) without mutating original list reference
+        sorted_population = sorted(self.population, key=lambda c: c.fitness_score, reverse=True)
         
-        print(f"PopulationManager: Fittest individual in current generation ({self.generation_number}): {self.population[0].id if self.population else 'N/A'} with fitness {self.population[0].fitness_score if self.population else 'N/A'}")
+        print(
+            f"PopulationManager: Fittest individual in current generation ({self.generation_number}):"
+            f" {sorted_population[0].id if sorted_population else 'N/A'} with fitness"
+            f" {sorted_population[0].fitness_score if sorted_population else 'N/A'}"
+        )
 
         new_population: list[PromptChromosome] = []
 
         # 3. Elitism: Carry over the best individuals
         if self.elitism_count > 0:
-            print(f"PopulationManager: Applying elitism for top {self.elitism_count} individuals.")
-            new_population.extend(self.population[:self.elitism_count])
+            print(
+                f"PopulationManager: Applying elitism for top {self.elitism_count} individuals."
+            )
+            new_population.extend(sorted_population[: self.elitism_count])
 
         # 4. Generate Offspring
         print(f"PopulationManager: Generating offspring through selection, crossover, and mutation.")
@@ -419,8 +425,8 @@ class PopulationManager:
         generated_offspring_count = 0
         while generated_offspring_count < num_offspring_needed:
             # Selection
-            parent1 = self.genetic_operators.selection(self.population) # Using current (sorted) population
-            parent2 = self.genetic_operators.selection(self.population)
+            parent1 = self.genetic_operators.selection(sorted_population)
+            parent2 = self.genetic_operators.selection(sorted_population)
             
             # Crossover
             child1, child2 = self.genetic_operators.crossover(parent1, parent2)
@@ -435,7 +441,7 @@ class PopulationManager:
                 new_population.append(mutated_child2)
                 generated_offspring_count += 1
         
-        self.population = new_population[:self.population_size] # Ensure population size is maintained
+        self.population = new_population[: self.population_size]
 
         self.generation_number += 1
         print(f"PopulationManager: Evolution complete. New generation: {self.generation_number}. Population size: {len(self.population)}")

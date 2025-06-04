@@ -95,7 +95,7 @@ class MetaLearnerAgent(BaseAgent):
                  if isinstance(pitfall_theme, str) and count > max_count : # Ensure pitfall_theme is a string
                     max_count = count
                     most_common_pitfall = pitfall_theme
-        if most_common_pitfall and max_count > 3: # Arbitrary threshold for "common"
+        if most_common_pitfall and max_count >= 1:  # Trigger even with a single observation
             trend2 = f"Most common pitfall observed: '{most_common_pitfall}' (occurred {max_count} times)."
             if trend2 not in self.knowledge_base["performance_trends"]:
                 new_trends.append(trend2)
