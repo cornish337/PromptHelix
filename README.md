@@ -12,7 +12,7 @@ AI prompts through innovative techniques inspired by genetic algorithms and mult
 *   Integration with various LLMs (OpenAI, Anthropic, Google)
 *   Performance tracking and evaluation of prompts
 *   API for programmatic access and integration
-*   User interface for managing and experimenting with prompts
+*   User interface for managing and experimenting with prompts (basic HTML interface available)
 
 ## Getting Started
 
@@ -64,7 +64,11 @@ PromptHelix also provides an API endpoint to trigger the genetic algorithm.
     ```
     Or you can open `http://127.0.0.1:8000/api/run-ga` in your web browser.
 
-3.  **Expected Response**:
+3.  **Try the Prompt Manager UI**:
+    Navigate to `http://127.0.0.1:8000/ui/prompts` to experiment with a simple
+    HTML interface for adding and viewing prompts.
+
+4.  **Expected Response**:
     The API will return a JSON response containing the best prompt found by the genetic algorithm and its fitness score:
     ```json
     {

@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Prompt Manager</title>
+</head>
+<body>
+    <h1>Prompt Manager</h1>
+    <form action="/ui/prompts" method="post">
+        <textarea name="content" rows="4" cols="60" placeholder="Enter prompt text"></textarea><br>
+        <button type="submit">Add Prompt</button>
+    </form>
+
+    <h2>Existing Prompts</h2>
+    <ul>
+    {% for p in prompts %}
+        <li><pre>{{ p.content }}</pre></li>
+    {% else %}
+        <li>No prompts yet.</li>
+    {% endfor %}
+    </ul>
+</body>
+</html>
