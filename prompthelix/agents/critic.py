@@ -29,9 +29,19 @@ class PromptCriticAgent(BaseAgent):
         return [
             {"name": "PromptTooShort", "type": "length_check", "min_genes": 3, "message": "Prompt might be too short to be effective (less than 3 gene segments)."},
             {"name": "PromptTooLong", "type": "length_check", "max_genes": 7, "message": "Prompt might be too long and complex (more than 7 gene segments)."},
-            {"name": "LacksInstruction", "type": "gene_keyword_check", "gene_keyword_missing": "instruction", "message": "Prompt should ideally have a clear 'instruction' segment. Consider adding one."},
+            {
+                "name": "LacksInstruction",
+                "type": "gene_keyword_check",
+                "gene_keyword_missing": "instruction",
+                "message": "Prompt is missing 'instruction' segment. Consider adding one.",
+            },
             {"name": "LacksContext", "type": "gene_keyword_check", "gene_keyword_missing": "context", "message": "Prompt may benefit from a 'context' segment. Ensure sufficient background is provided."},
-            {"name": "UsesNegativePhrasing", "type": "keyword_check", "keywords": ["don't", "cannot", "avoid", "won't", "not able to"], "message": "Consider rephrasing negative statements (e.g., 'don't do X') to be positive and direct (e.g., 'do Y')."}
+            {
+                "name": "UsesNegativePhrasing",
+                "type": "keyword_check",
+                "keywords": ["don't", "cannot", "avoid", "won't", "not able to"],
+                "message": "Avoid negative phrasing in prompts to keep instructions positive and direct.",
+            },
         ]
 
     def _structural_analysis(self, prompt_chromosome: PromptChromosome) -> list:

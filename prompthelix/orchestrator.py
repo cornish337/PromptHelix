@@ -1,13 +1,13 @@
 from prompthelix.agents.architect import PromptArchitectAgent
 from prompthelix.agents.results_evaluator import ResultsEvaluatorAgent
 from prompthelix.genetics.engine import (
-    GeneticOperators, 
-    FitnessEvaluator, 
-    PopulationManager, 
-    PromptChromosome
+    GeneticOperators,
+    FitnessEvaluator,
+    PopulationManager,
+    PromptChromosome,
 )
 
-def main_ga_loop():
+def main_ga_loop(return_best: bool = False):
     """
     Main orchestration loop for running the PromptHelix Genetic Algorithm.
     
@@ -98,10 +98,13 @@ def main_ga_loop():
     # 6. Print Final Best
     final_fittest = pop_manager.get_fittest_individual()
     if final_fittest:
-        print("\n--- Final Best Prompt after all generations ---")
-        print(str(final_fittest)) # Uses the __str__ method of PromptChromosome
+        print("\nBest prompt found:")
+        print(str(final_fittest))  # Uses the __str__ method of PromptChromosome
     else:
         print("\nNo solution found after all generations.")
+
+    if return_best:
+        return final_fittest
 
 if __name__ == "__main__":
     print("Running PromptHelix Genetic Algorithm Orchestrator...")

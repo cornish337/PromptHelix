@@ -32,7 +32,7 @@ class StyleOptimizerAgent(BaseAgent):
                 "ensure_ending_punctuation": True
             },
             "casual": {
-                "replace": {"do not": "don't", "items": "stuff", "please ": "", "kindly ": ""},
+                "replace": {"do not": "don't", "items": "stuff", "please ": "", "Please ": "", "kindly ": "", "Kindly ": ""},
                 "remove_ending_punctuation": False # Usually casual still has punctuation
             },
             "instructional": { # Example of a more specific style

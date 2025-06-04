@@ -3,6 +3,7 @@ Main application file for the PromptHelix API.
 Initializes the FastAPI application and includes the root endpoint.
 """
 from fastapi import FastAPI
+from prompthelix.api import routes as api_routes
 
 # Initialize FastAPI application
 app = FastAPI()
@@ -19,6 +20,5 @@ async def root():
     """
     return {"message": "Welcome to PromptHelix API"}
 
-# Placeholder for including API routes from prompthelix.api.routes
-# For example: from prompthelix.api import routes as api_routes
-# app.include_router(api_routes.router)
+# Include API routes
+app.include_router(api_routes.router)

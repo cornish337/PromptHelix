@@ -66,10 +66,11 @@ class PromptArchitectAgent(BaseAgent):
         print(f"{self.agent_id} - Parsing requirements: Task='{task_desc}', Keywords='{keywords}', Constraints='{constraints}'")
         # In a real implementation, this would involve more sophisticated NLP
         # and logic to extract structured information.
+        parsed_desc = task_desc if task_desc else "Default task description"
         return {
-            "task_description": task_desc,
+            "task_description": parsed_desc,
             "keywords": keywords,
-            "constraints": constraints
+            "constraints": constraints,
         }
 
     def _select_template(self, parsed_requirements: dict) -> str:
@@ -82,10 +83,11 @@ class PromptArchitectAgent(BaseAgent):
         Returns:
             str: The name of the selected template.
         """
-        task_desc_lower = parsed_requirements.get("task_description", "").lower()
+        task_desc = parsed_requirements.get("task_description") or ""
+        task_desc_lower = task_desc.lower()
         if "summary" in task_desc_lower or "summarize" in task_desc_lower:
             template_name = "summary_v1"
-        elif "question" in task_desc_lower or "answer" in task_desc_lower:
+        elif "question" in task_desc_lower or "answer" in task_desc_lower or "?" in task_desc:
             template_name = "question_answering_v1"
         else:
             template_name = "generic_v1"
@@ -107,6 +109,9 @@ class PromptArchitectAgent(BaseAgent):
         """
         genes = []
         genes.append(template["instruction"])
+
+        if parsed_requirements.get("task_description") == "Default task description":
+            genes.append("Default task description")
 
         context = template.get("context_placeholder", "[details_placeholder]")
         keywords = parsed_requirements.get("keywords", [])
