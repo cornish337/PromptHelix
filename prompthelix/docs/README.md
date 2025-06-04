@@ -12,7 +12,7 @@ A Python framework for AI prompt generation and optimization using a Prompt DNA 
 -   `prompthelix/evaluation/`: Modules for evaluating prompt performance (placeholder).
 -   `prompthelix/genetics/`: Core logic for the genetic algorithm (chromosomes, operators, population).
 -   `prompthelix/main.py`: Main FastAPI application entry point.
--   `prompthelix/models/`: Data models (SQLAlchemy or Pydantic, currently placeholders).
+-   `prompthelix/models/`: SQLAlchemy models for core entities (Prompts, Users, etc.).
 -   `prompthelix/services/`: Business logic and services (placeholder).
 -   `prompthelix/tests/`: Unit and integration tests.
     -   `unit/`: Contains unit tests for individual components, including each agent.
@@ -41,7 +41,10 @@ Unit tests for the core placeholder functionalities of each agent and the geneti
 
 To run the tests, navigate to the root directory of the project and use a test runner like Python's `unittest` module. For example:
 ```bash
+# To run all unit tests directly (e.g., for focused testing):
 python -m unittest discover -s prompthelix/tests/unit
+# To run all tests via the CLI (recommended, includes all test types):
+python -m prompthelix.cli test
 ```
 (Further details on test execution and integration tests will be added as the project matures.)
 
@@ -54,20 +57,18 @@ For a detailed explanation of the GA components and flow, please see:
 
 ## Running the Project
 
-Currently, the primary way to see the system in action (beyond unit tests) is by running the placeholder genetic algorithm orchestrator.
+The primary way to run the genetic algorithm is via the Command Line Interface (CLI).
 
-### Running the Genetic Algorithm Orchestrator
+### Using the CLI to run the Genetic Algorithm
 
-The `prompthelix/orchestrator.py` script provides a basic command-line demonstration of the GA loop. It initializes the necessary agents and GA components, creates an initial population of prompts, and runs the evolutionary process for a predefined number of generations.
+Execute the following command from the root of the project:
 
-To run the orchestrator:
-1.  Ensure you are in the root directory of the `prompthelix` project.
-2.  Make sure your Python environment has the project and its dependencies installed (e.g., by running `pip install .` or `pip install -e .` if you have a `setup.py` and want an editable install).
-3.  Execute the orchestrator module:
-    ```bash
-    python -m prompthelix.orchestrator
-    ```
-    This will print output to the console, showing the initialization steps, progress through generations, and information about the fittest prompts found.
+```bash
+python -m prompthelix.cli run
+```
+This command runs the genetic algorithm and will output the best prompt found along with its fitness score.
+
+You can also start the API server (see main project README) and access the GA via the `/api/run-ga` endpoint. The `prompthelix/orchestrator.py` script can still be run directly (`python -m prompthelix.orchestrator`) if you want to see its original detailed console output during development, but it's no longer the primary execution method for the GA logic when using the application.
 
 ## Future Directions
-(Placeholder for outlining future development plans, such as full LLM integration, database setup, UI development, etc.)
+(Placeholder for outlining future development plans, such as full LLM integration, database migration management, UI development, advanced agent capabilities, etc.)

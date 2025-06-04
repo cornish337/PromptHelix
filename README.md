@@ -16,7 +16,34 @@ AI prompts through innovative techniques inspired by genetic algorithms and mult
 
 ## Getting Started
 
-(Instructions to be added once the project is more mature)
+To get PromptHelix up and running on your local machine, follow these steps:
+
+1.  **Prerequisites:**
+    *   Python 3.8 or higher.
+    *   `pip` for installing packages.
+    *   `git` for cloning the repository.
+
+2.  **Clone the repository:**
+    ```bash
+    git clone <repository_url> # Replace <repository_url> with the actual URL
+    cd prompthelix
+    ```
+
+3.  **Set up a virtual environment (recommended):**
+    ```bash
+    python -m venv venv
+    source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
+    ```
+
+4.  **Install dependencies:**
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+5.  **Database Setup:**
+    The project defines SQLAlchemy models for data persistence (see `prompthelix/models/`). Currently, the core genetic algorithm and API endpoint run primarily in-memory. For future features involving data storage and user accounts, you would typically initialize a database and run migrations. For now, no specific database setup is required to run the MVP features described below.
+
+Now you are ready to run the application's MVP features as described in the "Running the MVP" section.
 
 ## Project Structure
 
@@ -24,11 +51,33 @@ See `prompthelix/docs/README.md` for a detailed project structure.
 
 ## Contributing
 
-(Contribution guidelines to be added)
+Contributions are welcome! If you'd like to contribute to PromptHelix, please follow these guidelines:
+
+1.  **Reporting Bugs:**
+    *   If you find a bug, please open an issue on the project's issue tracker.
+    *   Describe the bug in detail, including steps to reproduce it.
+
+2.  **Suggesting Enhancements:**
+    *   Open an issue to discuss new features or enhancements.
+
+3.  **Making Changes:**
+    *   Fork the repository.
+    *   Create a new branch for your feature or bug fix (e.g., `git checkout -b feature/your-feature-name` or `fix/bug-description`).
+    *   Make your changes. Adhere to PEP 8 coding style guidelines.
+    *   Ensure all tests pass. You can run tests using the command:
+        ```bash
+        python -m prompthelix.cli test
+        ```
+    *   Commit your changes with a clear and descriptive commit message.
+    *   Push your branch to your fork.
+    *   Open a pull request against the main repository.
+
+4.  **Code of Conduct:**
+    *   (Optional: Add a link to a Code of Conduct file if one exists, otherwise remove this point or state general expectations of respectful interaction).
 
 ## License
 
-(License information to be added - likely MIT)
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
 ## Running the MVP
 
