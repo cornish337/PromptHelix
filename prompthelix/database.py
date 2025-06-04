@@ -1,4 +1,5 @@
 import os
+import logging # Added import
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from prompthelix.models.base import Base
@@ -25,4 +26,9 @@ def get_db():
         db.close()
 
 def init_db():
+    logging.basicConfig(level=logging.INFO)  # Added logging config
+    logger = logging.getLogger(__name__)  # Added logger instance
+    logger.info("Initializing database...")  # Added log message
+    logger.info(f"Using database URL: {DATABASE_URL}") # Added log message
     Base.metadata.create_all(bind=engine)
+    logger.info("Database tables checked/created.") # Added log message

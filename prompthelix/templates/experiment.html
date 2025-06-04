@@ -18,6 +18,14 @@
         <input type="text" id="keywords" name="keywords" value="{{ form_data.keywords if form_data else '' }}">
     </div>
     <br>
+    <div>
+        <label for="execution_mode">Execution Mode:</label><br>
+        <select id="execution_mode" name="execution_mode">
+            <option value="REAL" {% if form_data and form_data.execution_mode == "REAL" %}selected{% endif %}>Real Mode (Use actual LLMs)</option>
+            <option value="TEST" {% if form_data and form_data.execution_mode == "TEST" %}selected{% endif %}>Test Mode (Use dummy data)</option>
+        </select>
+    </div>
+    <br>
     <fieldset>
         <legend>Genetic Algorithm Parameters</legend>
         <div>

@@ -13,6 +13,7 @@ from prompthelix.templating import templates # Import from templating.py
 from prompthelix.database import get_db     # Ensure this is imported
 from prompthelix.api import crud            # Ensure this is imported
 from prompthelix import schemas # Import all schemas
+from prompthelix.enums import ExecutionMode # Added import
 from prompthelix.agents.base import BaseAgent
 
 
@@ -111,6 +112,7 @@ async def run_experiment_ui_submit(
     db: Session = Depends(get_db),
     task_description: str = Form(...),
     keywords: Optional[str] = Form(""), # Comma-separated string
+    execution_mode: str = Form(ExecutionMode.REAL.value), # Added execution_mode
     num_generations: int = Form(10),
     population_size: int = Form(20),
     elitism_count: int = Form(2),
@@ -123,6 +125,7 @@ async def run_experiment_ui_submit(
     ga_params = schemas.GAExperimentParams(
         task_description=task_description,
         keywords=keyword_list,
+        execution_mode=ExecutionMode(execution_mode), # Added execution_mode
         num_generations=num_generations,
         population_size=population_size,
         elitism_count=elitism_count,
@@ -157,6 +160,7 @@ async def run_experiment_ui_submit(
     form_data_retained = {
         "task_description": task_description,
         "keywords": keywords,
+        "execution_mode": execution_mode, # Added execution_mode
         "num_generations": num_generations,
         "population_size": population_size,
         "elitism_count": elitism_count,

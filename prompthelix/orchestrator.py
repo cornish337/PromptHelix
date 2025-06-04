@@ -11,6 +11,7 @@ from prompthelix.genetics.engine import (
     PromptChromosome,
 )
 from typing import List
+from prompthelix.enums import ExecutionMode # Added import
 
 def main_ga_loop(
     task_desc: str,
@@ -18,6 +19,7 @@ def main_ga_loop(
     num_generations: int,
     population_size: int,
     elitism_count: int,
+    execution_mode: ExecutionMode, # New parameter
     return_best: bool = True
 ):
     """
@@ -45,12 +47,18 @@ def main_ga_loop(
     # 2. Instantiate GA Components
     print("Initializing GA components...")
     genetic_ops = GeneticOperators()
-    # FitnessEvaluator directly uses results_evaluator_agent instance.
-    # If FitnessEvaluator were an agent itself, it would also get the message_bus.
-    fitness_eval = FitnessEvaluator(results_evaluator_agent=results_evaluator)
+
+    # Ensure OPENAI_API_KEY (and other necessary keys for LLMs like ANTHROPIC_API_KEY, GOOGLE_API_KEY if used)
+    # are set in the environment for the FitnessEvaluator to function correctly with actual LLM calls.
+    # FitnessEvaluator handles its own OpenAI client initialization using settings from config.py.
+    fitness_eval = FitnessEvaluator(
+        results_evaluator_agent=results_evaluator,
+        execution_mode=execution_mode  # New argument
+    )
+
     pop_manager = PopulationManager(
-        genetic_operators=genetic_ops, 
-        fitness_evaluator=fitness_eval, 
+        genetic_operators=genetic_ops,
+        fitness_evaluator=fitness_eval,
         prompt_architect_agent=prompt_architect, 
         population_size=population_size,
         elitism_count=elitism_count
@@ -224,6 +232,7 @@ if __name__ == "__main__":
         num_generations=example_gens,
         population_size=example_pop,
         elitism_count=example_elitism,
+        execution_mode=ExecutionMode.TEST, # Added for the example call
         return_best=True
     )
     if best_chromosome:
