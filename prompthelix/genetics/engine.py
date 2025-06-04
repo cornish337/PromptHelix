@@ -1,10 +1,11 @@
 import uuid
 import copy
 import random
-# Imports for PopulationManager
-from prompthelix.agents.architect import PromptArchitectAgent
-# ResultsEvaluatorAgent is already imported for FitnessEvaluator
-from prompthelix.agents.results_evaluator import ResultsEvaluatorAgent
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover - only for type hints
+    from prompthelix.agents.architect import PromptArchitectAgent
+    from prompthelix.agents.results_evaluator import ResultsEvaluatorAgent
 
 
 # PromptChromosome class remains unchanged
@@ -246,7 +247,7 @@ class FitnessEvaluator:
     This class simulates interaction with an LLM and uses a ResultsEvaluatorAgent
     to determine the fitness score based on the LLM's output.
     """
-    def __init__(self, results_evaluator_agent: ResultsEvaluatorAgent):
+    def __init__(self, results_evaluator_agent: 'ResultsEvaluatorAgent'):
         """
         Initializes the FitnessEvaluator.
         Args:
@@ -254,6 +255,7 @@ class FitnessEvaluator:
                 ResultsEvaluatorAgent that will be used to assess the quality
                 of LLM outputs.
         """
+        from prompthelix.agents.results_evaluator import ResultsEvaluatorAgent
         if not isinstance(results_evaluator_agent, ResultsEvaluatorAgent):
             raise TypeError("results_evaluator_agent must be an instance of ResultsEvaluatorAgent.")
         self.results_evaluator_agent = results_evaluator_agent
@@ -305,7 +307,7 @@ class PopulationManager:
 
     def __init__(self, genetic_operators: GeneticOperators, 
                  fitness_evaluator: FitnessEvaluator, 
-                 prompt_architect_agent: PromptArchitectAgent, 
+                 prompt_architect_agent: 'PromptArchitectAgent',
                  population_size: int = 50, 
                  elitism_count: int = 2):
         """
@@ -323,6 +325,7 @@ class PopulationManager:
             raise TypeError("genetic_operators must be an instance of GeneticOperators.")
         if not isinstance(fitness_evaluator, FitnessEvaluator):
             raise TypeError("fitness_evaluator must be an instance of FitnessEvaluator.")
+        from prompthelix.agents.architect import PromptArchitectAgent
         if not isinstance(prompt_architect_agent, PromptArchitectAgent):
             raise TypeError("prompt_architect_agent must be an instance of PromptArchitectAgent.")
         if population_size <= 0:
@@ -451,7 +454,6 @@ class PopulationManager:
         """
         if not self.population:
             return None
-        # Assuming population is sorted by evolve_population or needs sorting if called ad-hoc
-        # For safety, re-sort if evolve_population isn't guaranteed to have just run
-        # self.population.sort(key=lambda chromo: chromo.fitness_score, reverse=True)
-
+        # Ensure population is sorted by fitness in descending order
+        self.population.sort(key=lambda chromo: chromo.fitness_score, reverse=True)
+        return self.population[0]

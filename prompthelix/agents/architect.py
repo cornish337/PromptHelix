@@ -20,6 +20,9 @@ class PromptArchitectAgent(BaseAgent):
             "Use XML-like tags to delineate different parts of the prompt, like <context>, <question>, <output_format>.",
         ]
 
+        # Load initial templates
+        self.templates = self._load_templates()
+
 
     def _load_templates(self) -> dict:
         """
