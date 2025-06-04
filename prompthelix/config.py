@@ -13,6 +13,17 @@ import os
 # from dotenv import load_dotenv
 # load_dotenv()
 
+# IMPORTANT: LLM API Key Configuration
+# The system requires API keys for the Large Language Models it interfaces with.
+# These keys should be set as environment variables.
+# For example, to use OpenAI models, set the OPENAI_API_KEY environment variable:
+#
+#   export OPENAI_API_KEY='sk-your_openai_api_key_here'
+#
+# If the required API keys are not found, the relevant LLM calls will fail.
+# The FitnessEvaluator, for instance, will not be able to get actual prompt evaluations
+# from OpenAI, and will return error messages or default (low) fitness scores.
+
 class Settings:
     """
     Application settings class.

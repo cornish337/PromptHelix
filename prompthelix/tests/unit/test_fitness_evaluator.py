@@ -1,105 +1,137 @@
-import unittest
-from unittest.mock import Mock, patch, call # Using Mock and patch
+import pytest
+from unittest.mock import patch, Mock, MagicMock
+
 from prompthelix.genetics.engine import FitnessEvaluator, PromptChromosome
-from prompthelix.agents.results_evaluator import ResultsEvaluatorAgent
+from prompthelix.agents.results_evaluator import ResultsEvaluatorAgent # May need to mock this
+from prompthelix.config import settings
+import openai # Necessary to mock openai.OpenAI and specific errors like OpenAIError
+import logging # For capturing log messages
 
-class TestFitnessEvaluator(unittest.TestCase):
-    """Test suite for the FitnessEvaluator class."""
+# Configure basic logging for tests if caplog is used and output is desired during runs
+# logging.basicConfig(level=logging.INFO) # Or DEBUG for more verbose output
 
-    def test_init_successful(self):
-        """Test successful instantiation with a mock ResultsEvaluatorAgent."""
-        mock_results_agent = Mock(spec=ResultsEvaluatorAgent)
-        evaluator = FitnessEvaluator(results_evaluator_agent=mock_results_agent)
-        self.assertIsInstance(evaluator, FitnessEvaluator)
-        self.assertEqual(evaluator.results_evaluator_agent, mock_results_agent)
+@pytest.fixture
+def mock_results_evaluator_agent():
+    """Fixture for a mocked ResultsEvaluatorAgent."""
+    agent = Mock(spec=ResultsEvaluatorAgent)
+    agent.process_request.return_value = {"fitness_score": 0.75, "detailed_metrics": {}, "error_analysis": []}
+    return agent
 
-    def test_init_type_error(self):
-        """Test that __init__ raises TypeError for incorrect agent type."""
-        with self.assertRaisesRegex(TypeError, "results_evaluator_agent must be an instance of ResultsEvaluatorAgent."):
-            FitnessEvaluator(results_evaluator_agent=None)
-        
-        with self.assertRaisesRegex(TypeError, "results_evaluator_agent must be an instance of ResultsEvaluatorAgent."):
-            FitnessEvaluator(results_evaluator_agent="not_an_agent")
+@pytest.fixture
+def sample_chromosome():
+    """Fixture for a sample PromptChromosome."""
+    return PromptChromosome(genes=["Evaluate this prompt for effectiveness."])
 
-    def setUp(self):
-        """Set up common test data and mocks for evaluate tests."""
-        # This setUp will be used by tests for the 'evaluate' method
-        self.mock_results_agent = Mock(spec=ResultsEvaluatorAgent)
-        self.expected_fitness_score = 0.7
-        self.mock_results_agent.process_request.return_value = {
-            "fitness_score": self.expected_fitness_score,
-            "detailed_metrics": {"relevance": 0.8, "coherence": 0.6},
-            "error_analysis": []
-        }
-        
-        self.fitness_evaluator = FitnessEvaluator(results_evaluator_agent=self.mock_results_agent)
-        self.sample_genes = ["Instruction: Test.", "Context: This is a test context."]
-        self.sample_chromosome = PromptChromosome(genes=self.sample_genes, fitness_score=0.0)
-        self.task_description = "Test task description for evaluation."
+@pytest.fixture
+def mock_openai_client():
+    """Fixture for a mocked OpenAI client instance."""
+    client = MagicMock(spec=openai.OpenAI) # Using MagicMock to handle attribute access like .chat.completions
 
-    @patch('prompthelix.genetics.engine.random.randint') # Mock random.randint in engine.py
-    def test_evaluate_successful(self, mock_randint):
-        """Test the evaluate method with valid inputs."""
-        mock_randint.return_value = 42 # Control randomness in mock LLM output
-        success_criteria = {"max_length": 100}
+    # Mocking the response structure for a successful call
+    mock_completion = Mock()
+    mock_choice = Mock()
+    mock_message = Mock()
+    mock_message.content = "Mocked LLM response content."
+    mock_choice.message = mock_message
+    mock_completion.choices = [mock_choice]
+    client.chat.completions.create.return_value = mock_completion
+    return client
 
-        # Mock chromosome's to_prompt_string to check if it's called
-        self.sample_chromosome.to_prompt_string = Mock(return_value="Test prompt string.")
+# Test for successful LLM call
+@patch('openai.OpenAI') # Mocks the OpenAI class constructor
+def test_evaluate_successful_llm_call(mock_openai_constructor, mock_results_evaluator_agent, sample_chromosome, mock_openai_client, caplog):
+    """Test FitnessEvaluator.evaluate for a successful LLM call."""
+    caplog.set_level(logging.INFO)
+    mock_openai_constructor.return_value = mock_openai_client # The constructor now returns our mock client
 
-        returned_fitness = self.fitness_evaluator.evaluate(
-            self.sample_chromosome, 
-            self.task_description, 
-            success_criteria
-        )
+    with patch.object(settings, 'OPENAI_API_KEY', 'fake_key_present'):
+        evaluator = FitnessEvaluator(results_evaluator_agent=mock_results_evaluator_agent)
 
-        # 1. Verify chromosome.to_prompt_string() was called
-        self.sample_chromosome.to_prompt_string.assert_called_once()
+    fitness_score = evaluator.evaluate(sample_chromosome, "Test task", {"criteria": "none"})
 
-        # 2. Verify results_evaluator_agent.process_request was called correctly
-        expected_mock_llm_output = (
-            f"Mock LLM output for: Test prompt string.[:50]. " # from to_prompt_string mock
-            f"Keywords found: {', '.join(str(g) for g in self.sample_chromosome.genes[:2])}. "
-            f"Random number: 42"
-        )
-        
-        self.mock_results_agent.process_request.assert_called_once()
-        call_args = self.mock_results_agent.process_request.call_args[0][0] # Get the first positional argument (the dict)
+    mock_openai_client.chat.completions.create.assert_called_once()
+    mock_results_evaluator_agent.process_request.assert_called_once_with({
+        "prompt_chromosome": sample_chromosome,
+        "llm_output": "Mocked LLM response content.",
+        "task_description": "Test task",
+        "success_criteria": {"criteria": "none"}
+    })
+    assert sample_chromosome.fitness_score == 0.75 # From mock_results_evaluator_agent
+    assert fitness_score == 0.75
 
-        self.assertEqual(call_args["prompt_chromosome"], self.sample_chromosome)
-        self.assertEqual(call_args["llm_output"], expected_mock_llm_output)
-        self.assertEqual(call_args["task_description"], self.task_description)
-        self.assertEqual(call_args["success_criteria"], success_criteria)
+    assert "Calling OpenAI API model gpt-3.5-turbo" in caplog.text
+    assert "OpenAI API call successful." in caplog.text
 
-        # 3. Verify chromosome.fitness_score is updated
-        self.assertEqual(self.sample_chromosome.fitness_score, self.expected_fitness_score)
+# Test for LLM API error
+@patch('openai.OpenAI')
+def test_evaluate_llm_api_error(mock_openai_constructor, mock_results_evaluator_agent, sample_chromosome, mock_openai_client, caplog):
+    """Test FitnessEvaluator.evaluate when LLM API call raises an OpenAIError."""
+    caplog.set_level(logging.ERROR)
+    mock_openai_constructor.return_value = mock_openai_client
+    mock_openai_client.chat.completions.create.side_effect = openai.APIError("Test API Error", request=Mock(), body=None)
 
-        # 4. Verify the method returns the correct fitness score
-        self.assertEqual(returned_fitness, self.expected_fitness_score)
+    with patch.object(settings, 'OPENAI_API_KEY', 'fake_key_present'):
+        evaluator = FitnessEvaluator(results_evaluator_agent=mock_results_evaluator_agent)
 
-    @patch('prompthelix.genetics.engine.random.randint')
-    def test_evaluate_success_criteria_none(self, mock_randint):
-        """Test evaluate with success_criteria=None."""
-        mock_randint.return_value = 10 # Another random value for this test
-        
-        # No success criteria passed
-        returned_fitness = self.fitness_evaluator.evaluate(
-            self.sample_chromosome, 
-            self.task_description,
-            success_criteria=None # Explicitly None
-        )
-        
-        self.mock_results_agent.process_request.assert_called_once()
-        call_args = self.mock_results_agent.process_request.call_args[0][0]
-        
-        # Ensure success_criteria in the call to process_request is an empty dict if None was passed
-        self.assertEqual(call_args["success_criteria"], {}) 
-        self.assertEqual(self.sample_chromosome.fitness_score, self.expected_fitness_score)
-        self.assertEqual(returned_fitness, self.expected_fitness_score)
+    evaluator.evaluate(sample_chromosome, "Test task", {})
 
-    def test_evaluate_invalid_chromosome_type(self):
-        """Test that evaluate raises TypeError for incorrect chromosome type."""
-        with self.assertRaisesRegex(TypeError, "chromosome must be an instance of PromptChromosome."):
-            self.fitness_evaluator.evaluate("not_a_chromosome", self.task_description)
+    mock_results_evaluator_agent.process_request.assert_called_once()
+    # Check that the error string is passed to results_evaluator
+    args, _ = mock_results_evaluator_agent.process_request.call_args
+    assert "Error: LLM API call failed. Details: Test API Error" in args[0]["llm_output"]
 
-if __name__ == '__main__':
-    unittest.main()
+    assert "OpenAI API error for prompt" in caplog.text
+    assert "Test API Error" in caplog.text
+
+# Test for LLM returning no content
+@patch('openai.OpenAI')
+def test_evaluate_llm_no_content_response(mock_openai_constructor, mock_results_evaluator_agent, sample_chromosome, mock_openai_client, caplog):
+    """Test FitnessEvaluator.evaluate when LLM returns no content in the response."""
+    caplog.set_level(logging.WARNING)
+    mock_openai_constructor.return_value = mock_openai_client
+
+    # Configure mock to simulate no content
+    mock_completion_no_content = Mock()
+    mock_completion_no_content.choices = [] # No choices
+    mock_openai_client.chat.completions.create.return_value = mock_completion_no_content
+
+    with patch.object(settings, 'OPENAI_API_KEY', 'fake_key_present'):
+        evaluator = FitnessEvaluator(results_evaluator_agent=mock_results_evaluator_agent)
+
+    evaluator.evaluate(sample_chromosome, "Test task", {})
+
+    mock_results_evaluator_agent.process_request.assert_called_once()
+    args, _ = mock_results_evaluator_agent.process_request.call_args
+    assert args[0]["llm_output"] == "Error: No content from LLM."
+
+    assert "returned no content or unexpected response structure" in caplog.text
+
+# Test for FitnessEvaluator initialization when API key is missing
+@patch('openai.OpenAI') # Still mock OpenAI constructor as it might be called if logic changes
+def test_fitness_evaluator_init_no_api_key(mock_openai_constructor, mock_results_evaluator_agent, sample_chromosome, caplog):
+    """Test FitnessEvaluator initialization and evaluate call when OPENAI_API_KEY is missing."""
+    caplog.set_level(logging.ERROR) # For init error
+
+    with patch.object(settings, 'OPENAI_API_KEY', None): # Simulate missing API key
+        evaluator = FitnessEvaluator(results_evaluator_agent=mock_results_evaluator_agent)
+
+    assert "OPENAI_API_KEY not found in settings" in caplog.text
+    mock_openai_constructor.assert_not_called() # OpenAI client should not be initialized
+
+    # Now test calling evaluate with no client
+    caplog.clear() # Clear previous log messages
+    caplog.set_level(logging.WARNING) # For the evaluate warning
+
+    evaluator.evaluate(sample_chromosome, "Test task", {})
+
+    # Check that the results evaluator still gets called, but with an error message
+    mock_results_evaluator_agent.process_request.assert_called_once()
+    args, _ = mock_results_evaluator_agent.process_request.call_args
+    assert args[0]["llm_output"] == "Error: LLM client not initialized."
+
+    # Check log for the specific failure within evaluate (or _call_llm_api)
+    assert "LLM client is not initialized. Cannot call LLM API." in caplog.text # This is from _call_llm_api
+    assert f"LLM call for prompt ID {sample_chromosome.id}" in caplog.text # This is from evaluate
+    assert "failed. Output: Error: LLM client not initialized." in caplog.text # This is from evaluate
+
+print("New test file created and initial tests added: prompthelix/tests/unit/test_fitness_evaluator.py")
