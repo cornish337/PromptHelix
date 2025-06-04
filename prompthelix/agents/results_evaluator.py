@@ -188,6 +188,18 @@ class ResultsEvaluatorAgent(BaseAgent):
         if not isinstance(prompt_chromosome, PromptChromosome):
             return {"fitness_score": 0.0, "detailed_metrics": {}, "error_analysis": ["Error: Invalid prompt_chromosome."]}
 
+        # Check for LLM API errors first
+        if llm_output.startswith("Error: LLM API call failed.") or \
+           llm_output.startswith("Error: No content from LLM.") or \
+           llm_output.startswith("Error: LLM client not initialized.") or \
+           llm_output.startswith("Error: Unexpected issue during LLM API call."):
+            print(f"{self.agent_id} - LLM output indicates an API error: {llm_output}")
+            return {
+                "fitness_score": 0.0, # Penalize heavily
+                "detailed_metrics": {"llm_call_status": "failed", "error_message": llm_output, "constraint_adherence_placeholder": 0.0},
+                "error_analysis": [f"LLM interaction failed: {llm_output}"]
+            }
+
         print(f"{self.agent_id} - Evaluating output for prompt: {str(prompt_chromosome)[:100]}... \nLLM Output: {llm_output[:100]}...")
 
         metrics = {}
@@ -205,23 +217,25 @@ class ResultsEvaluatorAgent(BaseAgent):
         metrics.update(content_metrics)
         errors.extend(content_errors)
         
-        # Calculate overall fitness score (example logic)
-        fitness_score = 0.3 # Base score
+        # Calculate overall fitness score
+        # Prioritize constraint adherence
+        fitness_score = metrics.get("constraint_adherence_placeholder", 0.0)
         
-        # Contributions from various metrics
-        # Using .get with a default ensures key presence doesn't break it
-        fitness_score += metrics.get("relevance_placeholder", 0.0) * 0.20
-        fitness_score += metrics.get("coherence_placeholder", 0.0) * 0.15
-        fitness_score += metrics.get("constraint_adherence_placeholder", 0.0) * 0.25
-        fitness_score += metrics.get("content_quality_placeholder", 0.0) * 0.20
-        
-        # Penalty for errors
-        if errors:
-            fitness_score -= len(errors) * 0.1 # Each error reduces score
+        # Optionally, add minor contributions from other metrics.
+        # For now, let's keep it simple and focused on constraints.
+        # Example:
+        # fitness_score = fitness_score * 0.8 + \
+        #                 metrics.get("relevance_placeholder", 0.0) * 0.1 + \
+        #                 metrics.get("coherence_placeholder", 0.0) * 0.1
 
+        # Apply a smaller penalty for non-critical errors found during constraint checks or content analysis.
+        # Critical LLM API errors are handled at the beginning of the function.
+        if errors: # These are errors from _check_constraints or _analyze_content
+            fitness_score -= len(errors) * 0.05 # Small penalty for each minor issue
+        
         fitness_score = max(0.0, min(1.0, fitness_score)) # Normalize to 0.0-1.0
 
-        print(f"{self.agent_id} - Evaluation complete. Fitness: {fitness_score}, Metrics: {metrics}, Errors: {len(errors)}")
+        print(f"{self.agent_id} - Evaluation complete. Fitness: {fitness_score:.4f}, Metrics: {metrics}, Errors (non-critical): {len(errors)}")
         return {
             "fitness_score": fitness_score,
             "detailed_metrics": metrics,
