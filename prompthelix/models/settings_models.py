@@ -1,5 +1,5 @@
 from sqlalchemy import Column, Integer, String, UniqueConstraint
-from prompthelix.database import Base # Assuming Base is accessible here
+from prompthelix.models.base import Base
 
 class APIKey(Base):
     __tablename__ = "api_keys"
