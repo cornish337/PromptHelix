@@ -106,3 +106,77 @@ def get_test_db_service_key(db: Optional[Session] = None) -> Optional[str]:
         if key_from_db:
             return key_from_db
     return os.getenv("TEST_DB_SERVICE_API_KEY") # Fallback to env var
+
+# --- Agent Specific Settings ---
+# This dictionary holds configurations for individual agents.
+AGENT_SETTINGS = {
+    "MetaLearnerAgent": {
+        "knowledge_file_path": "meta_learner_knowledge.json", # Filename, will be combined with KNOWLEDGE_DIR
+        "default_llm_provider": "openai",
+        "persist_knowledge_on_update": True,
+        "default_llm_model": "gpt-3.5-turbo",
+    },
+    "PromptArchitectAgent": {
+        "default_llm_provider": "openai",
+        "default_llm_model": "gpt-3.5-turbo",
+    },
+    "ResultsEvaluatorAgent": {
+        "default_llm_provider": "openai",
+        "evaluation_llm_model": "gpt-4", # Using a more capable model for evaluation
+        "fitness_score_weights": {
+            "constraint_adherence": 0.6,
+            "llm_quality_assessment": 0.4
+        },
+    },
+    "StyleOptimizerAgent": {
+        "default_llm_provider": "openai",
+        "default_llm_model": "gpt-3.5-turbo",
+    },
+    "DomainExpertAgent": {
+        "default_llm_provider": "openai",
+        "default_llm_model": "gpt-3.5-turbo",
+    },
+    "PromptCriticAgent": {
+        "default_llm_provider": "openai",
+        "default_llm_model": "gpt-3.5-turbo",
+    },
+}
+
+# --- LLM Utility Settings ---
+LLM_UTILS_SETTINGS = {
+    "default_timeout": 60,
+    "default_retries": 2,
+}
+
+# --- Logging Configuration (Simplified for now) ---
+LOGGING_CONFIG = {
+    "level": "INFO",
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+}
+
+# --- Directory for persistent knowledge ---
+KNOWLEDGE_DIR = "knowledge" # Relative to project root
+
+def ensure_directories_exist():
+    """
+    Ensures that directories specified in the config (like KNOWLEDGE_DIR) exist.
+    """
+    if KNOWLEDGE_DIR and not os.path.exists(KNOWLEDGE_DIR):
+        try:
+            os.makedirs(KNOWLEDGE_DIR, exist_ok=True) # exist_ok=True avoids error if dir already exists
+            print(f"Config: Created directory: {os.path.abspath(KNOWLEDGE_DIR)}")
+        except OSError as e:
+            print(f"Config: Error creating directory {os.path.abspath(KNOWLEDGE_DIR)}: {e}")
+    else:
+        if KNOWLEDGE_DIR:
+            print(f"Config: Directory {os.path.abspath(KNOWLEDGE_DIR)} already exists or KNOWLEDGE_DIR is not set.")
+
+# It's good practice to call this early, e.g., when the orchestrator starts,
+# or even here, though calling it here means it runs every time config.py is imported.
+# For controlled execution, call it from an application entry point.
+# ensure_directories_exist()
+
+print("PromptHelix Config: AGENT_SETTINGS and other global settings loaded.")
+# To verify API keys are seen by the Settings class (optional, remove for production):
+# print(f"Config - OpenAI Key Loaded via Settings: {'Yes' if settings.OPENAI_API_KEY else 'No (Check Environment Variable OPENAI_API_KEY)'}")
+# print(f"Config - Anthropic Key Loaded via Settings: {'Yes' if settings.ANTHROPIC_API_KEY else 'No (Check Environment Variable ANTHROPIC_API_KEY)'}")
