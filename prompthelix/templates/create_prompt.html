@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Create New Prompt</h1>
+
+<form method="POST" action="{{ url_for('create_prompt_ui_submit') }}">
+    <div>
+        <label for="name">Prompt Name:</label><br>
+        <input type="text" id="name" name="name" required style="width: 100%; max-width: 500px;">
+    </div>
+    <br>
+    <div>
+        <label for="description">Description (Optional):</label><br>
+        <textarea id="description" name="description" rows="3" style="width: 100%; max-width: 500px;"></textarea>
+    </div>
+    <br>
+    <div>
+        <label for="initial_content">Initial Prompt Version Content:</label><br>
+        <textarea id="initial_content" name="initial_content" rows="10" required style="width: 100%; max-width: 500px;"></textarea>
+    </div>
+    <br>
+    <div>
+        <button type="submit">Create Prompt</button>
+    </div>
+</form>
+
+<p><a href="{{ url_for('list_prompts_ui') }}">Cancel and return to Prompts List</a></p>
+{% endblock %}

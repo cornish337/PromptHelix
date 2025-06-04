@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>{{ prompt.name }}</h1>
+{% if prompt.description %}
+<p><strong>Description:</strong> {{ prompt.description }}</p>
+{% endif %}
+<p><small>Created: {{ prompt.created_at.strftime('%Y-%m-%d %H:%M') }}</small></p>
+
+<hr>
+
+<h2>Versions</h2>
+{% if sorted_versions %} {# Use sorted_versions passed from the route #}
+<ul>
+    {% for version in sorted_versions %}
+    <li class="{% if new_version_id and version.id == new_version_id %}highlight{% endif %}"> {# Apply .highlight class #}
+        <h3>Version {{ version.version_number }} {% if new_version_id and version.id == new_version_id %} (New!){% endif %}</h3>
+        <p><strong>Version ID:</strong> {{ version.id }}</p>
+        <p><strong>Created At:</strong> {{ version.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</p>
+        <p><strong>Content:</strong></p>
+        <pre>{{ version.content }}</pre>
+        {% if version.fitness_score is not none %}
+        <p><strong>Fitness Score:</strong> {{ version.fitness_score }}</p>
+        {% endif %}
+        {% if version.parameters_used %}
+        <p><strong>Parameters Used:</strong></p>
+        <pre>{{ version.parameters_used | tojson(indent=2) }}</pre>
+        {% endif %}
+    </li>
+    <hr>
+    {% endfor %}
+</ul>
+{% else %}
+<p>No versions available for this prompt yet.</p>
+{% endif %}
+
+<p><a href="{{ url_for('list_prompts_ui') }}">Back to All Prompts</a></p>
+{% endblock %}
