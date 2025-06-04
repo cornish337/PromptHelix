@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from datetime import datetime
 from typing import List, Optional, Dict, Any
+from prompthelix.enums import ExecutionMode
 
 class PromptVersionBase(BaseModel):
     content: str
@@ -38,6 +39,7 @@ class Prompt(PromptBase):
 # New Schemas for GA Experiment
 class GAExperimentParams(BaseModel):
     task_description: str
+    execution_mode: ExecutionMode = ExecutionMode.REAL
     keywords: List[str] = Field(default_factory=list)
     num_generations: int = 10
     population_size: int = 20

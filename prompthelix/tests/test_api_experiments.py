@@ -1,5 +1,9 @@
 from fastapi.testclient import TestClient
 import pytest
+from unittest.mock import patch, MagicMock
+from prompthelix.enums import ExecutionMode
+# from prompthelix.genetics.engine import PromptChromosome # Not strictly needed if using MagicMock without spec for return
+# from prompthelix.schemas import PromptVersion # Not strictly needed for these tests if just checking status and basic fields
 
 # client will be provided by the test_client fixture from conftest.py
 
@@ -26,7 +30,8 @@ def test_run_ga_experiment_new_prompt(test_client: TestClient):
         "population_size": 2, # Keep low for faster tests
         "elitism_count": 1,   # Keep low for faster tests
         "prompt_name": "GA Test - New Prompt",
-        "prompt_description": "Result of a GA experiment creating a new prompt."
+        "prompt_description": "Result of a GA experiment creating a new prompt.",
+        "execution_mode": ExecutionMode.REAL.value # Added
     }
     response = test_client.post("/api/experiments/run-ga", json=experiment_params)
 
@@ -62,7 +67,8 @@ def test_run_ga_experiment_existing_prompt(test_client: TestClient):
         "num_generations": 1,
         "population_size": 2,
         "elitism_count": 1,
-        "parent_prompt_id": shared_prompt_id_for_experiment_test
+        "parent_prompt_id": shared_prompt_id_for_experiment_test,
+        "execution_mode": ExecutionMode.REAL.value # Added
     }
 
     response = test_client.post("/api/experiments/run-ga", json=experiment_params)
@@ -98,7 +104,8 @@ def test_run_ga_experiment_invalid_parent_prompt(test_client: TestClient):
         "task_description": "Test with invalid parent.",
         "keywords": ["test"],
         "num_generations": 1, "population_size": 2, "elitism_count": 1,
-        "parent_prompt_id": invalid_prompt_id
+        "parent_prompt_id": invalid_prompt_id,
+        "execution_mode": ExecutionMode.REAL.value # Added
     }
     response = test_client.post("/api/experiments/run-ga", json=experiment_params)
     assert response.status_code == 404 # Expect Not Found for parent_prompt_id
@@ -127,3 +134,67 @@ def test_cleanup_experiment_parent_prompt(test_client: TestClient):
         assert response.status_code in [200, 404]
     # No critical assertions needed here, just cleanup.
     pass
+
+
+# New tests with mocked main_ga_loop
+@patch('prompthelix.api.routes.main_ga_loop')
+def test_run_ga_experiment_api_test_mode(mock_main_ga_loop, test_client: TestClient):
+    # Configure mock_main_ga_loop to return a mock PromptChromosome
+    mock_chromosome = MagicMock()
+    mock_chromosome.to_prompt_string.return_value = "Test prompt content from TEST mode"
+    mock_chromosome.fitness_score = 0.95
+    mock_main_ga_loop.return_value = mock_chromosome
+
+    payload = {
+        "task_description": "API Test task for TEST mode",
+        "keywords": ["api", "test", "mock"],
+        "num_generations": 1, # These params will be passed to the mocked loop
+        "population_size": 2,
+        "elitism_count": 1,
+        "prompt_name": "Test API Prompt (TEST mode)", # Create a new prompt
+        "execution_mode": ExecutionMode.TEST.value
+    }
+    response = test_client.post("/api/experiments/run-ga", json=payload)
+
+    assert response.status_code == 200, f"API call failed: {response.text}"
+    response_data = response.json()
+    assert response_data["content"] == "Test prompt content from TEST mode"
+    assert response_data["fitness_score"] == 0.95
+
+    # Check that main_ga_loop was called with the correct execution_mode
+    mock_main_ga_loop.assert_called_once()
+    args, kwargs = mock_main_ga_loop.call_args
+    assert kwargs.get('execution_mode') == ExecutionMode.TEST
+    assert kwargs.get('task_desc') == payload["task_description"]
+    # db_session_for_tests fixture is not explicitly used here as CRUD operations are within the endpoint.
+    # If direct DB verification were needed here, it would be passed.
+
+@patch('prompthelix.api.routes.main_ga_loop')
+def test_run_ga_experiment_api_real_mode_mocked_loop(mock_main_ga_loop, test_client: TestClient):
+    # Configure mock_main_ga_loop for REAL mode specifics if any
+    mock_chromosome = MagicMock()
+    mock_chromosome.to_prompt_string.return_value = "Real prompt content from REAL mode mock"
+    mock_chromosome.fitness_score = 0.88
+    mock_main_ga_loop.return_value = mock_chromosome
+
+    payload = {
+        "task_description": "API Test task for REAL mode (mocked loop)",
+        "keywords": ["api", "real", "mock"],
+        "num_generations": 1,
+        "population_size": 2,
+        "elitism_count": 1,
+        "prompt_name": "Test API Prompt (REAL mode - mocked)",
+        "execution_mode": ExecutionMode.REAL.value
+    }
+    response = test_client.post("/api/experiments/run-ga", json=payload)
+
+    assert response.status_code == 200, f"API call failed: {response.text}"
+    response_data = response.json()
+    assert response_data["content"] == "Real prompt content from REAL mode mock"
+    assert response_data["fitness_score"] == 0.88
+
+    # Check that main_ga_loop was called with the correct execution_mode
+    mock_main_ga_loop.assert_called_once()
+    args, kwargs = mock_main_ga_loop.call_args
+    assert kwargs.get('execution_mode') == ExecutionMode.REAL
+    assert kwargs.get('keywords') == payload["keywords"]

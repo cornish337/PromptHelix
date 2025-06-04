@@ -62,6 +62,7 @@ def run_ga_experiment(params: schemas.GAExperimentParams, db: Session = Depends(
         num_generations=params.num_generations,
         population_size=params.population_size,
         elitism_count=params.elitism_count,
+        execution_mode=params.execution_mode, # Added execution_mode
         return_best=True
     )
 
