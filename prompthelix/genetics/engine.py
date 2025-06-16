@@ -438,37 +438,35 @@ class FitnessEvaluator:
         eval_result = self.results_evaluator_agent.process_request(request_data)
 
         chromosome.fitness_score = eval_result.get('fitness_score', 0.0)
-        chromosome.evaluation_details = eval_result.get('evaluation_details', {})
+        chromosome.evaluation_details = eval_result.get('detailed_metrics', {}) # Corrected key
 
-        # Check for LLM analysis status from ResultsEvaluatorAgent
+        # Debugging: Check for LLM analysis status from ResultsEvaluatorAgent
+        logger.info(f"FIT_EVAL: Chromosome ID {chromosome.id} -- evaluation_details before status check: {str(chromosome.evaluation_details)}")
         llm_analysis_status = None
-        content_metrics = None # Initialize to avoid UnboundLocalError if evaluation_details is empty
+        feedback_message = "N/A"
 
-        if chromosome.evaluation_details:
-            # The key 'content_metrics' should hold the output from _analyze_content
-            content_metrics = chromosome.evaluation_details.get('content_metrics')
-            if content_metrics and isinstance(content_metrics, dict):
-                llm_analysis_status = content_metrics.get('llm_analysis_status')
+        if chromosome.evaluation_details and isinstance(chromosome.evaluation_details, dict):
+            llm_analysis_status = chromosome.evaluation_details.get('llm_analysis_status')
+            feedback_message = chromosome.evaluation_details.get('llm_assessment_feedback', 'N/A')
+            logger.info(f"FIT_EVAL: Chromosome ID {chromosome.id} -- Found evaluation_details. llm_analysis_status: {llm_analysis_status}, feedback: {feedback_message}")
+        else:
+            logger.warning(f"FIT_EVAL: Chromosome ID {chromosome.id} -- chromosome.evaluation_details is None, not a dict, or empty. Value: {str(chromosome.evaluation_details)}")
 
+        # Original logging logic based on the possibly updated llm_analysis_status
         if llm_analysis_status and llm_analysis_status != 'success':
-            # Ensure content_metrics is not None before trying to access llm_assessment_feedback
-            feedback_message = "N/A"
-            if content_metrics: # content_metrics should exist if llm_analysis_status was found within it
-                feedback_message = content_metrics.get('llm_assessment_feedback', 'N/A')
-
             logger.info(
-                f"FitnessEvaluator: Chromosome {chromosome.id} evaluated using fallback LLM metrics. "
+                f"FitnessEvaluator: Chromosome {chromosome.id} evaluated using fallback LLM metrics. " # Standard log message
                 f"Status: '{llm_analysis_status}'. Assigned fitness: {chromosome.fitness_score:.4f}. "
                 f"Feedback: {feedback_message}"
             )
-        elif not llm_analysis_status:
+        elif not llm_analysis_status: # This case implies evaluation_details might be missing or status key itself is absent
             logger.warning(
-                f"FitnessEvaluator: 'llm_analysis_status' not found in evaluation_details.content_metrics for Chromosome {chromosome.id}. "
-                f"Cannot determine if fallback LLM metrics were used. Details: {str(chromosome.evaluation_details)[:200]}..." # Log snippet
+                f"FitnessEvaluator: 'llm_analysis_status' key was not found or was None in evaluation_details for Chromosome {chromosome.id}. " # Standard log message
+                f"Cannot determine if fallback LLM metrics were used. evaluation_details content: {str(chromosome.evaluation_details)[:200]}..."
             )
 
-        # The print statement can be changed to logger.info or kept for verbose console output during runs
-        logger.info(f"FitnessEvaluator: Evaluated chromosome {chromosome.id}, Assigned Fitness: {chromosome.fitness_score:.4f}, LLM Analysis Status: {llm_analysis_status if llm_analysis_status else 'Unknown'}")
+        # Final log line for summary
+        logger.info(f"FitnessEvaluator: Evaluated chromosome {chromosome.id}, Assigned Fitness: {chromosome.fitness_score:.4f}, LLM Analysis Status Logged: {llm_analysis_status if llm_analysis_status else 'Status Unknown (Final Log)'}")
 
         return chromosome.fitness_score
 

@@ -40,13 +40,16 @@ class ResultsEvaluatorAgent(BaseAgent):
         logger.info(f"Agent '{self.agent_id}' initialized with LLM provider: {self.llm_provider}, Evaluation model: {self.evaluation_llm_model}")
 
         if knowledge_file_path:
-            self.knowledge_file_path = (
-                knowledge_file_path
-                if os.path.isabs(knowledge_file_path)
-                else os.path.join(KNOWLEDGE_DIR, knowledge_file_path)
-            )
+            # If knowledge_file_path is absolute or already correctly prefixed with KNOWLEDGE_DIR
+            if os.path.isabs(knowledge_file_path) or \
+               (knowledge_file_path.startswith(KNOWLEDGE_DIR) and knowledge_file_path[len(KNOWLEDGE_DIR)] == os.sep):
+                self.knowledge_file_path = knowledge_file_path
+            else: # It's a simple filename or a relative path not starting with KNOWLEDGE_DIR
+                self.knowledge_file_path = os.path.join(KNOWLEDGE_DIR, knowledge_file_path)
         else:
-            self.knowledge_file_path = os.path.join(KNOWLEDGE_DIR, "results_evaluator_config.json")
+            # Default path if no knowledge_file_path is provided
+            self.knowledge_file_path = os.path.join(KNOWLEDGE_DIR, "results_evaluator_config.json") # Default filename
+
         os.makedirs(os.path.dirname(self.knowledge_file_path), exist_ok=True)
 
         self.evaluation_metrics_config = {} # Initialize before loading
@@ -450,6 +453,15 @@ Example:
                 loop.create_task(self.message_bus.broadcast_message("evaluation_result", result, sender_id=self.agent_id))
             except RuntimeError:
                 asyncio.run(self.message_bus.broadcast_message("evaluation_result", result, sender_id=self.agent_id))
+
+        # Debug logging before returning
+        logger.info(f"REA.process_request: Type of prompt_chromosome input: {type(request_data.get('prompt_chromosome'))}")
+        logger.info(f"REA.process_request: Returning result with keys: {result.keys()}")
+        if 'detailed_metrics' in result:
+            logger.info(f"REA.process_request: detailed_metrics keys: {result['detailed_metrics'].keys()}")
+            logger.info(f"REA.process_request: llm_analysis_status in detailed_metrics: {result['detailed_metrics'].get('llm_analysis_status')}")
+        else:
+            logger.warning("REA.process_request: 'detailed_metrics' key is MISSING in the result.")
 
         return result
 
