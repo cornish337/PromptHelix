@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import patch, MagicMock
 import re  # Import re for escaping
+import datetime
 
 from prompthelix.utils import llm_utils
 
@@ -208,3 +209,93 @@ def test_list_available_llms_scenarios(
     mock_llm_utils_get_openai_key.assert_called_once_with(db_session)
     mock_llm_utils_get_anthropic_key.assert_called_once_with(db_session)
     mock_llm_utils_get_google_key.assert_called_once_with(db_session)
+
+
+@patch('prompthelix.utils.llm_utils.LOG_FILE_PATH', "test_llm_api_calls.log")
+@patch('prompthelix.utils.llm_utils.call_google_api')
+@patch('prompthelix.utils.llm_utils.call_anthropic_api')
+@patch('prompthelix.utils.llm_utils.call_openai_api')
+@patch('prompthelix.utils.llm_utils.datetime')
+@patch('builtins.open', new_callable=MagicMock)
+def test_call_llm_api_logging(
+    mock_open,  # Corresponds to @patch('builtins.open', ...)
+    mock_datetime,  # Corresponds to @patch('prompthelix.utils.llm_utils.datetime')
+    mock_call_openai,  # Corresponds to @patch('prompthelix.utils.llm_utils.call_openai_api')
+    mock_call_anthropic,  # Corresponds to @patch('prompthelix.utils.llm_utils.call_anthropic_api')
+    mock_call_google,  # Corresponds to @patch('prompthelix.utils.llm_utils.call_google_api')
+    mock_log_file_path_object, # Corresponds to @patch('prompthelix.utils.llm_utils.LOG_FILE_PATH', ...)
+    sample_prompt_text,
+    db_session
+):
+    # Setup fixed timestamp
+    fixed_timestamp_str = "2023-10-26T10:00:00"
+    mock_dt_instance = MagicMock()
+    mock_dt_instance.isoformat.return_value = fixed_timestamp_str
+    mock_datetime.datetime.now.return_value = mock_dt_instance
+
+    test_log_file = "test_llm_api_calls.log" # This is the patched path
+
+    # --- Test Case 1: Successful OpenAI call ---
+    mock_call_openai.return_value = "OpenAI success response"
+    provider_success = "openai"
+    model_success = "gpt-test"
+    expected_api_path_success = f"{provider_success.lower()}/{model_success}"
+
+    llm_utils.call_llm_api(prompt=sample_prompt_text, provider=provider_success, model=model_success, db=db_session)
+
+    mock_open.assert_called_with(test_log_file, "a")
+
+    written_content_success_calls = mock_open.return_value.write.call_args_list
+    written_content_success = "".join(call[0][0] for call in written_content_success_calls)
+
+    assert f"Timestamp: {fixed_timestamp_str}" in written_content_success
+    assert f"API Path: {expected_api_path_success}" in written_content_success
+    assert f"Prompt: {sample_prompt_text}" in written_content_success
+    assert "Error:" not in written_content_success
+    assert "---\n" in written_content_success
+
+    mock_open.reset_mock()
+    mock_open.return_value.write.reset_mock()
+    mock_call_openai.reset_mock()
+
+    # --- Test Case 2: Error call (Anthropic) ---
+    error_return_value = "RATE_LIMIT_ERROR"
+    mock_call_anthropic.return_value = error_return_value
+    provider_error = "anthropic"
+    model_error = "claude-test"
+    expected_api_path_error = f"{provider_error.lower()}/{model_error}"
+    expected_error_msg_in_log = error_return_value
+
+    llm_utils.call_llm_api(prompt=sample_prompt_text, provider=provider_error, model=model_error, db=db_session)
+
+    mock_open.assert_called_with(test_log_file, "a")
+    written_content_error_calls = mock_open.return_value.write.call_args_list
+    written_content_error = "".join(call[0][0] for call in written_content_error_calls)
+
+    assert f"Timestamp: {fixed_timestamp_str}" in written_content_error
+    assert f"API Path: {expected_api_path_error}" in written_content_error
+    assert f"Prompt: {sample_prompt_text}" in written_content_error
+    assert f"Error: {expected_error_msg_in_log}" in written_content_error
+    assert "---\n" in written_content_error
+
+    mock_open.reset_mock()
+    mock_open.return_value.write.reset_mock()
+    mock_call_anthropic.reset_mock() # Reset this mock
+
+    # --- Test Case 3: Successful Google call ---
+    mock_call_google.return_value = "Google success response"
+    provider_google = "google"
+    model_google = "gemini-test"
+    expected_api_path_google = f"{provider_google.lower()}/{model_google}"
+
+    llm_utils.call_llm_api(prompt=sample_prompt_text, provider=provider_google, model=model_google, db=db_session)
+
+    mock_open.assert_called_with(test_log_file, "a")
+    written_content_google_calls = mock_open.return_value.write.call_args_list
+    written_content_google = "".join(call[0][0] for call in written_content_google_calls)
+
+    assert f"Timestamp: {fixed_timestamp_str}" in written_content_google
+    assert f"API Path: {expected_api_path_google}" in written_content_google
+    assert f"Prompt: {sample_prompt_text}" in written_content_google
+    assert "Error:" not in written_content_google
+    assert "---\n" in written_content_google

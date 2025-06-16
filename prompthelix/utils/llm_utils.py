@@ -1,3 +1,4 @@
+import datetime
 from prompthelix.config import settings  # Import the settings object
 import logging
 from sqlalchemy.orm import Session  # Added for list_available_llms
@@ -32,6 +33,7 @@ from google.api_core import exceptions as google_exceptions
 # from google.generativeai.types import BlockedPromptException # Not directly caught for now
 
 logger = logging.getLogger(__name__)
+LOG_FILE_PATH = "llm_api_calls.log"
 
 def call_openai_api(prompt: str, model: str = "gpt-3.5-turbo", db: Session = None) -> str:
     api_key = get_openai_api_key(db)
@@ -184,19 +186,81 @@ def call_google_api(prompt: str, model: str = "gemini-pro", db: Session = None) 
 def call_llm_api(prompt: str, provider: str, model: Optional[str] = None, db: Session = None) -> str:
     logger.info(f"call_llm_api invoked with provider: {provider}, model: {model}")
     provider_lower = provider.lower()
+    timestamp = datetime.datetime.now().isoformat()
 
+    determined_model = ""
     if provider_lower == "openai":
-        model_to_use = model if model else "gpt-3.5-turbo"
-        return call_openai_api(prompt, model=model_to_use, db=db)
+        determined_model = model if model else "gpt-3.5-turbo"
     elif provider_lower == "anthropic":
-        model_to_use = model if model else "claude-2"
-        return call_claude_api(prompt, model=model_to_use, db=db)
+        determined_model = model if model else "claude-2"
     elif provider_lower == "google":
-        model_to_use = model if model else "gemini-pro"
-        return call_google_api(prompt, model=model_to_use, db=db)
+        determined_model = model if model else "gemini-pro"
     else:
-        logger.error(f"Unsupported LLM provider: {provider}")
-        return "UNSUPPORTED_PROVIDER_ERROR"
+        # For unsupported providers, or if model is None
+        determined_model = model if model else "unknown_model"
+
+    api_path = f"{provider_lower}/{determined_model}"
+
+    # Ensure prompt is a string, even if it's lengthy.
+    # For logging, newlines in prompt should be escaped or handled if they break log format.
+    # Python's f-string handles multiline strings in `prompt` correctly for the variable itself.
+    # When writing to file, newlines in `prompt` will be preserved.
+    log_entry_start = f"Timestamp: {timestamp}\nAPI Path: {api_path}\nPrompt: {prompt}\n"
+
+    result = ""
+    error_message_for_log = None # Use a different variable name to avoid confusion with API result
+
+    try:
+        if provider_lower == "openai":
+            result = call_openai_api(prompt, model=determined_model, db=db)
+            if result in ["API_KEY_MISSING_ERROR", "RATE_LIMIT_ERROR", "AUTHENTICATION_ERROR", "API_CONNECTION_ERROR", "INVALID_REQUEST_ERROR", "API_ERROR", "OPENAI_ERROR", "UNEXPECTED_OPENAI_CALL_ERROR"]:
+                error_message_for_log = result
+        elif provider_lower == "anthropic":
+            result = call_claude_api(prompt, model=determined_model, db=db)
+            if result in ["API_KEY_MISSING_ERROR", "RATE_LIMIT_ERROR", "AUTHENTICATION_ERROR", "API_STATUS_ERROR", "API_CONNECTION_ERROR", "API_ERROR", "ANTHROPIC_ERROR", "UNEXPECTED_ANTHROPIC_CALL_ERROR", "MALFORMED_CLAUDE_RESPONSE_CONTENT", "EMPTY_CLAUDE_RESPONSE"]:
+                error_message_for_log = result
+        elif provider_lower == "google":
+            result = call_google_api(prompt, model=determined_model, db=db)
+            google_error_conditions = [
+                "API_KEY_MISSING_ERROR", "RATE_LIMIT_ERROR", "AUTHENTICATION_ERROR",
+                "INVALID_ARGUMENT_ERROR", "API_SERVER_ERROR", "API_ERROR",
+                "BLOCKED_PROMPT_ERROR", "EMPTY_GOOGLE_RESPONSE", "GOOGLE_SDK_ERROR",
+                "UNEXPECTED_GOOGLE_CALL_ERROR"
+            ]
+            if result in google_error_conditions or (isinstance(result, str) and result.startswith("GENERATION_STOPPED_")):
+                error_message_for_log = result
+        else:
+            logger.error(f"Unsupported LLM provider: {provider}")
+            result = "UNSUPPORTED_PROVIDER_ERROR"
+            error_message_for_log = result
+
+    except Exception as e:
+        # This is a fallback for unexpected errors during the call_llm_api orchestration itself
+        # or if a sub-call raises an exception instead of returning an error string.
+        logger.error(f"Unexpected error in call_llm_api orchestration or sub-call: {e}", exc_info=True)
+        # Try to form a descriptive error string if possible
+        error_str = str(e)
+        # Check for common error types that might not be caught by string checks
+        if isinstance(e, (OpenAIError, AnthropicError, google_exceptions.GoogleAPIError)):
+             # This provides a more specific error if the sub-functions unexpectedly raised.
+            error_str = f"{type(e).__name__}: {str(e)}"
+
+        result = f"UNEXPECTED_CALL_LLM_API_ERROR" # Generic result for the caller
+        error_message_for_log = f"UNEXPECTED_CALL_LLM_API_ERROR: {error_str}"
+
+
+    # Perform logging
+    try:
+        with open(LOG_FILE_PATH, "a") as f:
+            f.write(log_entry_start) # This includes the prompt
+            if error_message_for_log:
+                f.write(f"Error: {error_message_for_log}\n")
+            f.write("---\n") # Separator for entries
+    except Exception as e:
+        logger.error(f"Failed to write to LLM API call log: {e}", exc_info=True)
+        # Do not propagate logging errors to the caller of call_llm_api
+
+    return result
 
 
 # Backwards compatibility for older tests
