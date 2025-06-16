@@ -116,6 +116,14 @@ class PromptChromosome:
         return f"PromptChromosome(id='{self.id}', genes={self.genes!r}, fitness_score={self.fitness_score:.4f})"
 
 
+from prompthelix.genetics.mutation_strategies import (
+    MutationStrategy,
+    AppendCharStrategy,
+    ReverseSliceStrategy,
+    PlaceholderReplaceStrategy,
+    NoOperationMutationStrategy
+)
+
 # GeneticOperators class remains unchanged
 class GeneticOperators:
     """
@@ -123,9 +131,40 @@ class GeneticOperators:
     for PromptChromosome objects.
     """
 
-    def __init__(self, style_optimizer_agent: 'StyleOptimizerAgent' | None = None):
-        """Initializes the operator with an optional StyleOptimizerAgent."""
+    def __init__(self,
+                 style_optimizer_agent: 'StyleOptimizerAgent' | None = None,
+                 mutation_strategies: list[MutationStrategy] | None = None):
+        """
+        Initializes the operator with an optional StyleOptimizerAgent and mutation strategies.
+
+        Args:
+            style_optimizer_agent (StyleOptimizerAgent | None, optional): Agent for style optimization.
+            mutation_strategies (list[MutationStrategy] | None, optional):
+                A list of mutation strategies to use. If None, default strategies are initialized.
+        """
         self.style_optimizer_agent = style_optimizer_agent
+
+        if mutation_strategies is None:
+            # If no list is provided at all, use the default set of strategies
+            self.mutation_strategies = [
+                AppendCharStrategy(),
+                ReverseSliceStrategy(),
+                PlaceholderReplaceStrategy()
+            ]
+            logger.info("GeneticOperators initialized with default mutation strategies.")
+        else:
+            # If a list is provided (even if empty), use that list
+            self.mutation_strategies = mutation_strategies
+            if self.mutation_strategies: # Log if the provided list is not empty
+                logger.info(f"GeneticOperators initialized with {len(self.mutation_strategies)} custom mutation strategies.")
+            # If the provided list IS empty, the next check will handle it.
+
+        # If, after the above, mutation_strategies is an empty list (e.g., user passed []),
+        # then default to NoOperationMutationStrategy.
+        if not self.mutation_strategies:
+            logger.warning("GeneticOperators received an empty list for mutation_strategies. Defaulting to NoOperationMutationStrategy.")
+            self.mutation_strategies = [NoOperationMutationStrategy()]
+
 
     def selection(self, population: list[PromptChromosome], tournament_size: int = 3) -> PromptChromosome:
         """
@@ -155,6 +194,8 @@ class GeneticOperators:
         for contender in tournament_contenders[1:]:
             if contender.fitness_score > winner.fitness_score:
                 winner = contender
+
+        logger.debug(f"Selection (tournament size {actual_tournament_size}): Winner Chromosome ID {winner.id}, Fitness {winner.fitness_score:.4f}")
         return winner
 
     def crossover(self, parent1: PromptChromosome, parent2: PromptChromosome, 
@@ -177,8 +218,10 @@ class GeneticOperators:
         """
         child1_genes = []
         child2_genes = []
+        performed_crossover = False
 
         if random.random() < crossover_rate:
+            performed_crossover = True
             len1 = len(parent1.genes)
             len2 = len(parent2.genes)
             
@@ -190,7 +233,9 @@ class GeneticOperators:
                 child1_genes, child2_genes = [], copy.deepcopy(parent1.genes)
             else:
                 shorter_parent_len = min(len1, len2)
-                crossover_point = random.randint(0, shorter_parent_len)
+                # Ensure crossover_point allows for segments from both if shorter_parent_len > 0
+                crossover_point = random.randint(0, shorter_parent_len) if shorter_parent_len > 0 else 0
+
                 child1_genes.extend(parent1.genes[:crossover_point])
                 child1_genes.extend(parent2.genes[crossover_point:])
                 child2_genes.extend(parent2.genes[:crossover_point])
@@ -198,15 +243,17 @@ class GeneticOperators:
             
             child1 = PromptChromosome(genes=child1_genes, fitness_score=0.0)
             child2 = PromptChromosome(genes=child2_genes, fitness_score=0.0)
+            logger.debug(f"Crossover performed between Parent {parent1.id} and Parent {parent2.id}. Child1 ID {child1.id}, Child2 ID {child2.id}.")
         else:
             child1 = parent1.clone()
             child2 = parent2.clone()
             child1.fitness_score = 0.0 
             child2.fitness_score = 0.0
+            logger.debug(f"Crossover skipped (rate {crossover_rate}). Cloned Parent {parent1.id} to Child {child1.id}, Parent {parent2.id} to Child {child2.id}.")
         return child1, child2
 
     def mutate(self, chromosome: PromptChromosome, mutation_rate: float = 0.1,
-               gene_mutation_prob: float = 0.2,
+               gene_mutation_prob: float = 0.2, # This param is currently unused as strategies manage gene selection
                target_style: str | None = None) -> PromptChromosome:
         """
         Mutates a chromosome based on mutation_rate and gene_mutation_prob.
@@ -221,56 +268,105 @@ class GeneticOperators:
         Returns:
             PromptChromosome: A new, potentially mutated, PromptChromosome instance.
         """
-        mutated_chromosome = chromosome.clone()
-        mutated_chromosome.fitness_score = 0.0
+        # Clone the chromosome at the beginning. Strategies will work on this clone.
+        # Individual strategies also clone, this might be redundant but ensures encapsulation.
+        # Let's have strategies operate on the passed chromosome and expect them to return a new, mutated clone.
 
-        mutation_applied = False
+        mutated_chromosome_overall = chromosome # Start with original
+        mutation_applied_this_cycle = False
 
-        if random.random() < mutation_rate:
-            genes_modified = False
-            for i in range(len(mutated_chromosome.genes)):
-                if random.random() < gene_mutation_prob:
-                    genes_modified = True
-                    mutation_applied = True
-                    original_gene_str = str(mutated_chromosome.genes[i])
-                    # Added "style_optimization_placeholder" to the list of choices
-                    mutation_type = random.choice(["append_char", "reverse_slice", "placeholder_replace", "style_optimization_placeholder"])
-                    if mutation_type == "append_char":
-                        mutated_chromosome.genes[i] = original_gene_str + random.choice("!*?_")
-                    elif mutation_type == "reverse_slice" and len(original_gene_str) > 2:
-                        slice_len = random.randint(1, max(2, len(original_gene_str) // 2))
-                        start_index = random.randint(0, len(original_gene_str) - slice_len)
-                        segment_to_reverse = original_gene_str[start_index : start_index + slice_len]
-                        mutated_chromosome.genes[i] = (
-                            original_gene_str[:start_index] + 
-                            segment_to_reverse[::-1] + 
-                            original_gene_str[start_index + slice_len:]
-                        )
-                    elif mutation_type == "style_optimization_placeholder":
-                        print(f"GeneticOperators.mutate: Conceptual call to StyleOptimizerAgent for gene: {original_gene_str}")
-                        mutated_chromosome.genes[i] = original_gene_str + " [StyleOptimized_Placeholder]"
-                        # In a real scenario:
-                        # style_optimizer_payload = {"prompt_chromosome": PromptChromosome(genes=[original_gene_str]), "target_style": "concise"} # or another dynamic style
-                        # Assuming a StyleOptimizerAgent instance was available (e.g., passed to __init__ or a global registry):
-                        # optimized_segment_chromosome = style_optimizer_agent.process_request(style_optimizer_payload)
-                        # mutated_chromosome.genes[i] = optimized_segment_chromosome.genes[0]
-                    else: # Fallback for placeholder_replace or short strings (if placeholder_replace was chosen or other conditions failed)
-                        mutated_chromosome.genes[i] = "[MUTATED_GENE_SEGMENT]"
-            if not genes_modified and len(mutated_chromosome.genes) > 0:
-                mutation_applied = True
-                gene_to_mutate_idx = random.randrange(len(mutated_chromosome.genes))
-                mutated_chromosome.genes[gene_to_mutate_idx] = str(mutated_chromosome.genes[gene_to_mutate_idx]) + "*"
+        if random.random() < mutation_rate: # Overall probability of any mutation occurring
+            if self.mutation_strategies:
+                # Apply one strategy per gene, if gene_mutation_prob is met for that gene
+                # This is a change from "one strategy for the whole chromosome" to "potentially multiple strategies if multiple genes mutate"
+                # Or, pick one strategy and apply it if any gene is chosen for mutation. Let's stick to the latter for now.
 
-        if mutation_applied and target_style and self.style_optimizer_agent:
+                # Create a working clone that strategies will modify or replace
+                working_chromosome_clone = chromosome.clone()
+                working_chromosome_clone.fitness_score = 0.0 # Reset fitness
+
+                at_least_one_gene_mutated = False
+                for i in range(len(working_chromosome_clone.genes)):
+                    if random.random() < gene_mutation_prob: # Probability of this specific gene mutating
+                        selected_strategy = random.choice(self.mutation_strategies)
+
+                        # Create a temporary chromosome for the single gene to pass to the strategy
+                        # This is a bit clunky; strategies might need to be aware of gene indices or operate on gene lists.
+                        # For now, let's assume strategies are designed to mutate one gene of a chromosome.
+                        # The current strategies (AppendChar, ReverseSlice, PlaceholderReplace) pick a random gene.
+                        # This means applying a strategy might mutate a *different* gene than the one selected by index i.
+                        # This needs refinement.
+
+                        # Refined approach: Pass the working_chromosome_clone and let the strategy pick a gene.
+                        # If a strategy is applied, we consider the chromosome mutated.
+                        # This is simpler and closer to the original intent where one mutation operation was chosen.
+
+                        # Let's revert to: if mutation is to occur, pick ONE strategy and apply it to the chromosome.
+                        # The strategy itself will then pick which gene(s) to mutate internally if it's gene-specific.
+                        pass # This loop for gene_mutation_prob is not how it should be with current strategies
+
+                # Corrected logic: If chromosome is selected for mutation, pick one strategy and apply it.
+                # The chosen strategy will internally handle how it mutates (e.g. which gene).
+                selected_strategy = random.choice(self.mutation_strategies)
+                logger.debug(f"Applying mutation strategy '{selected_strategy.__class__.__name__}' to chromosome {working_chromosome_clone.id}")
+                mutated_chromosome_overall = selected_strategy.mutate(working_chromosome_clone) # Pass the clone
+                mutation_applied_this_cycle = True # A strategy was applied
+
+                # The old logic of appending "*" if no gene was modified by the above loop:
+                # This should be handled by ensuring strategies always make a change,
+                # or by having a specific strategy that does this (e.g. "MinorPerturbationStrategy").
+                # For now, if a strategy is selected, we assume it mutates.
+                # The NoOperationMutationStrategy can be used if no change is desired sometimes.
+            else:
+                logger.warning("Mutation selected to occur, but no mutation strategies are defined in GeneticOperators.")
+                mutated_chromosome_overall = chromosome.clone() # Still clone, reset fitness
+                mutated_chromosome_overall.fitness_score = 0.0
+
+
+        # If no mutation was applied by random chance (missed mutation_rate),
+        # return a fresh clone with reset fitness.
+        if not mutation_applied_this_cycle:
+            mutated_chromosome_overall = chromosome.clone()
+            mutated_chromosome_overall.fitness_score = 0.0
+            # No specific mutation strategy was chosen via mutation_rate
+
+        # Style optimization step (if applicable)
+        # This happens *after* a primary mutation strategy has been applied (or not, if mutation_rate was missed)
+        if target_style and self.style_optimizer_agent:
+            # If mutation_applied_this_cycle is false, mutated_chromosome_overall is just a clone.
+            # We might only want to apply style optimization if a structural mutation happened.
+            # Or, style optimization could be a mutation strategy itself.
+            # For now, let's assume it can be applied even to an unmutated (but cloned) chromosome.
             try:
-                request = {"prompt_chromosome": mutated_chromosome, "target_style": target_style}
-                optimized = self.style_optimizer_agent.process_request(request)
-                if isinstance(optimized, PromptChromosome):
-                    mutated_chromosome = optimized
-            except Exception as e:  # pragma: no cover - logging/exception path
-                logger.error(f"Style optimization failed during mutation: {e}")
+                # Ensure the chromosome passed to style optimizer is the one potentially mutated
+                request = {"prompt_chromosome": mutated_chromosome_overall, "target_style": target_style}
+                optimized_chromosome = self.style_optimizer_agent.process_request(request)
+                if isinstance(optimized_chromosome, PromptChromosome):
+                    # The style optimizer should return a new chromosome instance.
+                    # Fitness of this new chromosome should ideally be reset by the optimizer,
+                    # or it should be reset here if the optimizer doesn't guarantee it.
+                    # For now, we assume the optimizer returns a valid chromosome,
+                    # and we'll ensure its fitness is 0.0 for the new generation.
+                    mutated_chromosome_overall = optimized_chromosome
+                    mutated_chromosome_overall.fitness_score = 0.0 # Ensure fitness is reset
+                    logger.info(f"Chromosome {mutated_chromosome_overall.id} successfully style-optimized to target style '{target_style}'.")
+                else:
+                    logger.warning(
+                        f"StyleOptimizerAgent did not return a PromptChromosome for chromosome {mutated_chromosome_overall.id} "
+                        f"(received {type(optimized_chromosome)}). Skipping style optimization."
+                    )
+            except Exception as e:
+                logger.error(
+                    f"Style optimization failed during mutation for chromosome {mutated_chromosome_overall.id} "
+                    f"with target style '{target_style}': {e}", exc_info=True
+                )
+        elif target_style and not self.style_optimizer_agent:
+            logger.warning(
+                f"Target style '{target_style}' provided for mutation, but StyleOptimizerAgent is not available. Skipping style optimization."
+            )
 
-        return mutated_chromosome
+
+        return mutated_chromosome_overall
 
 
 # FitnessEvaluator class remains unchanged
@@ -536,7 +632,9 @@ class PopulationManager:
                  population_size: int = 50,
                  elitism_count: int = 2,
                  population_path: str | None = None,
-                 initial_prompt_str: str | None = None): # New parameter
+                 initial_prompt_str: str | None = None, # New parameter
+                 parallel_workers: Optional[int] = None,
+                 evaluation_timeout: Optional[int] = 60):
         """
         Initializes the PopulationManager.
 
@@ -564,6 +662,10 @@ class PopulationManager:
             raise ValueError("Population size must be positive.")
         if elitism_count < 0 or elitism_count > population_size:
             raise ValueError("Elitism count must be non-negative and not exceed population size.")
+        if parallel_workers is not None and parallel_workers <= 0:
+            raise ValueError("parallel_workers must be positive if specified.")
+        if evaluation_timeout is not None and evaluation_timeout <= 0:
+            raise ValueError("evaluation_timeout must be positive if specified.")
 
         self.genetic_operators = genetic_operators
         self.fitness_evaluator = fitness_evaluator
@@ -572,7 +674,8 @@ class PopulationManager:
         self.elitism_count = elitism_count
         self.population_path = population_path
         self.initial_prompt_str = initial_prompt_str # Store the new parameter
-
+        self.parallel_workers = parallel_workers
+        self.evaluation_timeout = evaluation_timeout
 
         self.population: list[PromptChromosome] = []
         self.generation_number: int = 0
@@ -664,16 +767,22 @@ class PopulationManager:
                 StyleOptimizerAgent is available. Defaults to None.
         """
         if not self.population:
-            print("PopulationManager: Cannot evolve an empty population. Please initialize first.")
+            logger.warning("PopulationManager: Cannot evolve an empty population. Please initialize first.")
             return
 
-        print(f"PopulationManager: Evolving population for generation {self.generation_number + 1}. Evaluating current population...")
+        current_generation_number = self.generation_number + 1
+        logger.info(f"PopulationManager: Starting evolution for generation {current_generation_number}. Population size: {len(self.population)}")
         
         # 1. Evaluate Population
+        logger.info(f"Generation {current_generation_number}: Evaluating fitness of {len(self.population)} chromosomes.")
         futures = []
         # Ensure ProcessPoolExecutor is imported
-        from concurrent.futures import ProcessPoolExecutor
-        with ProcessPoolExecutor() as executor:
+        from concurrent.futures import ProcessPoolExecutor, TimeoutError
+
+        evaluated_chromosomes_count = 0
+        failed_evaluations_count = 0
+
+        with ProcessPoolExecutor(max_workers=self.parallel_workers) as executor:
             for chromosome in self.population:
                 # Submit evaluation task to the executor
                 future = executor.submit(self.fitness_evaluator.evaluate, chromosome, task_description, success_criteria)
@@ -682,59 +791,79 @@ class PopulationManager:
             # Retrieve results and update fitness scores
             for future, chromosome in futures:
                 try:
-                    fitness_score = future.result()  # This will block until the future is complete
+                    # Use self.evaluation_timeout; if None, future.result() has no timeout
+                    fitness_score = future.result(timeout=self.evaluation_timeout)
                     chromosome.fitness_score = fitness_score
+                    evaluated_chromosomes_count +=1
+                except TimeoutError:
+                    logger.error(f"Fitness evaluation for chromosome {chromosome.id} timed out after {self.evaluation_timeout} seconds.")
+                    chromosome.fitness_score = 0.0 # Assign a default low fitness on error
+                    failed_evaluations_count += 1
                 except Exception as e:
                     logger.error(f"Error evaluating chromosome {chromosome.id} in parallel: {e}", exc_info=True)
                     chromosome.fitness_score = 0.0 # Assign a default low fitness on error
+                    failed_evaluations_count += 1
+
+        logger.info(f"PopulationManager: Fitness evaluation complete for generation {self.generation_number + 1}.")
+        logger.info(f"Successfully evaluated: {evaluated_chromosomes_count - failed_evaluations_count}/{len(self.population)} chromosomes.")
+        if failed_evaluations_count > 0:
+            logger.warning(f"Failed evaluations (due to timeout or other errors): {failed_evaluations_count}/{len(self.population)} chromosomes.")
 
 
-        # 2. Sort Population by fitness (descending) without mutating original list reference
-        # Population is now updated with fitness scores from parallel execution
+        # 2. Sort Population by fitness (descending)
         sorted_population = sorted(self.population, key=lambda c: c.fitness_score, reverse=True)
         
-        print(
-            f"PopulationManager: Fittest individual in current generation ({self.generation_number}):"
-            f" {sorted_population[0].id if sorted_population else 'N/A'} with fitness"
-            f" {sorted_population[0].fitness_score if sorted_population else 'N/A'}"
-        )
+        if sorted_population:
+            fittest_individual = sorted_population[0]
+            logger.info(
+                f"Generation {current_generation_number}: Fittest individual Chromosome ID {fittest_individual.id} "
+                f"with fitness {fittest_individual.fitness_score:.4f}"
+            )
+        else:
+            logger.warning(f"Generation {current_generation_number}: Population is empty after evaluation. No fittest individual.")
+
 
         new_population: list[PromptChromosome] = []
 
         # 3. Elitism: Carry over the best individuals
-        if self.elitism_count > 0:
-            print(
-                f"PopulationManager: Applying elitism for top {self.elitism_count} individuals."
+        if self.elitism_count > 0 and sorted_population:
+            logger.info(
+                f"Generation {current_generation_number}: Applying elitism for top {self.elitism_count} individuals."
             )
             new_population.extend(sorted_population[: self.elitism_count])
 
         # 4. Generate Offspring
-        print(f"PopulationManager: Generating offspring through selection, crossover, and mutation.")
+        logger.info(f"Generation {current_generation_number}: Generating {self.population_size - len(new_population)} offspring through selection, crossover, and mutation.")
         num_offspring_needed = self.population_size - len(new_population)
         
         generated_offspring_count = 0
-        while generated_offspring_count < num_offspring_needed:
-            # Selection
-            parent1 = self.genetic_operators.selection(sorted_population)
-            parent2 = self.genetic_operators.selection(sorted_population)
-            
-            # Crossover
-            child1, child2 = self.genetic_operators.crossover(parent1, parent2)
-            
-            # Mutation
-            mutated_child1 = self.genetic_operators.mutate(child1, target_style=target_style)
-            mutated_child2 = self.genetic_operators.mutate(child2, target_style=target_style)
-            
-            new_population.append(mutated_child1)
-            generated_offspring_count += 1
-            if generated_offspring_count < num_offspring_needed:
-                new_population.append(mutated_child2)
+        # Ensure there's a viable population to select from for breeding
+        if sorted_population: # Check if sorted_population is not empty
+            while generated_offspring_count < num_offspring_needed:
+                # Selection - logging is inside genetic_operators.selection
+                parent1 = self.genetic_operators.selection(sorted_population)
+                parent2 = self.genetic_operators.selection(sorted_population)
+
+                # Crossover - logging is inside genetic_operators.crossover
+                child1, child2 = self.genetic_operators.crossover(parent1, parent2)
+
+                # Mutation - logging is inside genetic_operators.mutate and strategies
+                mutated_child1 = self.genetic_operators.mutate(child1, target_style=target_style) # gene_mutation_prob is unused here
+                mutated_child2 = self.genetic_operators.mutate(child2, target_style=target_style) # gene_mutation_prob is unused here
+
+                new_population.append(mutated_child1)
                 generated_offspring_count += 1
-        
+                if generated_offspring_count < num_offspring_needed:
+                    new_population.append(mutated_child2)
+                    generated_offspring_count += 1
+        elif num_offspring_needed > 0 : # If population was empty and we need offspring
+             logger.warning(f"Generation {current_generation_number}: Cannot generate offspring as the population became empty after evaluation. New population will be undersized.")
+
+
         self.population = new_population[: self.population_size]
 
-        self.generation_number += 1
-        print(f"PopulationManager: Evolution complete. New generation: {self.generation_number}. Population size: {len(self.population)}")
+        self.generation_number = current_generation_number # Update generation number
+        logger.info(f"PopulationManager: Evolution complete for generation {self.generation_number}. New population size: {len(self.population)}")
 
 
     def get_fittest_individual(self) -> PromptChromosome | None:
@@ -766,9 +895,9 @@ class PopulationManager:
         try:
             with open(file_path, "w", encoding="utf-8") as fh:
                 json.dump(data, fh, indent=2)
-            print(f"PopulationManager: Population saved to {file_path}.")
+            logger.info(f"PopulationManager: Population saved to {file_path}.")
         except Exception as e:
-            logger.error(f"Error saving population to {file_path}: {e}")
+            logger.error(f"Error saving population to {file_path}: {e}", exc_info=True)
 
     def load_population(self, file_path: str) -> None:
         """Load population from a JSON file if it exists."""
@@ -785,7 +914,15 @@ class PopulationManager:
                                  fitness_score=item.get("fitness_score", 0.0))
                 for item in individuals
             ]
-            self.population_size = len(self.population) or self.population_size
-            print(f"PopulationManager: Loaded {len(self.population)} individuals from {file_path}.")
+            # If loading an empty population, population_size might become 0.
+            # Keep original population_size if loaded population is empty,
+            # unless original population_size was also 0.
+            if not self.population and self.population_size > 0:
+                 logger.warning(f"Loaded population from {file_path} is empty. Retaining configured population_size: {self.population_size}")
+            else:
+                 self.population_size = len(self.population) or self.population_size
+
+
+            logger.info(f"PopulationManager: Loaded {len(self.population)} individuals from {file_path}. Generation set to {self.generation_number}. Population size set to {self.population_size}.")
         except Exception as e:
-            logger.error(f"Error loading population from {file_path}: {e}")
+            logger.error(f"Error loading population from {file_path}: {e}", exc_info=True)
