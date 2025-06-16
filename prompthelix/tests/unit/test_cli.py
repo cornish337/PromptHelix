@@ -3,6 +3,7 @@ import unittest
 from unittest.mock import patch, MagicMock, ANY
 import sys
 import io # For capturing stdout/stderr
+import json # For mocking JSONDecodeError
 
 from prompthelix.cli import main_cli
 from prompthelix.enums import ExecutionMode # Needed for asserting calls
