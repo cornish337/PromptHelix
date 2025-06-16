@@ -3,18 +3,21 @@ import importlib
 import inspect
 from typing import List, Optional
 
-from fastapi import APIRouter, Request, Depends, HTTPException, Form, Query
+from fastapi import APIRouter, Request, Depends, HTTPException, Form, Query, status
 from fastapi.responses import RedirectResponse, HTMLResponse
 from sqlalchemy.orm import Session
-from starlette.status import HTTP_303_SEE_OTHER # For POST redirect
-import httpx # For making API calls from UI routes
+from starlette.status import HTTP_303_SEE_OTHER  # For POST redirect
+import httpx  # For making API calls from UI routes
+from datetime import datetime
 
 from prompthelix.templating import templates # Import from templating.py
 from prompthelix.database import get_db     # Ensure this is imported
 from prompthelix.api import crud            # Ensure this is imported
 from prompthelix import schemas # Import all schemas
-from prompthelix.enums import ExecutionMode # Added import
+from prompthelix.enums import ExecutionMode  # Added import
 from prompthelix.agents.base import BaseAgent
+from prompthelix.models.user_models import User as UserModel
+from prompthelix.services import user_service
 
 
 router = APIRouter()
@@ -24,6 +27,24 @@ SUPPORTED_LLM_SERVICES = [
     {"name": "ANTHROPIC", "display_name": "Anthropic", "description": "API key for Anthropic models (e.g., Claude)."},
     {"name": "GOOGLE", "display_name": "Google", "description": "API key for Google AI models (e.g., Gemini)."}
 ]
+
+
+async def get_current_user_ui(
+    request: Request, db: Session = Depends(get_db)
+) -> UserModel:
+    token = request.cookies.get("prompthelix_access_token")
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    db_session = user_service.get_session_by_token(db, session_token=token)
+    if not db_session:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authentication credentials")
+    if db_session.expires_at < datetime.utcnow():
+        user_service.delete_session(db, session_token=token)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired")
+    user = user_service.get_user(db, user_id=db_session.user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found for session")
+    return user
 
 def list_available_agents() -> List[dict[str, str]]: # Updated type hint
     agents_info = [] # Changed variable name
@@ -82,13 +103,13 @@ async def create_prompt_ui_form(request: Request):
 async def create_prompt_ui_submit(
     request: Request,
     db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user_ui),
     name: str = Form(...),
     description: Optional[str] = Form(None),
     initial_content: str = Form(...)
 ):
     prompt_data = schemas.PromptCreate(name=name, description=description)
-    # UI routes do not handle authentication yet; default owner_id=1
-    db_prompt = crud.create_prompt(db, prompt=prompt_data, owner_id=1)
+    db_prompt = crud.create_prompt(db, prompt=prompt_data, owner_id=current_user.id)
 
     version_data = schemas.PromptVersionCreate(content=initial_content)
     crud.create_prompt_version(db, version=version_data, prompt_id=db_prompt.id)
@@ -101,7 +122,11 @@ async def create_prompt_ui_submit(
 
 
 @router.get("/ui/experiments/new", name="run_experiment_ui_form")
-async def run_experiment_ui_form(request: Request, db: Session = Depends(get_db)):
+async def run_experiment_ui_form(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user_ui),
+):
     available_prompts = crud.get_prompts(db, limit=1000) # Get a list of prompts for dropdown
     return templates.TemplateResponse(
         "experiment.html",
@@ -112,6 +137,7 @@ async def run_experiment_ui_form(request: Request, db: Session = Depends(get_db)
 async def run_experiment_ui_submit(
     request: Request,
     db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user_ui),
     task_description: str = Form(...),
     keywords: Optional[str] = Form(""), # Comma-separated string
     execution_mode: str = Form(ExecutionMode.REAL.value), # Added execution_mode
