@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import Mock, patch, call # Using Mock and patch
 from prompthelix.genetics.engine import FitnessEvaluator, PromptChromosome
 from prompthelix.agents.results_evaluator import ResultsEvaluatorAgent
+from prompthelix.enums import ExecutionMode # Added import
 
 class TestFitnessEvaluator(unittest.TestCase):
     """Test suite for the FitnessEvaluator class."""
@@ -9,17 +10,17 @@ class TestFitnessEvaluator(unittest.TestCase):
     def test_init_successful(self):
         """Test successful instantiation with a mock ResultsEvaluatorAgent."""
         mock_results_agent = Mock(spec=ResultsEvaluatorAgent)
-        evaluator = FitnessEvaluator(results_evaluator_agent=mock_results_agent)
+        evaluator = FitnessEvaluator(results_evaluator_agent=mock_results_agent, execution_mode=ExecutionMode.TEST)
         self.assertIsInstance(evaluator, FitnessEvaluator)
         self.assertEqual(evaluator.results_evaluator_agent, mock_results_agent)
 
     def test_init_type_error(self):
         """Test that __init__ raises TypeError for incorrect agent type."""
         with self.assertRaisesRegex(TypeError, "results_evaluator_agent must be an instance of ResultsEvaluatorAgent."):
-            FitnessEvaluator(results_evaluator_agent=None)
+            FitnessEvaluator(results_evaluator_agent=None, execution_mode=ExecutionMode.TEST)
 
         with self.assertRaisesRegex(TypeError, "results_evaluator_agent must be an instance of ResultsEvaluatorAgent."):
-            FitnessEvaluator(results_evaluator_agent="not_an_agent")
+            FitnessEvaluator(results_evaluator_agent="not_an_agent", execution_mode=ExecutionMode.TEST)
 
     def setUp(self):
         """Set up common test data and mocks for evaluate tests."""
@@ -32,7 +33,7 @@ class TestFitnessEvaluator(unittest.TestCase):
             "error_analysis": []
         }
 
-        self.fitness_evaluator = FitnessEvaluator(results_evaluator_agent=self.mock_results_agent)
+        self.fitness_evaluator = FitnessEvaluator(results_evaluator_agent=self.mock_results_agent, execution_mode=ExecutionMode.TEST)
         self.sample_genes = ["Instruction: Test.", "Context: This is a test context."]
         self.sample_chromosome = PromptChromosome(genes=self.sample_genes, fitness_score=0.0)
         self.task_description = "Test task description for evaluation."

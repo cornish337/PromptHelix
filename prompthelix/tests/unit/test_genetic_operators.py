@@ -131,9 +131,10 @@ class TestGeneticOperators(unittest.TestCase):
     @patch('random.random') # To control mutation rates
     def test_mutate_occurs(self, mock_random_rates, mock_random_choice):
         """Test mutation when it's triggered and at least one gene mutates."""
+        from prompthelix.genetics.mutation_strategies import PlaceholderReplaceStrategy # Import strategy
         # First random.random() for overall mutation_rate, subsequent for gene_mutation_prob
         mock_random_rates.side_effect = [0.05, 0.05, 0.9, 0.05] # Mutate chromo, Mutate gene1, Don't mutate gene2, Mutate gene3
-        mock_random_choice.return_value = "placeholder_replace" # Define a specific mutation type
+        mock_random_choice.return_value = PlaceholderReplaceStrategy() # Return an instance
 
         original_genes = list(self.chromosome_to_mutate.genes) # Deep copy for comparison
         mutated_chromosome = self.operators.mutate(self.chromosome_to_mutate, mutation_rate=0.1, gene_mutation_prob=0.2)
@@ -142,12 +143,12 @@ class TestGeneticOperators(unittest.TestCase):
         self.assertEqual(mutated_chromosome.fitness_score, 0.0)
         
         # Check if genes were actually changed
-        self.assertNotEqual(mutated_chromosome.genes, original_genes, "Genes should have been modified.")
-        
-        # Check specific genes based on side_effect of random.random
-        self.assertEqual(mutated_chromosome.genes[0], "[MUTATED_GENE_SEGMENT]") # Mutated
-        self.assertEqual(mutated_chromosome.genes[1], original_genes[1]) # Not mutated
-        self.assertEqual(mutated_chromosome.genes[2], "[MUTATED_GENE_SEGMENT]") # Mutated
+        # PlaceholderReplaceStrategy replaces a random gene with "[MUTATED_GENE_SEGMENT]"
+        # This test assumes at least one gene will be replaced.
+        self.assertTrue(any(gene == "[MUTATED_GENE_SEGMENT]" for gene in mutated_chromosome.genes),
+                        "At least one gene should have been replaced by PlaceholderReplaceStrategy.")
+        self.assertNotEqual(mutated_chromosome.genes, original_genes, "Genes should have been modified by PlaceholderReplaceStrategy.")
+
 
     @patch('random.random')
     def test_mutate_does_not_occur_rate_too_high(self, mock_random_rate):
@@ -198,8 +199,9 @@ class TestGeneticOperators(unittest.TestCase):
     @patch('random.random')
     def test_mutate_with_style_optimizer(self, mock_random, mock_choice):
         """Mutation should incorporate StyleOptimizerAgent output when provided."""
+        from prompthelix.genetics.mutation_strategies import PlaceholderReplaceStrategy # Import strategy
         mock_random.side_effect = [0.05, 0.05]  # Trigger mutation and mutate gene0
-        mock_choice.return_value = "placeholder_replace"
+        mock_choice.return_value = PlaceholderReplaceStrategy() # Return an instance
 
         style_mock = Mock()
         style_mock.process_request.return_value = PromptChromosome(genes=["styled"], fitness_score=0.0)

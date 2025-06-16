@@ -5,6 +5,7 @@ import json
 from prompthelix.agents.meta_learner import MetaLearnerAgent
 from prompthelix.genetics.engine import PromptChromosome
 from prompthelix.config import AGENT_SETTINGS as GLOBAL_AGENT_SETTINGS # For easy access to structure
+from prompthelix.message_bus import MessageBus # Added import
 
 # Define a temporary test knowledge file path
 TEST_KNOWLEDGE_FILE = "test_meta_learner_knowledge.json"

@@ -4,7 +4,7 @@ import inspect
 from typing import List, Optional
 
 from fastapi import APIRouter, Request, Depends, HTTPException, Form, Query
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, HTMLResponse
 from sqlalchemy.orm import Session
 from starlette.status import HTTP_303_SEE_OTHER # For POST redirect
 import httpx # For making API calls from UI routes
@@ -118,7 +118,7 @@ async def run_experiment_ui_submit(
     num_generations: int = Form(10),
     population_size: int = Form(20),
     elitism_count: int = Form(2),
-    parent_prompt_id: Optional[int] = Form(None),
+    parent_prompt_id: Optional[str] = Form(None), # Changed to Optional[str]
     prompt_name: Optional[str] = Form(None),
     prompt_description: Optional[str] = Form(None)
 ):
@@ -131,7 +131,7 @@ async def run_experiment_ui_submit(
         num_generations=num_generations,
         population_size=population_size,
         elitism_count=elitism_count,
-        parent_prompt_id=parent_prompt_id if parent_prompt_id else None, # Ensure None if empty string or 0
+        parent_prompt_id=int(parent_prompt_id) if parent_prompt_id and parent_prompt_id.isdigit() else None, # Convert to int if not empty/None
         prompt_name=prompt_name,
         prompt_description=prompt_description
     )
@@ -161,7 +161,7 @@ async def run_experiment_ui_submit(
 
             # Redirect to the prompt detail page, highlighting the new version
             message = f"New version (ID: {created_version.id}) created successfully from experiment."
-            redirect_url = request.url_for('view_prompt_ui', prompt_id=created_version.prompt_id)
+            redirect_url = str(request.url_for('view_prompt_ui', prompt_id=created_version.prompt_id)) # Convert URL to string
             redirect_url += f"?new_version_id={created_version.id}&message={message}" # Pass as query param
             return RedirectResponse(url=redirect_url, status_code=303)
 
@@ -182,7 +182,7 @@ async def run_experiment_ui_submit(
         "num_generations": num_generations,
         "population_size": population_size,
         "elitism_count": elitism_count,
-        "parent_prompt_id": parent_prompt_id,
+        "parent_prompt_id": parent_prompt_id, # Keep as string for re-rendering form
         "prompt_name": prompt_name,
         "prompt_description": prompt_description,
     }

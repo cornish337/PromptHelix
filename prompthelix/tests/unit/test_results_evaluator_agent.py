@@ -18,7 +18,7 @@ class TestResultsEvaluatorAgent(unittest.TestCase):
 
         self.evaluator = ResultsEvaluatorAgent(knowledge_file_path=None)
         # Example prompt_chromosome, actual content doesn't matter much for these _analyze_content tests
-        self.prompt_chromosome = PromptChromosome(genes=["Test gene"])
+        self.test_prompt = PromptChromosome(genes=["Test gene"]) # Renamed from self.prompt_chromosome
         self.task_desc = "Test task description"
 
         # Restore logging to default after tests if necessary, or set per test.
@@ -202,7 +202,7 @@ class TestResultsEvaluatorAgent(unittest.TestCase):
             metrics, errors = self.evaluator._analyze_content(
                 llm_output="Some output",
                 task_desc=self.task_desc,
-                prompt_chromosome=self.prompt_chromosome
+                prompt_chromosome=self.test_prompt # Use renamed attribute
             )
 
         self.assertIn("LLM call for content analysis failed with error code: RATE_LIMIT_ERROR", cm.output[0])
@@ -224,7 +224,7 @@ class TestResultsEvaluatorAgent(unittest.TestCase):
             metrics, errors = self.evaluator._analyze_content(
                 llm_output="Some output",
                 task_desc=self.task_desc,
-                prompt_chromosome=self.prompt_chromosome
+                prompt_chromosome=self.test_prompt # Use renamed attribute
             )
 
         # Check logs for parsing failure and fallback usage
@@ -250,12 +250,12 @@ class TestResultsEvaluatorAgent(unittest.TestCase):
             metrics, errors = self.evaluator._analyze_content(
                 llm_output="Some output",
                 task_desc=self.task_desc,
-                prompt_chromosome=self.prompt_chromosome
+                prompt_chromosome=self.test_prompt # Use renamed attribute
             )
             logging.disable(logging.CRITICAL) # Re-disable after the call for other tests
 
-        self.assertTrue(any("Error parsing LLM evaluation response (JSONDecodeError)" in log_msg for log_msg in cm.output if "ERROR" in log_msg.split(" - ")[2] )) # Check for specific ERROR log
-        self.assertTrue(any("Using fallback LLM metrics." in log_msg for log_msg in cm.output if "WARNING" in log_msg.split(" - ")[2] ))
+        self.assertTrue(any("ERROR" in log_msg and "Error parsing LLM evaluation response (JSONDecodeError)" in log_msg for log_msg in cm.output))
+        self.assertTrue(any("WARNING" in log_msg and "Using fallback LLM metrics." in log_msg for log_msg in cm.output))
 
 
         self.assertEqual(metrics['llm_analysis_status'], 'fallback_due_to_error')
@@ -284,7 +284,7 @@ class TestResultsEvaluatorAgent(unittest.TestCase):
         metrics, errors = self.evaluator._analyze_content(
             llm_output="Some output",
             task_desc=self.task_desc,
-            prompt_chromosome=self.prompt_chromosome
+            prompt_chromosome=self.test_prompt # Use renamed attribute
         )
         logging.disable(logging.CRITICAL) # Re-disable
 
