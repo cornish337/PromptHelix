@@ -11,4 +11,5 @@ pydantic==2.7.1
 celery
 redis
 openai
-# Add other potential dependencies like openai, anthropic, google-generativeai later
+anthropic
+google-generativeai
