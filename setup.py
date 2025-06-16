@@ -9,6 +9,7 @@ setup(
     long_description=open('README.md').read(),
     long_description_content_type="text/markdown",
     url="https://github.com/yourusername/prompthelix", # Replace with your actual URL
+    license="MIT",
     packages=find_packages(),
     install_requires=[
         "fastapi",
