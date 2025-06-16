@@ -23,13 +23,24 @@ def main_ga_loop(
     population_size: int,
     elitism_count: int,
     execution_mode: ExecutionMode, # New parameter
-    return_best: bool = True
+    return_best: bool = True,
+    population_path: str | None = None
 ):
     """
     Main orchestration loop for running the PromptHelix Genetic Algorithm.
-    
+
     This function initializes agents, GA components, and runs the
     evolutionary process based on the provided parameters.
+
+    Args:
+        task_desc: Description of the task prompts should solve.
+        keywords: Keywords used by the PromptArchitectAgent.
+        num_generations: Number of generations to evolve.
+        population_size: Desired population size.
+        elitism_count: Number of top individuals preserved each generation.
+        execution_mode: Whether to run in REAL or TEST mode.
+        return_best: If True, return the best chromosome at the end.
+        population_path: Optional path for loading/saving population JSON.
     """
     # 0. Instantiate Message Bus
     print("Initializing Message Bus...")
@@ -65,9 +76,10 @@ def main_ga_loop(
     pop_manager = PopulationManager(
         genetic_operators=genetic_ops,
         fitness_evaluator=fitness_eval,
-        prompt_architect_agent=prompt_architect, 
+        prompt_architect_agent=prompt_architect,
         population_size=population_size,
-        elitism_count=elitism_count
+        elitism_count=elitism_count,
+        population_path=population_path
     )
     print("GA components initialized.")
 
@@ -85,12 +97,15 @@ def main_ga_loop(
     print(f"Parameters: Generations={num_generations}, Population Size={population_size}, Elitism Count={elitism_count}, Task='{task_desc}'")
 
     # 4. Initialize Population
-    print("\n--- Initializing Population ---")
-    pop_manager.initialize_population(
-        initial_task_description=task_desc,
-        initial_keywords=keywords
-    )
-    print(f"Population initialized with {len(pop_manager.population)} individuals.")
+    if not pop_manager.population:
+        print("\n--- Initializing Population ---")
+        pop_manager.initialize_population(
+            initial_task_description=task_desc,
+            initial_keywords=keywords
+        )
+        print(f"Population initialized with {len(pop_manager.population)} individuals.")
+    else:
+        print(f"Loaded population with {len(pop_manager.population)} individuals.")
 
     # Evaluate the initial population to see a starting best
     # (evolve_population also does this, but this shows the state *before* any evolution)
@@ -148,6 +163,9 @@ def main_ga_loop(
         print(str(final_fittest_overall))
     else:
         print("\nNo solution found after all generations.")
+
+    if population_path:
+        pop_manager.save_population(population_path)
 
     if return_best:
         return final_fittest_overall
