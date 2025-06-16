@@ -76,7 +76,9 @@ class MessageBus:
             asyncio.create_task(self._broadcast_log_async(log_data))
 
     def register(self, agent_id: str, agent_instance):
-        """Registers an agent instance with the message bus.
+      #Registers an agent instance with the message bus.
+
+
 
         Args:
             agent_id (str): The unique identifier for the agent.

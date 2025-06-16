@@ -2,14 +2,19 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session as DbSession
 from prompthelix.database import get_db
-from prompthelix.schemas import ConversationLogEntry, ConversationSession # Ensure schemas are importable
+from prompthelix.schemas import ConversationLogEntry, ConversationSession
 from prompthelix.services.conversation_service import conversation_service
+from prompthelix.models.user_models import User as UserModel
+from .dependencies import get_current_user
 
 router = APIRouter()
 
 @router.get("/conversations/sessions/", response_model=List[ConversationSession], tags=["Conversations"])
 async def list_conversation_sessions(
-    db: DbSession = Depends(get_db), skip: int = 0, limit: int = 100
+    db: DbSession = Depends(get_db),
+    skip: int = 0,
+    limit: int = 100,
+    current_user: UserModel = Depends(get_current_user),
 ):
     """
     Get a list of all recorded conversation sessions.
@@ -20,7 +25,11 @@ async def list_conversation_sessions(
 
 @router.get("/conversations/sessions/{session_id}/messages/", response_model=List[ConversationLogEntry], tags=["Conversations"])
 async def get_session_messages(
-    session_id: str, db: DbSession = Depends(get_db), skip: int = 0, limit: int = 1000
+    session_id: str,
+    db: DbSession = Depends(get_db),
+    skip: int = 0,
+    limit: int = 1000,
+    current_user: UserModel = Depends(get_current_user),
 ):
     """
     Get all messages for a specific conversation session_id.
@@ -87,7 +96,10 @@ async def get_session_messages(
 
 @router.get("/conversations/all_logs/", response_model=List[ConversationLogEntry], tags=["Conversations"])
 async def get_all_conversation_logs(
-    db: DbSession = Depends(get_db), skip: int = 0, limit: int = 100
+    db: DbSession = Depends(get_db),
+    skip: int = 0,
+    limit: int = 100,
+    current_user: UserModel = Depends(get_current_user),
 ):
     """
     Get all conversation logs across all sessions.
