@@ -239,8 +239,11 @@ def run_ga_experiment_route(params: schemas.GAExperimentParams, db: DbSession = 
     return created_version
 
 # --- LLM Utility Routes (Verified, using CRUD layer for stats) ---
+
 @router.post("/api/llm/test_prompt", response_model=schemas.LLMTestResponse, name="test_llm_prompt", tags=["LLM Utilities"], summary="Test a prompt with an LLM", description="Sends a given prompt text to a specified LLM service and returns the response. Increments usage statistics for the LLM service.")
-async def test_llm_prompt_route(request_data: schemas.LLMTestRequest, db: DbSession = Depends(get_db), current_user: UserModel = Depends(get_current_user)):
+#async def test_llm_prompt_route(request_data: schemas.LLMTestRequest, db: DbSession = Depends(get_db), current_user: UserModel = Depends(get_current_user)):
+async def test_llm_prompt_route(request_data: schemas.LLMTestRequest, db: DbSession = Depends(get_db)):
+
     try:
         response_text = llm_utils.call_llm_api(
             prompt=request_data.prompt_text, provider=request_data.llm_service, db=db
