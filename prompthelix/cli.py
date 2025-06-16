@@ -143,7 +143,6 @@ def main_cli():
                     num_generations=default_num_generations,
                     population_size=default_population_size,
                     elitism_count=default_elitism_count,
-jules_wip_4393603586497566236
                     execution_mode=ExecutionMode.TEST, # Pass execution_mode
 
                     return_best=True  # Ensure it returns to potentially print results
