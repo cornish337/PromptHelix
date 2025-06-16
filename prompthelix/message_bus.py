@@ -78,29 +78,6 @@ class MessageBus:
     def register(self, agent_id: str, agent_instance):
         """
         Registers an agent instance with the message bus.
-        try:
-            db = self.db_session_factory()
-            log_entry = ConversationLog(
-                session_id=session_id,
-                sender_id=sender_id,
-                recipient_id=recipient_id,
-                message_type=message_type,
-                content=json.dumps(content_payload)
-            )
-            db.add(log_entry)
-            db.commit()
-            logger.debug(f"Message from {sender_id} to {recipient_id} logged to DB. Session: {session_id}, Type: {message_type}")
-        except Exception as e:
-            logger.error(f"Failed to log message to DB: {e}", exc_info=True)
-            if db:
-                db.rollback()
-        finally:
-            if db:
-                db.close()
-
-    def register(self, agent_id: str, agent_instance):
-        """
-        Registers an agent instance with the message bus.
 
         Args:
             agent_id (str): The unique identifier for the agent.
