@@ -49,7 +49,9 @@ class TestMetaLearnerAgent(unittest.TestCase):
         """Test basic creation and initialization of the agent and its knowledge base structure."""
         # Test with default knowledge file path from mocked config
         with patch.dict(GLOBAL_AGENT_SETTINGS, {"MetaLearnerAgent": {"knowledge_file_path": "test_config_knowledge.json", "persist_knowledge_on_update": False, "default_llm_provider": "test"}}):
-            learner = MetaLearnerAgent(knowledge_file_path=self.default_test_file_path) # Explicitly use test file to avoid config one
+            # MetaLearnerAgent requires a message_bus
+            mock_bus = MagicMock(spec=MessageBus)
+            learner = MetaLearnerAgent(message_bus=mock_bus, knowledge_file_path=self.default_test_file_path)
 
         self.assertIsNotNone(learner)
         self.assertEqual(learner.agent_id, "MetaLearner")
@@ -76,7 +78,8 @@ class TestMetaLearnerAgent(unittest.TestCase):
         """Test process_request with evaluation data indicating high fitness."""
         # This test is largely the same as before, but ensures it still works with the new structure
         # and mocks save_knowledge correctly.
-        learner = MetaLearnerAgent(knowledge_file_path=self.default_test_file_path)
+        mock_bus = MagicMock(spec=MessageBus)
+        learner = MetaLearnerAgent(message_bus=mock_bus, knowledge_file_path=self.default_test_file_path)
         prompt = PromptChromosome(genes=["Good prompt gene 1", "Instruction: Be good"])
         eval_data = {"prompt_chromosome": prompt, "fitness_score": 0.9}
         request_data = {"data_type": "evaluation_result", "data": eval_data}
@@ -98,7 +101,8 @@ class TestMetaLearnerAgent(unittest.TestCase):
 
     def test_process_request_critique_data_with_metrics(self):
         """Test processing critique data that includes programmatic metric_details."""
-        learner = MetaLearnerAgent(knowledge_file_path=self.default_test_file_path)
+        mock_bus = MagicMock(spec=MessageBus)
+        learner = MetaLearnerAgent(message_bus=mock_bus, knowledge_file_path=self.default_test_file_path)
         dummy_prompt = PromptChromosome(genes=["Test"])
         critique_feedback_points = ["Structural Issue: A bit short."]
         metric_details_payload = {
@@ -148,7 +152,8 @@ class TestMetaLearnerAgent(unittest.TestCase):
 
     def test_identify_system_patterns_with_metric_stats(self):
         """Test _identify_system_patterns derives trends from prompt_metric_stats."""
-        learner = MetaLearnerAgent(knowledge_file_path=self.default_test_file_path)
+        mock_bus = MagicMock(spec=MessageBus)
+        learner = MetaLearnerAgent(message_bus=mock_bus, knowledge_file_path=self.default_test_file_path)
         # Populate prompt_metric_stats with enough data to trigger trend derivation
         sample_metrics = [
             {"prompt_id": "p1", "metrics": {"clarity_score": 0.4, "completeness_score": 0.8, "specificity_score": 0.7, "prompt_length_score": 0.9}},
@@ -179,7 +184,8 @@ class TestMetaLearnerAgent(unittest.TestCase):
 
     def test_generate_recommendations_from_metric_trends(self):
         """Test _generate_recommendations includes advice from statistical_prompt_metric_trends."""
-        learner = MetaLearnerAgent(knowledge_file_path=self.default_test_file_path)
+        mock_bus = MagicMock(spec=MessageBus)
+        learner = MetaLearnerAgent(message_bus=mock_bus, knowledge_file_path=self.default_test_file_path)
         learner.knowledge_base["statistical_prompt_metric_trends"] = [
             {"trend_description": "Average clarity score is relatively low (0.45). Consider focusing on improving this aspect of prompts."}
         ]
@@ -195,7 +201,8 @@ class TestMetaLearnerAgent(unittest.TestCase):
     @patch('prompthelix.utils.llm_utils.call_llm_api')
     def test_identify_system_patterns_indirectly_updated(self, mock_llm):
         """Updated test for _identify_system_patterns via process_request calls."""
-        learner = MetaLearnerAgent(knowledge_file_path=self.default_test_file_path)
+        mock_bus = MagicMock(spec=MessageBus)
+        learner = MetaLearnerAgent(message_bus=mock_bus, knowledge_file_path=self.default_test_file_path)
         
         mock_llm.side_effect = [
             '["High fitness feature 1"]',  # For eval_data1's _analyze_evaluation_data
@@ -226,7 +233,8 @@ class TestMetaLearnerAgent(unittest.TestCase):
     @patch('prompthelix.utils.llm_utils.call_llm_api')
     def test_generate_recommendations_indirectly_updated(self, mock_llm):
         """Updated test for _generate_recommendations checking for various recommendation types."""
-        learner = MetaLearnerAgent(knowledge_file_path=self.default_test_file_path)
+        mock_bus = MagicMock(spec=MessageBus)
+        learner = MetaLearnerAgent(message_bus=mock_bus, knowledge_file_path=self.default_test_file_path)
         prompt = PromptChromosome(genes=["Good prompt"])
         eval_data = {"prompt_chromosome": prompt, "fitness_score": 0.9}
         critique_data = {"feedback_points": ["Test feedback"], "metric_details": {"clarity_score": 0.3}} # low clarity
@@ -257,7 +265,8 @@ class TestMetaLearnerAgent(unittest.TestCase):
 
     def test_process_request_unknown_data_type(self):
         """Test process_request with an unknown data type."""
-        learner = MetaLearnerAgent(knowledge_file_path=self.default_test_file_path)
+        mock_bus = MagicMock(spec=MessageBus)
+        learner = MetaLearnerAgent(message_bus=mock_bus, knowledge_file_path=self.default_test_file_path)
         request_data = {"data_type": "unknown_type", "data": {"info": "test"}}
 
         with patch.object(MetaLearnerAgent, 'save_knowledge') as mock_save:
@@ -272,7 +281,8 @@ class TestMetaLearnerAgent(unittest.TestCase):
 
     def test_process_request_missing_keys(self):
         """Test process_request with missing data_type or data keys."""
-        learner = MetaLearnerAgent(knowledge_file_path=self.default_test_file_path)
+        mock_bus = MagicMock(spec=MessageBus)
+        learner = MetaLearnerAgent(message_bus=mock_bus, knowledge_file_path=self.default_test_file_path)
         request_no_type = {"data": {"info": "test"}}
         result_no_type = learner.process_request(request_no_type)
         self.assertEqual(result_no_type["status"], "Error: Missing data_type or data.")
@@ -286,7 +296,8 @@ class TestMetaLearnerAgent(unittest.TestCase):
     # --- Persistence Tests ---
     def test_save_knowledge_successful(self):
         """Test successful saving of knowledge base and data log."""
-        learner = MetaLearnerAgent(knowledge_file_path=self.default_test_file_path)
+        mock_bus = MagicMock(spec=MessageBus)
+        learner = MetaLearnerAgent(message_bus=mock_bus, knowledge_file_path=self.default_test_file_path)
         learner.knowledge_base["successful_prompt_features"].append({"feature": "test_feature"})
         learner.data_log.append({"entry": "test_log_entry"})
 
@@ -306,8 +317,14 @@ class TestMetaLearnerAgent(unittest.TestCase):
 
     def test_save_knowledge_creates_directory(self):
         """Test that save_knowledge creates the directory if it doesn't exist."""
-        learner = MetaLearnerAgent(knowledge_file_path=TEST_KNOWLEDGE_FILE_IN_DIR) # Uses a path in a subdirectory
-        self.assertFalse(os.path.exists(TEST_KNOWLEDGE_DIR)) # Ensure dir doesn't exist initially
+        mock_bus = MagicMock(spec=MessageBus)
+        learner = MetaLearnerAgent(message_bus=mock_bus, knowledge_file_path=TEST_KNOWLEDGE_FILE_IN_DIR) # Uses a path in a subdirectory
+        # Need to ensure directory is removed if __init__ created it, to test save_knowledge's creation part
+        if os.path.exists(TEST_KNOWLEDGE_DIR):
+            if os.path.exists(TEST_KNOWLEDGE_FILE_IN_DIR): # remove file first
+                os.remove(TEST_KNOWLEDGE_FILE_IN_DIR)
+            os.rmdir(TEST_KNOWLEDGE_DIR) # then remove dir
+        self.assertFalse(os.path.exists(TEST_KNOWLEDGE_DIR))
 
         m = mock_open()
         # We need to mock os.makedirs and os.path.exists called *within* save_knowledge
@@ -339,10 +356,10 @@ class TestMetaLearnerAgent(unittest.TestCase):
 
     def test_save_knowledge_io_error(self):
         """Test error handling when saving knowledge fails due to IOError."""
-        learner = MetaLearnerAgent(knowledge_file_path=self.default_test_file_path)
+        mock_bus = MagicMock(spec=MessageBus)
+        learner = MetaLearnerAgent(message_bus=mock_bus, knowledge_file_path=self.default_test_file_path)
         with patch('builtins.open', mock_open()) as m:
             m.side_effect = IOError("Failed to write")
-            # Use assertLogs to capture log messages
             with self.assertLogs(level='ERROR') as log_watcher:
                 learner.save_knowledge()
 
@@ -350,7 +367,10 @@ class TestMetaLearnerAgent(unittest.TestCase):
 
     def test_load_knowledge_successful(self):
         """Test successful loading of knowledge."""
-        learner = MetaLearnerAgent(knowledge_file_path=self.default_test_file_path)
+        mock_bus = MagicMock(spec=MessageBus)
+        # Instantiate with a path, then load_knowledge will be called in __init__
+        # For this test, we want to control the content of the file it reads.
+
         mock_data = {
             "knowledge_base": {
                 "successful_prompt_features": [{"feature": "loaded_feature"}],
@@ -365,9 +385,10 @@ class TestMetaLearnerAgent(unittest.TestCase):
             "data_log": [{"entry": "loaded_log"}]
         }
         m = mock_open(read_data=json.dumps(mock_data))
-        with patch('os.path.exists', return_value=True): # Mock file existence
+        with patch('os.path.exists', return_value=True):
             with patch('builtins.open', m):
-                learner.load_knowledge() # This is also called in __init__
+                # __init__ calls load_knowledge.
+                learner = MetaLearnerAgent(message_bus=mock_bus, knowledge_file_path=self.default_test_file_path)
 
         self.assertEqual(learner.knowledge_base["successful_prompt_features"], mock_data["knowledge_base"]["successful_prompt_features"])
         self.assertEqual(learner.knowledge_base["prompt_metric_stats"], mock_data["knowledge_base"]["prompt_metric_stats"])
@@ -376,9 +397,10 @@ class TestMetaLearnerAgent(unittest.TestCase):
 
     def test_load_knowledge_file_not_found(self):
         """Test behavior when knowledge file does not exist."""
-        with patch('os.path.exists', return_value=False): # Mock file not existing
+        with patch('os.path.exists', return_value=False):
+            mock_bus = MagicMock(spec=MessageBus)
             # __init__ calls load_knowledge. We check the state after __init__.
-            learner = MetaLearnerAgent(knowledge_file_path="non_existent_file.json")
+            learner = MetaLearnerAgent(message_bus=mock_bus, knowledge_file_path="non_existent_file.json")
 
         # Should initialize with default empty structures
         self.assertEqual(learner.knowledge_base["successful_prompt_features"], [])
@@ -392,11 +414,12 @@ class TestMetaLearnerAgent(unittest.TestCase):
         with patch('os.path.exists', return_value=True):
             with patch('builtins.open', m):
                 with self.assertLogs(level='ERROR') as log_watcher:
+                    mock_bus = MagicMock(spec=MessageBus)
                     # __init__ calls load_knowledge
-                    learner = MetaLearnerAgent(knowledge_file_path=self.default_test_file_path)
+                    learner = MetaLearnerAgent(message_bus=mock_bus, knowledge_file_path=self.default_test_file_path)
 
         self.assertTrue(any("Failed to load knowledge due to JSON decoding error" in msg for msg in log_watcher.output))
-        self.assertEqual(learner.knowledge_base["successful_prompt_features"], []) # Should use defaults
+        self.assertEqual(learner.knowledge_base["successful_prompt_features"], [])
         self.assertEqual(learner.knowledge_base["prompt_metric_stats"], [])
         self.assertEqual(learner.data_log, [])
 
@@ -405,22 +428,24 @@ class TestMetaLearnerAgent(unittest.TestCase):
         m = mock_open(read_data="") # Empty file
         with patch('os.path.exists', return_value=True):
             with patch('builtins.open', m):
-                with self.assertLogs(level='ERROR') as log_watcher: # Expecting error as empty string is not valid JSON
-                     learner = MetaLearnerAgent(knowledge_file_path=self.default_test_file_path)
+                with self.assertLogs(level='ERROR') as log_watcher:
+                    mock_bus = MagicMock(spec=MessageBus)
+                    learner = MetaLearnerAgent(message_bus=mock_bus, knowledge_file_path=self.default_test_file_path)
 
         self.assertTrue(any("Failed to load knowledge due to JSON decoding error" in msg for msg in log_watcher.output) or \
                         any("Knowledge file non_existent_file.json not found" in msg for msg in log_watcher.output) or \
-                        any("Loaded knowledge_base is not a dictionary" in msg for msg in log_watcher.output)
-                        ) # Error message might vary based on how json.load handles empty string
+                        any("Loaded knowledge_base is not a dictionary" in msg for msg in log_watcher.output))
         self.assertEqual(learner.knowledge_base["successful_prompt_features"], [])
         self.assertEqual(learner.knowledge_base["prompt_metric_stats"], [])
         self.assertEqual(learner.data_log, [])
 
     def test_load_knowledge_missing_keys_graceful_merge(self):
         """Test that missing keys in loaded KB are gracefully handled with defaults."""
-        learner = MetaLearnerAgent(knowledge_file_path=self.default_test_file_path)
+        mock_bus = MagicMock(spec=MessageBus)
+        # Learner initialized here, its load_knowledge will be called.
+        # We need to patch builtins.open for this specific instantiation's load_knowledge call.
         mock_data_missing_keys = {
-            "knowledge_base": { # Missing "llm_identified_trends", "statistical_prompt_metric_trends" etc.
+            "knowledge_base": {
                 "successful_prompt_features": [{"feature": "loaded_feature"}],
                 "legacy_common_pitfalls": {},
             },
@@ -429,17 +454,17 @@ class TestMetaLearnerAgent(unittest.TestCase):
         m = mock_open(read_data=json.dumps(mock_data_missing_keys))
         with patch('os.path.exists', return_value=True):
             with patch('builtins.open', m):
-                learner.load_knowledge()
+                learner = MetaLearnerAgent(message_bus=mock_bus, knowledge_file_path=self.default_test_file_path)
 
         self.assertEqual(learner.knowledge_base["successful_prompt_features"], [{"feature": "loaded_feature"}])
-        self.assertEqual(learner.knowledge_base["llm_identified_trends"], [])
-        self.assertEqual(learner.knowledge_base["prompt_metric_stats"], []) # Should be default empty list
+        self.assertEqual(learner.knowledge_base["llm_identified_trends"], []) # Default
+        self.assertEqual(learner.knowledge_base["prompt_metric_stats"], [])
         self.assertEqual(learner.knowledge_base["statistical_prompt_metric_trends"], [])
         self.assertEqual(learner.knowledge_base["legacy_common_pitfalls"], {})
 
     def test_load_knowledge_type_mismatch_graceful_merge(self):
         """Test that type mismatches in loaded KB are gracefully handled."""
-        learner = MetaLearnerAgent(knowledge_file_path=self.default_test_file_path)
+        mock_bus = MagicMock(spec=MessageBus)
         mock_data_type_mismatch = {
             "knowledge_base": {
                 "successful_prompt_features": "not_a_list",
@@ -457,7 +482,7 @@ class TestMetaLearnerAgent(unittest.TestCase):
         with patch('os.path.exists', return_value=True):
             with patch('builtins.open', m):
                  with self.assertLogs(level='WARNING') as log_watcher:
-                    learner.load_knowledge()
+                    learner = MetaLearnerAgent(message_bus=mock_bus, knowledge_file_path=self.default_test_file_path)
 
         self.assertTrue(any("Key 'successful_prompt_features' missing or type mismatch" in msg for msg in log_watcher.output))
         self.assertTrue(any("Key 'prompt_metric_stats' missing or type mismatch" in msg for msg in log_watcher.output))
@@ -480,13 +505,12 @@ class TestMetaLearnerAgent(unittest.TestCase):
     def test_init_uses_config_settings(self):
         """Test agent uses settings from AGENT_SETTINGS in config.py."""
         # KNOWLEDGE_DIR is "knowledge" by default in config.py
-        # We need to ensure this dir exists for the test or mock os.path.join and os.makedirs
         expected_path = os.path.join("knowledge", "config_defined_knowledge.json")
+        mock_bus = MagicMock(spec=MessageBus)
 
-        with patch('os.path.exists', return_value=False): # Ensure load_knowledge starts fresh
-             # Mock makedirs if KNOWLEDGE_DIR is used.
+        with patch('os.path.exists', return_value=False):
             with patch('os.makedirs') as mock_mkdirs:
-                learner = MetaLearnerAgent() # No explicit path, should use config
+                learner = MetaLearnerAgent(message_bus=mock_bus) # No explicit path, should use config
 
         self.assertEqual(learner.knowledge_file_path, expected_path)
         self.assertEqual(learner.llm_provider, "config_provider")
@@ -509,7 +533,8 @@ class TestMetaLearnerAgent(unittest.TestCase):
                 # the __init__ logic would need adjustment or this test needs to expect the prepending.
 
                 # For now, let's assume the passed path is a filename to be put in KNOWLEDGE_DIR
-                learner = MetaLearnerAgent(knowledge_file_path="explicit_filename.json")
+                mock_bus = MagicMock(spec=MessageBus)
+                learner = MetaLearnerAgent(message_bus=mock_bus, knowledge_file_path="explicit_filename.json")
 
         self.assertEqual(learner.knowledge_file_path, os.path.join("knowledge", "explicit_filename.json"))
 
@@ -517,18 +542,19 @@ class TestMetaLearnerAgent(unittest.TestCase):
     @patch.dict(GLOBAL_AGENT_SETTINGS, {"MetaLearnerAgent": {"persist_knowledge_on_update": True, "knowledge_file_path": "dummy.json"}})
     def test_persist_knowledge_on_update_true(self):
         """Test save_knowledge is called if persist_knowledge_on_update is True."""
-        learner = MetaLearnerAgent(knowledge_file_path=self.default_test_file_path) # Use a clean path for this test
-        self.assertTrue(learner.persist_on_update) # Verify it's true from mocked config
+        mock_bus = MagicMock(spec=MessageBus)
+        learner = MetaLearnerAgent(message_bus=mock_bus, knowledge_file_path=self.default_test_file_path)
+        self.assertTrue(learner.persist_on_update)
 
         with patch.object(learner, 'save_knowledge') as mock_save:
-            # Simulate a request that updates knowledge (e.g. by adding to data_log)
             learner.process_request({"data_type": "test_event", "data": {"info": "test"}})
             mock_save.assert_called_once()
 
     @patch.dict(GLOBAL_AGENT_SETTINGS, {"MetaLearnerAgent": {"persist_knowledge_on_update": False, "knowledge_file_path": "dummy.json"}})
     def test_persist_knowledge_on_update_false(self):
         """Test save_knowledge is NOT called if persist_knowledge_on_update is False."""
-        learner = MetaLearnerAgent(knowledge_file_path=self.default_test_file_path)
+        mock_bus = MagicMock(spec=MessageBus)
+        learner = MetaLearnerAgent(message_bus=mock_bus, knowledge_file_path=self.default_test_file_path)
         self.assertFalse(learner.persist_on_update)
 
         with patch.object(learner, 'save_knowledge') as mock_save:
@@ -539,38 +565,38 @@ class TestMetaLearnerAgent(unittest.TestCase):
     @patch('prompthelix.utils.llm_utils.call_llm_api', side_effect=Exception("LLM API Error"))
     def test_analyze_evaluation_data_llm_failure_falls_back(self, mock_call_llm_api):
         """Test _analyze_evaluation_data falls back on LLM failure."""
-        learner = MetaLearnerAgent(knowledge_file_path=self.default_test_file_path)
+        mock_bus = MagicMock(spec=MessageBus)
+        learner = MetaLearnerAgent(message_bus=mock_bus, knowledge_file_path=self.default_test_file_path)
         prompt = PromptChromosome(genes=["Test gene"], fitness_score=0.0)
-        eval_data = {"prompt_chromosome": prompt, "fitness_score": 0.8} # High enough to attempt LLM
+        eval_data = {"prompt_chromosome": prompt, "fitness_score": 0.8}
 
         with patch.object(learner, '_fallback_analyze_evaluation_data') as mock_fallback:
-            with patch.object(learner, 'save_knowledge'): # Mock save
+            with patch.object(learner, 'save_knowledge'):
                  learner.process_request({"data_type": "evaluation_result", "data": eval_data})
 
         mock_call_llm_api.assert_called_once()
         mock_fallback.assert_called_once_with(eval_data)
-        # Check if legacy KB was updated by fallback (optional, depends on fallback's detail)
-        # self.assertTrue(learner.knowledge_base["legacy_successful_patterns"])
 
 
     @patch('prompthelix.utils.llm_utils.call_llm_api', side_effect=Exception("LLM API Error"))
     def test_analyze_critique_data_llm_failure_falls_back(self, mock_call_llm_api):
         """Test _analyze_critique_data falls back on LLM failure."""
-        learner = MetaLearnerAgent(knowledge_file_path=self.default_test_file_path)
+        mock_bus = MagicMock(spec=MessageBus)
+        learner = MetaLearnerAgent(message_bus=mock_bus, knowledge_file_path=self.default_test_file_path)
         critique_data = {"feedback_points": ["Some feedback"]}
 
         with patch.object(learner, '_fallback_analyze_critique_data') as mock_fallback:
-            with patch.object(learner, 'save_knowledge'): # Mock save
+            with patch.object(learner, 'save_knowledge'):
                 learner.process_request({"data_type": "critique_result", "data": critique_data})
 
-        mock_call_llm_api.assert_called_once() # LLM is called for qualitative feedback
-        mock_fallback.assert_called_once_with(critique_data) # Fallback for qualitative is also called
+        mock_call_llm_api.assert_called_once()
+        mock_fallback.assert_called_once_with(critique_data)
 
     @patch('prompthelix.utils.llm_utils.call_llm_api', side_effect=Exception("LLM API Error"))
     def test_identify_system_patterns_llm_failure_falls_back(self, mock_call_llm_api):
         """Test _identify_system_patterns falls back on LLM failure."""
-        learner = MetaLearnerAgent(knowledge_file_path=self.default_test_file_path)
-        # Populate some data so it attempts LLM analysis for system patterns
+        mock_bus = MagicMock(spec=MessageBus)
+        learner = MetaLearnerAgent(message_bus=mock_bus, knowledge_file_path=self.default_test_file_path)
         learner.knowledge_base["successful_prompt_features"].append({"feature": "dummy"})
 
         with patch.object(learner, '_fallback_identify_system_patterns') as mock_fallback:

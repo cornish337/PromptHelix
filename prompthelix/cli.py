@@ -121,6 +121,7 @@ def main_cli():
         if args.module == "ga":
             print("CLI: Running Genetic Algorithm...")
             from prompthelix.orchestrator import main_ga_loop # Import directly
+            from prompthelix.enums import ExecutionMode # Import ExecutionMode
             # Define default parameters for the CLI run
             default_task_desc = "Generate a creative story about a space explorer."
             default_keywords = ["space", "adventure", "discovery"]
@@ -142,7 +143,9 @@ def main_cli():
                     num_generations=default_num_generations,
                     population_size=default_population_size,
                     elitism_count=default_elitism_count,
-                    execution_mode=ExecutionMode(args.mode),
+jules_wip_4393603586497566236
+                    execution_mode=ExecutionMode.TEST, # Pass execution_mode
+
                     return_best=True  # Ensure it returns to potentially print results
                 )
                 if best_chromosome:

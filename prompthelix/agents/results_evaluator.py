@@ -35,11 +35,16 @@ class ResultsEvaluatorAgent(BaseAgent):
         self.fitness_score_weights = agent_config.get("fitness_score_weights", DEFAULT_FITNESS_WEIGHTS)
         logger.info(f"Agent '{self.agent_id}' initialized with LLM provider: {self.llm_provider}, Evaluation model: {self.evaluation_llm_model}")
 
-        self.evaluation_metrics_config = self._load_metrics_config() # This is mostly placeholder
+        self.knowledge_file_path = knowledge_file_path
+        if self.knowledge_file_path is None:
+            self.knowledge_file_path = "results_evaluator_config.json"
 
-    def _load_metrics_config(self) -> dict:
+        self.evaluation_metrics_config = {} # Initialize before loading
+        self.load_knowledge()
+
+    def _get_default_metrics_config(self) -> dict:
         """
-        Loads mock configurations for evaluation metrics.
+        Provides default mock configurations for evaluation metrics.
 
         In a real scenario, this would load from a configuration file,
         a database, or be influenced by the DomainExpertAgent or MetaLearnerAgent.
@@ -47,6 +52,7 @@ class ResultsEvaluatorAgent(BaseAgent):
         Returns:
             dict: A dictionary of metric configurations.
         """
+        logger.info(f"Agent '{self.agent_id}': Using default metrics configuration.")
         return {
             "default_metrics": ["relevance_placeholder", "coherence_placeholder"],
             "task_specific": {
@@ -54,6 +60,38 @@ class ResultsEvaluatorAgent(BaseAgent):
                 "code_generation": ["execution_success_placeholder", "code_quality_placeholder"]
             }
         }
+
+    def load_knowledge(self):
+        """
+        Loads evaluation metrics configuration from the specified JSON file.
+        If the file is not found or is invalid, it loads default config
+        and saves it to a new file.
+        """
+        try:
+            with open(self.knowledge_file_path, 'r') as f:
+                self.evaluation_metrics_config = json.load(f)
+            logger.info(f"Agent '{self.agent_id}': Metrics config loaded successfully from '{self.knowledge_file_path}'.")
+        except FileNotFoundError:
+            logger.warning(f"Agent '{self.agent_id}': Knowledge file '{self.knowledge_file_path}' not found. Using default config and creating the file.")
+            self.evaluation_metrics_config = self._get_default_metrics_config()
+            self.save_knowledge() # Save defaults if file not found
+        except json.JSONDecodeError as e:
+            logger.error(f"Agent '{self.agent_id}': Error decoding JSON from '{self.knowledge_file_path}': {e}. Using default config.", exc_info=True)
+            self.evaluation_metrics_config = self._get_default_metrics_config()
+        except Exception as e:
+            logger.error(f"Agent '{self.agent_id}': Failed to load metrics config from '{self.knowledge_file_path}': {e}. Using default config.", exc_info=True)
+            self.evaluation_metrics_config = self._get_default_metrics_config()
+
+    def save_knowledge(self):
+        """
+        Saves the current evaluation metrics configuration to the specified JSON file.
+        """
+        try:
+            with open(self.knowledge_file_path, 'w') as f:
+                json.dump(self.evaluation_metrics_config, f, indent=4)
+            logger.info(f"Agent '{self.agent_id}': Metrics config saved successfully to '{self.knowledge_file_path}'.")
+        except Exception as e:
+            logger.error(f"Agent '{self.agent_id}': Failed to save metrics config to '{self.knowledge_file_path}': {e}", exc_info=True)
 
     def _calculate_standard_metrics(self, llm_output: str, task_desc: str) -> dict:
         """
