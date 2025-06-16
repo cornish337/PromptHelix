@@ -2,8 +2,9 @@ from prompthelix.agents.base import BaseAgent
 from prompthelix.genetics.engine import PromptChromosome
 from prompthelix.utils.llm_utils import call_llm_api
 from prompthelix.config import AGENT_SETTINGS
-from prompthelix.evaluation import metrics as prompt_metrics # Import new metrics
+from prompthelix.evaluation import metrics as prompt_metrics  # Import new metrics
 import logging
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -372,5 +373,11 @@ Best Practice Note: Consider specifying the desired output format.
             "metric_details": programmatic_metric_details # Include the new scores for transparency
         }
         logger.info(f"Agent '{self.agent_id}': Critique result - Score={critique_score}, Total Feedback Points#={len(feedback_points)}, Programmatic Scores={programmatic_metric_details}")
+        if self.message_bus:
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(self.message_bus.broadcast_message("critique_result", result, sender_id=self.agent_id))
+            except RuntimeError:
+                asyncio.run(self.message_bus.broadcast_message("critique_result", result, sender_id=self.agent_id))
         return result
 

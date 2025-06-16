@@ -77,6 +77,20 @@ class BaseAgent(abc.ABC):
             logger.warning(f"Agent '{self.agent_id}' (no message bus) attempting to print message for '{recipient_agent_id}': Type='{message_type}', Payload='{message_content}'")
             return {"status": "error", "error": "No message bus available to send message."}
 
+    async def broadcast_message(self, message_type: str, payload: dict):
+        """Broadcasts a message to all subscribers via the message bus."""
+        if self.message_bus and hasattr(self.message_bus, "broadcast_message"):
+            await self.message_bus.broadcast_message(message_type, payload, sender_id=self.agent_id)
+        else:
+            logger.warning(f"Agent '{self.agent_id}': No message bus available to broadcast '{message_type}'.")
+
+    def subscribe_to(self, message_type: str):
+        """Subscribe this agent to a message type on the bus."""
+        if self.message_bus and hasattr(self.message_bus, "subscribe"):
+            self.message_bus.subscribe(self.agent_id, message_type)
+        else:
+            logger.warning(f"Agent '{self.agent_id}': No message bus available to subscribe to '{message_type}'.")
+
 
     def receive_message(self, message: dict):
         """
@@ -111,11 +125,17 @@ class BaseAgent(abc.ABC):
                 "agent_id": self.agent_id,
                 "timestamp": datetime.utcnow().isoformat()
             }
-        elif msg_type == "info_update": # Example of another message type
-            logger.info(f"Agent '{self.agent_id}' received 'info_update' from '{sender_id}'. Logging payload: {payload}")
-            # Potentially update internal state based on this info
+        elif msg_type == "info_update":  # Example of another message type
+            logger.info(
+                f"Agent '{self.agent_id}' received 'info_update' from '{sender_id}'. Logging payload: {payload}"
+            )
             return {"status": "info_logged", "agent_id": self.agent_id}
+        elif msg_type in {"evaluation_result", "critique_result"}:
+            logger.info(f"Agent '{self.agent_id}' processing '{msg_type}' from '{sender_id}'.")
+            return self.process_request({"data_type": msg_type, "data": payload})
         else:
-            logger.info(f"Agent '{self.agent_id}' logged message of type '{msg_type}' from '{sender_id}'. No specific handler implemented in BaseAgent.")
+            logger.info(
+                f"Agent '{self.agent_id}' logged message of type '{msg_type}' from '{sender_id}'. No specific handler implemented in BaseAgent."
+            )
             return {"status": "message_logged_by_base_agent", "type": msg_type, "agent_id": self.agent_id}
 
