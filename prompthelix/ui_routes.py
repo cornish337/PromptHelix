@@ -96,7 +96,7 @@ async def create_prompt_ui_submit(
     # Redirect to the new prompt's detail page
     # Use request.url_for to get the URL for the named route
     message = f"Prompt '{db_prompt.name}' created successfully."
-    redirect_url = request.url_for('view_prompt_ui', prompt_id=db_prompt.id) + f"?message={message}"
+    redirect_url = str(request.url_for('view_prompt_ui', prompt_id=db_prompt.id)) + f"?message={message}"
     return RedirectResponse(url=redirect_url, status_code=303)
 
 
@@ -138,7 +138,7 @@ async def run_experiment_ui_submit(
 
     api_experiment_url = request.url_for('api_run_ga_experiment') # Needs name in API route
 
-    async with httpx.AsyncClient(app=request.app, base_url=request.base_url) as client:
+    async with httpx.AsyncClient(app=request.app, base_url=str(request.base_url)) as client:
         try:
             response = await client.post(api_experiment_url, json=ga_params.model_dump(exclude_none=True))
             response.raise_for_status()  # Raises an exception for 4XX/5XX responses
