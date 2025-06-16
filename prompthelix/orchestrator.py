@@ -1,4 +1,5 @@
 from prompthelix.message_bus import MessageBus
+import logging
 from prompthelix.agents.architect import PromptArchitectAgent
 from prompthelix.agents.results_evaluator import ResultsEvaluatorAgent
 from prompthelix.agents.style_optimizer import StyleOptimizerAgent
@@ -15,6 +16,8 @@ from prompthelix.genetics.engine import (
 )
 from typing import List
 from prompthelix.enums import ExecutionMode # Added import
+
+logger = logging.getLogger(__name__)
 
 def main_ga_loop(
     task_desc: str,
@@ -133,16 +136,18 @@ def main_ga_loop(
 
     # 5. Evolution Loop
     print("\n--- Starting Evolution Loop ---")
+    logger.info("Starting evolution loop for %d generations", num_generations)
     fittest_individual = None
     for i in range(num_generations):
         current_generation_num = pop_manager.generation_number + 1
         print(f"\n--- Generation {current_generation_num} of {num_generations} ---")
+        logger.info("Generation %d start", current_generation_num)
         pop_manager.evolve_population(
             task_description=evaluation_task_desc,  # Use consistent task for evaluation
             success_criteria=evaluation_success_criteria,
             target_style="formal"
         )
-        
+
         fittest_in_gen = pop_manager.get_fittest_individual()
         if fittest_in_gen:
             print(f"Fittest in Generation {pop_manager.generation_number}: Fitness={fittest_in_gen.fitness_score:.4f}") # pop_manager.generation_number is updated by evolve_population
@@ -151,6 +156,12 @@ def main_ga_loop(
         else:
             print("No fittest individual found in this generation.")
             # If population collapses or no valid individuals, might stop or handle differently
+        logger.info(
+            "Generation %d end - population size: %d, best fitness: %s",
+            pop_manager.generation_number,
+            len(pop_manager.population),
+            f"{fittest_in_gen.fitness_score:.4f}" if fittest_in_gen else "N/A",
+        )
 
     # 6. Final Best
     # The fittest_individual variable now holds the best from the last generation,
@@ -161,8 +172,17 @@ def main_ga_loop(
     if final_fittest_overall:
         print("\n--- Overall Best Prompt Found ---")
         print(str(final_fittest_overall))
+        logger.info(
+            "GA finished - final population size: %d, best fitness: %.4f",
+            len(pop_manager.population),
+            final_fittest_overall.fitness_score,
+        )
     else:
         print("\nNo solution found after all generations.")
+        logger.info(
+            "GA finished - final population size: %d, no valid solution",
+            len(pop_manager.population),
+        )
 
     if population_path:
         pop_manager.save_population(population_path)
