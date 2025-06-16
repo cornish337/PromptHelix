@@ -1,6 +1,6 @@
 import unittest
 import random
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 from prompthelix.genetics.engine import GeneticOperators, PromptChromosome
 
 class TestGeneticOperators(unittest.TestCase):
@@ -193,6 +193,24 @@ class TestGeneticOperators(unittest.TestCase):
             self.assertNotEqual(mutated_chromosome.id, empty_chromosome.id)
             self.assertEqual(mutated_chromosome.genes, []) # Genes should remain empty
             self.assertEqual(mutated_chromosome.fitness_score, 0.0)
+
+    @patch('random.choice')
+    @patch('random.random')
+    def test_mutate_with_style_optimizer(self, mock_random, mock_choice):
+        """Mutation should incorporate StyleOptimizerAgent output when provided."""
+        mock_random.side_effect = [0.05, 0.05]  # Trigger mutation and mutate gene0
+        mock_choice.return_value = "placeholder_replace"
+
+        style_mock = Mock()
+        style_mock.process_request.return_value = PromptChromosome(genes=["styled"], fitness_score=0.0)
+
+        operators = GeneticOperators(style_optimizer_agent=style_mock)
+        chromo = PromptChromosome(genes=["gene"], fitness_score=0.1)
+
+        result = operators.mutate(chromo, mutation_rate=0.1, gene_mutation_prob=0.2, target_style="formal")
+
+        style_mock.process_request.assert_called_once()
+        self.assertEqual(result.genes, ["styled"])
 
 if __name__ == '__main__':
     unittest.main()
