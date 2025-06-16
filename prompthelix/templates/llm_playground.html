@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+
+{% block title %}LLM Playground - PromptHelix{% endblock %}
+
+{% block content %}
+<div class="container mx-auto p-4">
+    <h1 class="text-2xl font-bold mb-6">LLM Playground</h1>
+
+    <div class="max-w-2xl mx-auto bg-white p-6 rounded-lg shadow-md">
+        <form id="llm-playground-form" class="space-y-4">
+            <div>
+                <label for="llm_provider" class="block text-sm font-medium text-gray-700">Select LLM Provider:</label>
+                <select id="llm_provider" name="llm_provider"
+                        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    <option value="">Loading providers...</option>
+                </select>
+            </div>
+
+            <div>
+                <label for="prompt_text" class="block text-sm font-medium text-gray-700">Enter your prompt:</label>
+                <textarea id="prompt_text" name="prompt_text" rows="5"
+                          class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                          placeholder="e.g., Write a short poem about a robot."></textarea>
+            </div>
+
+            <div>
+                <button type="submit"
+                        class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    Submit to LLM
+                </button>
+            </div>
+        </form>
+
+        <div id="llm-response-area" class="mt-6">
+            <h3 class="text-lg font-semibold text-gray-800">LLM Response:</h3>
+            <div id="llm-response-status" class="text-sm text-gray-500 mb-2"></div>
+            <pre id="llm-response-content"
+                 class="bg-gray-100 p-4 rounded-md text-gray-700 whitespace-pre-wrap overflow-x-auto"></pre>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const llmProviderSelect = document.getElementById('llm_provider');
+    const promptTextarea = document.getElementById('prompt_text');
+    const llmPlaygroundForm = document.getElementById('llm-playground-form');
+    const responseStatusDiv = document.getElementById('llm-response-status');
+    const responseContentPre = document.getElementById('llm-response-content');
+
+    // 1. Populate LLM Providers Dropdown
+    // The `llm_providers` variable is passed from the Python route to the template.
+    // We use Jinja's `tojson` filter to safely serialize it as a JSON string.
+    const providers = {{ llm_providers | tojson | safe }};
+
+    llmProviderSelect.innerHTML = '<option value="">Select a provider</option>'; // Clear loading/set default
+    if (providers && providers.length > 0) {
+        providers.forEach(function(provider) {
+            const option = document.createElement('option');
+            option.value = provider.name; // e.g., "OPENAI"
+            option.textContent = provider.display_name; // e.g., "OpenAI"
+            llmProviderSelect.appendChild(option);
+        });
+    } else {
+        llmProviderSelect.innerHTML = '<option value="">No providers configured or found</option>';
+    }
+
+    // 2. Handle Form Submission
+    llmPlaygroundForm.addEventListener('submit', async function (event) {
+        event.preventDefault();
+
+        const selectedProvider = llmProviderSelect.value;
+        const promptText = promptTextarea.value.trim();
+
+        if (!selectedProvider) {
+            responseStatusDiv.textContent = 'Error: Please select an LLM provider.';
+            responseStatusDiv.className = 'text-sm text-red-500 mb-2'; // Ensure error styling
+            responseContentPre.textContent = '';
+            return;
+        }
+
+        if (!promptText) {
+            responseStatusDiv.textContent = 'Error: Please enter a prompt.';
+            responseStatusDiv.className = 'text-sm text-red-500 mb-2'; // Ensure error styling
+            responseContentPre.textContent = '';
+            return;
+        }
+
+        responseStatusDiv.textContent = 'Loading response...';
+        responseStatusDiv.className = 'text-sm text-gray-500 mb-2'; // Reset to normal styling
+        responseContentPre.textContent = '';
+
+        try {
+            // Determine the base URL for the API call
+            // const apiBaseUrl = '{{ request.url_for("api_base") }}'; // If you have a base API route
+            // For now, constructing relative path, assuming API is served from same domain/port.
+            // The API route for testing prompts is assumed to be '/api/llm/test_prompt'
+            // If the API route has a name like 'test_llm_prompt_api', use:
+            // const apiUrl = "{{ request.url_for('test_llm_prompt_api') }}";
+            // For this subtask, using the literal path as specified.
+            const apiUrl = '/api/llm/test_prompt';
+
+
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    // If your FastAPI setup includes CSRF protection (e.g., via middleware),
+                    // you might need to fetch and include a CSRF token here.
+                    // Example: 'X-CSRF-Token': getCsrfToken()
+                },
+                body: JSON.stringify({
+                    llm_service: selectedProvider,
+                    prompt_text: promptText
+                })
+            });
+
+            const responseData = await response.json(); // Attempt to parse JSON regardless of response.ok
+
+            if (response.ok) {
+                responseContentPre.textContent = responseData.response_text;
+                responseStatusDiv.textContent = 'Response received:';
+                responseStatusDiv.className = 'text-sm text-green-600 mb-2'; // Success styling
+            } else {
+                // FastAPI often returns error details in `responseData.detail`
+                let errorMessage = 'Error: ';
+                if (responseData.detail) {
+                    if (typeof responseData.detail === 'string') {
+                        errorMessage += responseData.detail;
+                    } else if (Array.isArray(responseData.detail) && responseData.detail.length > 0) {
+                        // Handle validation errors (list of dicts)
+                        errorMessage += responseData.detail.map(err => `${err.loc ? err.loc.join('.')+': ' : ''}${err.msg}`).join('; ');
+                    } else {
+                        errorMessage += JSON.stringify(responseData.detail);
+                    }
+                } else {
+                    errorMessage += (response.statusText || `Failed to fetch response with status ${response.status}`);
+                }
+                responseStatusDiv.textContent = errorMessage;
+                responseStatusDiv.className = 'text-sm text-red-500 mb-2'; // Error styling
+                // Displaying the full error object might be useful for debugging
+                responseContentPre.textContent = JSON.stringify(responseData, null, 2);
+            }
+        } catch (error) {
+            console.error('Playground Fetch Error:', error);
+            responseStatusDiv.textContent = 'Error: An unexpected error occurred. Check console for details.';
+            responseStatusDiv.className = 'text-sm text-red-500 mb-2'; // Error styling
+            responseContentPre.textContent = error.message || 'Network request failed.';
+        }
+    });
+});
+</script>
+
+{% endblock %}

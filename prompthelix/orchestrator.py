@@ -1,6 +1,8 @@
 from prompthelix.message_bus import MessageBus
+import logging
 from prompthelix.agents.architect import PromptArchitectAgent
 from prompthelix.agents.results_evaluator import ResultsEvaluatorAgent
+from prompthelix.agents.style_optimizer import StyleOptimizerAgent
 from prompthelix.agents.meta_learner import MetaLearnerAgent
 from prompthelix.agents.domain_expert import DomainExpertAgent # Added for demo
 from prompthelix.agents.critic import PromptCriticAgent # Added for demo
@@ -15,6 +17,8 @@ from prompthelix.genetics.engine import (
 from typing import List
 from prompthelix.enums import ExecutionMode # Added import
 
+logger = logging.getLogger(__name__)
+
 def main_ga_loop(
     task_desc: str,
     keywords: List[str],
@@ -22,13 +26,24 @@ def main_ga_loop(
     population_size: int,
     elitism_count: int,
     execution_mode: ExecutionMode, # New parameter
-    return_best: bool = True
+    return_best: bool = True,
+    population_path: str | None = None
 ):
     """
     Main orchestration loop for running the PromptHelix Genetic Algorithm.
-    
+
     This function initializes agents, GA components, and runs the
     evolutionary process based on the provided parameters.
+
+    Args:
+        task_desc: Description of the task prompts should solve.
+        keywords: Keywords used by the PromptArchitectAgent.
+        num_generations: Number of generations to evolve.
+        population_size: Desired population size.
+        elitism_count: Number of top individuals preserved each generation.
+        execution_mode: Whether to run in REAL or TEST mode.
+        return_best: If True, return the best chromosome at the end.
+        population_path: Optional path for loading/saving population JSON.
     """
     # 0. Instantiate Message Bus
     print("Initializing Message Bus...")
@@ -39,17 +54,19 @@ def main_ga_loop(
     print("Initializing agents with message bus...")
     prompt_architect = PromptArchitectAgent(message_bus=message_bus, knowledge_file_path="architect_ga_knowledge.json")
     results_evaluator = ResultsEvaluatorAgent(message_bus=message_bus, knowledge_file_path="results_evaluator_ga_config.json")
+    style_optimizer = StyleOptimizerAgent(message_bus=message_bus, knowledge_file_path=None)
     # Note: PromptCriticAgent and StyleOptimizerAgent are typically used within FitnessEvaluator or other
     # GA components. If they were instantiated directly here for the GA loop, they'd also get specific paths.
 
     # Register agents with the message bus
     message_bus.register(prompt_architect.agent_id, prompt_architect)
     message_bus.register(results_evaluator.agent_id, results_evaluator)
+    message_bus.register(style_optimizer.agent_id, style_optimizer)
     print("Agents initialized and registered.")
 
     # 2. Instantiate GA Components
     print("Initializing GA components...")
-    genetic_ops = GeneticOperators()
+    genetic_ops = GeneticOperators(style_optimizer_agent=style_optimizer)
 
     # Ensure OPENAI_API_KEY (and other necessary keys for LLMs like ANTHROPIC_API_KEY, GOOGLE_API_KEY if used)
     # are set in the environment for the FitnessEvaluator to function correctly with actual LLM calls.
@@ -62,9 +79,10 @@ def main_ga_loop(
     pop_manager = PopulationManager(
         genetic_operators=genetic_ops,
         fitness_evaluator=fitness_eval,
-        prompt_architect_agent=prompt_architect, 
+        prompt_architect_agent=prompt_architect,
         population_size=population_size,
-        elitism_count=elitism_count
+        elitism_count=elitism_count,
+        population_path=population_path
     )
     print("GA components initialized.")
 
@@ -82,12 +100,15 @@ def main_ga_loop(
     print(f"Parameters: Generations={num_generations}, Population Size={population_size}, Elitism Count={elitism_count}, Task='{task_desc}'")
 
     # 4. Initialize Population
-    print("\n--- Initializing Population ---")
-    pop_manager.initialize_population(
-        initial_task_description=task_desc,
-        initial_keywords=keywords
-    )
-    print(f"Population initialized with {len(pop_manager.population)} individuals.")
+    if not pop_manager.population:
+        print("\n--- Initializing Population ---")
+        pop_manager.initialize_population(
+            initial_task_description=task_desc,
+            initial_keywords=keywords
+        )
+        print(f"Population initialized with {len(pop_manager.population)} individuals.")
+    else:
+        print(f"Loaded population with {len(pop_manager.population)} individuals.")
 
     # Evaluate the initial population to see a starting best
     # (evolve_population also does this, but this shows the state *before* any evolution)
@@ -115,15 +136,18 @@ def main_ga_loop(
 
     # 5. Evolution Loop
     print("\n--- Starting Evolution Loop ---")
+    logger.info("Starting evolution loop for %d generations", num_generations)
     fittest_individual = None
     for i in range(num_generations):
         current_generation_num = pop_manager.generation_number + 1
         print(f"\n--- Generation {current_generation_num} of {num_generations} ---")
+        logger.info("Generation %d start", current_generation_num)
         pop_manager.evolve_population(
-            task_description=evaluation_task_desc, # Use consistent task for evaluation
-            success_criteria=evaluation_success_criteria
+            task_description=evaluation_task_desc,  # Use consistent task for evaluation
+            success_criteria=evaluation_success_criteria,
+            target_style="formal"
         )
-        
+
         fittest_in_gen = pop_manager.get_fittest_individual()
         if fittest_in_gen:
             print(f"Fittest in Generation {pop_manager.generation_number}: Fitness={fittest_in_gen.fitness_score:.4f}") # pop_manager.generation_number is updated by evolve_population
@@ -132,6 +156,12 @@ def main_ga_loop(
         else:
             print("No fittest individual found in this generation.")
             # If population collapses or no valid individuals, might stop or handle differently
+        logger.info(
+            "Generation %d end - population size: %d, best fitness: %s",
+            pop_manager.generation_number,
+            len(pop_manager.population),
+            f"{fittest_in_gen.fitness_score:.4f}" if fittest_in_gen else "N/A",
+        )
 
     # 6. Final Best
     # The fittest_individual variable now holds the best from the last generation,
@@ -142,8 +172,20 @@ def main_ga_loop(
     if final_fittest_overall:
         print("\n--- Overall Best Prompt Found ---")
         print(str(final_fittest_overall))
+        logger.info(
+            "GA finished - final population size: %d, best fitness: %.4f",
+            len(pop_manager.population),
+            final_fittest_overall.fitness_score,
+        )
     else:
         print("\nNo solution found after all generations.")
+        logger.info(
+            "GA finished - final population size: %d, no valid solution",
+            len(pop_manager.population),
+        )
+
+    if population_path:
+        pop_manager.save_population(population_path)
 
     if return_best:
         return final_fittest_overall

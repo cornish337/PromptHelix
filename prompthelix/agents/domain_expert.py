@@ -13,6 +13,8 @@ FALLBACK_LLM_MODEL = AGENT_SETTINGS.get("DomainExpertAgent", {}).get("default_ll
 
 
 class DomainExpertAgent(BaseAgent):
+    agent_id = "DomainExpert"
+    agent_description = "Provides domain-specific knowledge and evaluation criteria."
     """
     Provides domain-specific knowledge, constraints, terminology, and
     evaluation criteria to other agents.

@@ -16,6 +16,8 @@ DEFAULT_KNOWLEDGE_FILENAME = AGENT_SETTINGS.get("MetaLearnerAgent", {}).get("kno
 PERSIST_ON_UPDATE_DEFAULT = AGENT_SETTINGS.get("MetaLearnerAgent", {}).get("persist_knowledge_on_update", True)
 
 class MetaLearnerAgent(BaseAgent):
+    agent_id = "MetaLearner"
+    agent_description = "Learns from performance metrics to guide other agents."
     """
     Analyzes the overall performance of the prompt generation and optimization
     process over time. It learns from successful and unsuccessful prompts and
@@ -50,6 +52,11 @@ class MetaLearnerAgent(BaseAgent):
         self.knowledge_file_path = os.path.join(KNOWLEDGE_DIR, _knowledge_filename)
 
         self.persist_on_update = agent_config.get("persist_knowledge_on_update", PERSIST_ON_UPDATE_DEFAULT)
+
+        # Subscribe to evaluation and critique results if a message bus is available
+        if self.message_bus:
+            self.subscribe_to("evaluation_result")
+            self.subscribe_to("critique_result")
 
         # Default structure for knowledge_base
         self._default_knowledge_base_structure = {

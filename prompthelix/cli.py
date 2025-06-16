@@ -12,6 +12,9 @@ import unittest
 import logging # Added for logging configuration
 import openai # Added for openai.RateLimitError
 
+logger = logging.getLogger(__name__)
+
+
 def main_cli():
     """
     Main function for the PromptHelix CLI.
@@ -43,6 +46,11 @@ def main_cli():
     # "run" command
     run_parser = subparsers.add_parser("run", help="Run the PromptHelix application or a specific module")
     run_parser.add_argument("module", nargs="?", default="ga", help="Module to run (e.g., 'ga')")
+
+    # "check-llm" command for quick connectivity testing
+    check_parser = subparsers.add_parser("check-llm", help="Test LLM provider connectivity")
+    check_parser.add_argument("--provider", default="openai", help="LLM provider name")
+    check_parser.add_argument("--model", help="Model name for the provider")
 
 
     args = parser.parse_args()
@@ -124,6 +132,7 @@ def main_cli():
     elif args.command == "run":
         if args.module == "ga":
             print("CLI: Running Genetic Algorithm...")
+            logger.info("Running Genetic Algorithm")
             from prompthelix.orchestrator import main_ga_loop # Import directly
             from prompthelix.enums import ExecutionMode # Import ExecutionMode
             # Define default parameters for the CLI run
@@ -150,9 +159,13 @@ def main_cli():
                 if best_chromosome:
                     print("\nCLI: Genetic Algorithm completed.")
                     print(f"Best prompt fitness: {best_chromosome.fitness_score}")
+                    logger.info("GA finished with best fitness %.4f", best_chromosome.fitness_score)
                     # print(f"Best prompt content: {best_chromosome.to_prompt_string()}") # Could be very long
                 else:
                     print("\nCLI: Genetic Algorithm completed, but no best prompt was found.")
+
+                    logger.info("GA finished with no best prompt")
+
             except openai.RateLimitError as rle:
                 print(f"CLI: CRITICAL ERROR - OpenAI Rate Limit Exceeded: {rle}", file=sys.stderr)
                 print("Your OpenAI account has hit its usage quota or rate limits. The Genetic Algorithm cannot proceed with LLM evaluations.", file=sys.stderr)
@@ -165,6 +178,22 @@ def main_cli():
                 sys.exit(1)
         else:
             print(f"Error: Unknown module '{args.module}'. Currently, only 'ga' module is supported for the run command.", file=sys.stderr)
+            sys.exit(1)
+
+    elif args.command == "check-llm":
+        logging.debug(
+            f"CLI: Checking LLM connectivity for provider {args.provider}, model {args.model}"
+        )
+        try:
+            from prompthelix.utils import llm_utils
+
+            response = llm_utils.call_llm_api(
+                prompt="Hello from PromptHelix", provider=args.provider, model=args.model
+            )
+            print(f"LLM response from {args.provider}: {response}")
+        except Exception as e:
+            logging.exception("CLI: LLM connectivity check failed")
+            print(f"CLI: Failed to contact {args.provider}: {e}", file=sys.stderr)
             sys.exit(1)
 
     # No specific action needed for --version as argparse handles it

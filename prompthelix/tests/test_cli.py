@@ -38,5 +38,41 @@ class TestCli(unittest.TestCase):
         except FileNotFoundError:
             self.fail(f"CLI command failed. Ensure 'python -m prompthelix.cli' can be resolved. Is PYTHONPATH set up correctly or package installed?")
 
+    def test_check_llm_command_mocked(self):
+        """Test the 'check-llm' command with a mocked LLM call."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sitecustomize_path = os.path.join(tmpdir, "sitecustomize.py")
+            with open(sitecustomize_path, "w") as f:
+                f.write(
+                    "from unittest.mock import patch\n"
+                    "patch('prompthelix.utils.llm_utils.call_llm_api', return_value='mocked-response').start()\n"
+                )
+
+            env = os.environ.copy()
+            env["PYTHONPATH"] = tmpdir + os.pathsep + env.get("PYTHONPATH", "")
+
+            command = [
+                sys.executable,
+                "-m",
+                "prompthelix.cli",
+                "check-llm",
+                "--provider",
+                "openai",
+            ]
+
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                env=env,
+                check=True,
+                timeout=30,
+            )
+
+            self.assertEqual(result.returncode, 0)
+            self.assertIn("mocked-response", result.stdout)
+
 if __name__ == '__main__':
     unittest.main()

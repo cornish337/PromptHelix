@@ -2,8 +2,9 @@ from prompthelix.agents.base import BaseAgent
 from prompthelix.genetics.engine import PromptChromosome
 from prompthelix.utils.llm_utils import call_llm_api
 from prompthelix.config import AGENT_SETTINGS
-from prompthelix.evaluation import metrics as prompt_metrics # Import new metrics
+from prompthelix.evaluation import metrics as prompt_metrics  # Import new metrics
 import logging
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -19,13 +20,16 @@ class PromptCriticAgent(BaseAgent):
     and adherence to best practices, without necessarily executing them.
     It acts as a "static analyzer" for prompts.
     """
-    def __init__(self, message_bus=None):
+    def __init__(self, message_bus=None, knowledge_file_path=None):
         """
         Initializes the PromptCriticAgent.
         Loads critique rules or heuristics and agent configuration.
 
         Args:
             message_bus (object, optional): The message bus for inter-agent communication.
+            knowledge_file_path (str, optional): Path to the JSON file storing
+                critique rules. Defaults to "critic_rules.json" if not
+                provided.
         """
         super().__init__(agent_id=self.agent_id, message_bus=message_bus)
 
@@ -34,9 +38,7 @@ class PromptCriticAgent(BaseAgent):
         self.llm_model = agent_config.get("default_llm_model", FALLBACK_LLM_MODEL)
         logger.info(f"Agent '{self.agent_id}' initialized with LLM provider: {self.llm_provider} and model: {self.llm_model}")
 
-        self.knowledge_file_path = knowledge_file_path
-        if self.knowledge_file_path is None:
-            self.knowledge_file_path = "critic_rules.json"
+        self.knowledge_file_path = knowledge_file_path or "critic_rules.json"
 
         self.critique_rules = [] # Initialize before loading
         self.load_knowledge()
@@ -371,5 +373,11 @@ Best Practice Note: Consider specifying the desired output format.
             "metric_details": programmatic_metric_details # Include the new scores for transparency
         }
         logger.info(f"Agent '{self.agent_id}': Critique result - Score={critique_score}, Total Feedback Points#={len(feedback_points)}, Programmatic Scores={programmatic_metric_details}")
+        if self.message_bus:
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(self.message_bus.broadcast_message("critique_result", result, sender_id=self.agent_id))
+            except RuntimeError:
+                asyncio.run(self.message_bus.broadcast_message("critique_result", result, sender_id=self.agent_id))
         return result
 

@@ -50,6 +50,14 @@ The PromptHelix system is designed around a collection of specialized AI agents 
 ### Agent Functionality Notes
 The current implementations of these agents are functional placeholders. They utilize mock data (e.g., for templates, critique rules, style rules, domain knowledge) and simplified internal logic. This approach is intended to establish the foundational framework of the multi-agent system and demonstrate the intended interactions and data flows. Future development will involve replacing mock data with configurable sources and implementing more sophisticated algorithms and machine learning models within each agent.
 
+### Message Flow
+
+Agents interact through an asynchronous message bus. Agents subscribe to message
+types they care about and broadcast results for others to consume. The
+`ResultsEvaluatorAgent` and `PromptCriticAgent` broadcast `evaluation_result` and
+`critique_result` messages respectively. The `MetaLearnerAgent` listens for these
+messages and updates its knowledge base whenever new feedback arrives.
+
 ## Testing
 
 Unit tests for the core placeholder functionalities of each agent and the genetic algorithm components are located in the `prompthelix/tests/unit/` directory. Each component has its own test file (e.g., `test_architect_agent.py`, `test_genetic_operators.py`, etc.) that verifies its basic operations.
@@ -93,6 +101,14 @@ python -m prompthelix.tests.test_llm_connectivity --provider openai --model gpt-
 ```bash
 python -m prompthelix.tests.test_llm_connectivity --provider anthropic --model claude-2
 ```
+
+You can also run the connectivity check via the CLI:
+
+```bash
+python -m prompthelix.cli check-llm --provider openai --model gpt-3.5-turbo
+```
+
+Debug logs are printed to the console to aid troubleshooting.
 
 ## Genetic Algorithm Engine
 

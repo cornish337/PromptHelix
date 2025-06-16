@@ -10,41 +10,87 @@ body {
 
 /* Navigation Bar */
 nav {
-    background-color: #333;
-    color: #fff;
-    padding: 1rem 0;
+    background-color: #333; /* Dark background for the navbar */
+    color: #fff; /* White text color */
+    padding: 1rem 2%; /* Increased padding, using % for some responsiveness */
     text-align: center;
-    margin-bottom: 20px;
+    margin-bottom: 25px; /* Slightly more margin */
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1); /* Subtle shadow for depth */
+}
+
+nav ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: inline-block; /* Allows centering of the ul if nav is text-align: center */
+}
+
+nav ul li {
+    display: inline-block; /* Arrange links horizontally */
+    margin: 0 10px; /* Spacing between links */
+    background-color: transparent; /* Override general li styles */
+    border: none; /* Override general li styles */
+    padding: 0; /* Override general li styles */
 }
 
 nav a {
     color: #fff;
     text-decoration: none;
-    padding: 0.5rem 1rem;
-    margin: 0 0.5rem;
+    padding: 0.75rem 1.5rem; /* Increased padding for a larger clickable area */
+    display: inline-block; /* Allows padding to take effect properly */
+    border-radius: 4px; /* Rounded corners for links */
+    transition: background-color 0.3s ease, color 0.3s ease; /* Smooth transition for hover effects */
 }
 
-nav a:hover {
-    background-color: #555;
-    border-radius: 4px;
+nav a:hover, nav a:focus {
+    background-color: #555; /* Darker background on hover/focus */
+    color: #fff; /* Ensure text remains white */
+    outline: none; /* Remove default focus outline if custom styling is sufficient */
+}
+
+nav a.active { /* Style for active link (if class is applied by backend) */
+    background-color: #007bff; /* Example active link color */
+    color: #fff;
+}
+
+
+/* Global Link Styles */
+a {
+    color: #007bff; /* Standard link color */
+    text-decoration: none;
+}
+
+a:hover, a:focus {
+    color: #0056b3; /* Darker shade on hover/focus */
+    text-decoration: underline;
 }
 
 /* Headings */
-h1, h2, h3 {
+h1, h2, h3, h4, h5, h6 { /* Added h4,h5,h6 for completeness */
     color: #333;
-    margin-bottom: 0.75rem;
+    margin-top: 1em; /* Added margin-top */
 }
 
-h1 { font-size: 2em; }
-h2 { font-size: 1.75em; }
-h3 { font-size: 1.5em; }
+h1 { font-size: 2em; margin-bottom: 1rem; } /* Tailwind mb-6 is 1.5rem, mb-4 is 1rem. Adjusted. */
+h2 { font-size: 1.75em; margin-bottom: 0.875rem; } /* Adjusted based on Tailwind */
+h3 { font-size: 1.5em; margin-bottom: 0.75rem; } /* Adjusted based on Tailwind */
+h4 { font-size: 1.25em; margin-bottom: 0.5rem; }
+h5 { font-size: 1em; margin-bottom: 0.5rem; }
+h6 { font-size: 0.875em; margin-bottom: 0.5rem; }
+
 
 /* Lists */
 ul {
-    list-style: none;
+    list-style: none; /* Default is no bullets for ul */
     padding: 0;
 }
 
+ul li { /* Basic spacing for li elements if they are direct children of ul */
+    padding: 2px 0;
+}
+
+/* DEPRECATED li styling - will be replaced by .card or specific component styles */
+/*
 li {
     background-color: #fff;
     border: 1px solid #ddd;
@@ -52,6 +98,7 @@ li {
     margin-bottom: 10px;
     border-radius: 4px;
 }
+*/
 
 /* Forms */
 form {
@@ -62,67 +109,167 @@ form {
     border: 1px solid #ddd;
 }
 
+form div:last-of-type { /* Add some space above the form's last div, often containing the submit button */
+    margin-top: 20px;
+}
+
+
 fieldset {
     border: 1px solid #ccc;
-    padding: 15px;
-    margin-bottom: 15px;
+    padding: 20px; /* Increased padding */
+    margin-bottom: 20px; /* Increased margin */
     border-radius: 4px;
 }
 
 legend {
     font-weight: bold;
     color: #333;
+    padding: 0 5px; /* Add some padding around legend text */
+    margin-bottom: 10px; /* Space below legend */
+}
+
+label {
+    display: block; /* Make labels take full width for better spacing */
+    margin-bottom: 8px; /* Space below labels */
+    font-weight: bold;
+    color: #333;
 }
 
 input[type="text"],
+input[type="email"], /* Added email type */
+input[type="password"], /* Added password type */
 input[type="number"],
 textarea,
 select {
-    width: 100%;
-    max-width: 500px; /* Max width for readability */
-    padding: 10px;
-    margin-bottom: 10px;
+    width: 100%; /* Changed from max-width: 500px to width: 100% for full width in containers like cards */
+    padding: 12px; /* Increased padding */
+    margin-bottom: 15px; /* Increased margin */
     border: 1px solid #ccc;
     border-radius: 4px;
     box-sizing: border-box; /* So padding doesn't add to width */
+    transition: border-color 0.3s ease, box-shadow 0.3s ease; /* Smooth transition for focus */
+}
+
+input[type="text"]:focus,
+input[type="email"]:focus,
+input[type="password"]:focus,
+input[type="number"]:focus,
+textarea:focus,
+select:focus {
+    border-color: #007bff; /* Highlight border on focus */
+    box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25); /* Add a glow effect on focus */
+    outline: none; /* Remove default outline */
 }
 
 textarea {
-    min-height: 80px;
+    min-height: 100px; /* Increased min-height */
     resize: vertical;
 }
 
 /* Buttons */
 button,
 input[type="submit"] {
-    background-color: #5cb85c;
+    background-color: #007bff; /* Primary button color (Bootstrap primary blue) */
     color: white;
-    padding: 10px 15px;
+    padding: 12px 20px; /* Adjusted padding */
     border: none;
     border-radius: 4px;
     cursor: pointer;
-    font-size: 1em;
+    font-size: 1em; /* Consistent font size */
+    transition: background-color 0.3s ease; /* Smooth transition */
 }
 
 button:hover,
 input[type="submit"]:hover {
-    background-color: #4cae4c;
+    background-color: #0056b3; /* Darker shade on hover */
 }
 
+button:focus,
+input[type="submit"]:focus {
+    outline: none;
+    box-shadow: 0 0 0 0.2rem rgba(0,123,255,.5); /* Focus glow, similar to Bootstrap */
+}
+
+/* Secondary Button Style */
+.btn-secondary {
+    background-color: #6c757d; /* Bootstrap secondary grey */
+    color: white;
+}
+
+.btn-secondary:hover {
+    background-color: #5a6268; /* Darker grey on hover */
+}
+
+.btn-secondary:focus {
+    box-shadow: 0 0 0 0.2rem rgba(108,117,125,.5); /* Focus glow for secondary */
+}
+
+
 /* Utility Classes */
-.highlight {
+.highlight { /* Existing class, ensure it's still relevant or update */
     background-color: #e6ffe6 !important; /* Light green highlight */
     border: 1px solid #5cb85c !important; /* Green border */
-    padding: 10px;
+    padding: 10px; /* Consider standardizing padding if used with cards/messages */
 }
 
 .error-message {
-    color: #d9534f; /* Bootstrap danger color */
-    background-color: #f2dede;
-    border: 1px solid #ebccd1;
-    padding: 10px;
-    margin-bottom: 15px;
+    color: #721c24; /* Darker red text for better contrast (Bootstrap danger text) */
+    background-color: #f8d7da; /* Lighter red background (Bootstrap danger background) */
+    border: 1px solid #f5c6cb; /* Reddish border (Bootstrap danger border) */
+    padding: 1rem; /* Standardized padding */
+    margin-bottom: 1rem; /* Standardized margin */
     border-radius: 4px;
+}
+
+.success-message {
+    color: #155724; /* Darker green text (Bootstrap success text) */
+    background-color: #d4edda; /* Lighter green background (Bootstrap success background) */
+    border: 1px solid #c3e6cb; /* Greenish border (Bootstrap success border) */
+    padding: 1rem; /* Standardized padding */
+    margin-bottom: 1rem; /* Standardized margin */
+    border-radius: 4px;
+}
+
+.success-text { /* For inline success messages, like API key set hint */
+    color: #155724; /* Darker green text (Bootstrap success text) */
+    font-size: 0.9em;
+}
+
+.form-hint-text {
+    font-size: 0.9em; /* Slightly smaller than normal text */
+    color: #555; /* Grey color for hints */
+    margin-top: 5px; /* Space above the hint text */
+    margin-bottom: 10px; /* Space below the hint text */
+}
+
+/* Card-like elements */
+.card {
+    background-color: #fff;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 20px; /* Increased padding for cards, was 15px */
+    margin-bottom: 15px; /* Increased margin for cards, was 10px */
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05); /* Softer shadow */
+}
+
+/* Settings Page Specific Styles */
+.settings-section {
+    margin-bottom: 2rem; /* Spacing between sections like "API Key Management" and "Available Agents" */
+}
+
+.settings-section .card { /* More margin for cards specifically within settings sections if needed */
+    margin-bottom: 20px;
+}
+
+.agent-list {
+    list-style: disc; /* Use bullets for agent list */
+    padding-left: 25px; /* Indent list items */
+    margin-top: 10px;
+}
+
+.agent-list li {
+    margin-bottom: 8px; /* Space between list items */
+    padding-left: 5px; /* Small padding for the li content itself */
 }
 
 /* Content Area */

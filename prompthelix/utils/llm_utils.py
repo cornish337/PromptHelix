@@ -10,7 +10,18 @@ from prompthelix.config import (
 from typing import Optional  # Added for Optional type hint
 
 import openai
-from openai import OpenAIError, APIError as OpenAPIApiError, RateLimitError as OpenAIRateLimitError, AuthenticationError as OpenAIAuthenticationError, APIConnectionError as OpenAIAPIConnectionError, InvalidRequestError as OpenAIInvalidRequestError
+from openai import (
+    OpenAIError,
+    APIError as OpenAPIApiError,
+    RateLimitError as OpenAIRateLimitError,
+    AuthenticationError as OpenAIAuthenticationError,
+    APIConnectionError as OpenAIAPIConnectionError,
+)
+try:  # pragma: no cover – support both old and new OpenAI SDKs
+    from openai import InvalidRequestError as OpenAIInvalidRequestError
+except ImportError:  # pragma: no cover
+    from openai import BadRequestError as OpenAIInvalidRequestError
+
 
 import anthropic
 # Renamed Anthropic client import to avoid conflict with the error type

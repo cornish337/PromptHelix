@@ -1,5 +1,9 @@
+from __future__ import annotations
+
 import uuid
 import copy
+import json
+import os
 import random
 from typing import TYPE_CHECKING
 import openai
@@ -13,6 +17,7 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:  # pragma: no cover - only for type hints
     from prompthelix.agents.architect import PromptArchitectAgent
     from prompthelix.agents.results_evaluator import ResultsEvaluatorAgent
+    from prompthelix.agents.style_optimizer import StyleOptimizerAgent
 
 
 # PromptChromosome class remains unchanged
@@ -116,6 +121,10 @@ class GeneticOperators:
     for PromptChromosome objects.
     """
 
+    def __init__(self, style_optimizer_agent: 'StyleOptimizerAgent' | None = None):
+        """Initializes the operator with an optional StyleOptimizerAgent."""
+        self.style_optimizer_agent = style_optimizer_agent
+
     def selection(self, population: list[PromptChromosome], tournament_size: int = 3) -> PromptChromosome:
         """
         Selects an individual from the population using tournament selection.
@@ -194,8 +203,9 @@ class GeneticOperators:
             child2.fitness_score = 0.0
         return child1, child2
 
-    def mutate(self, chromosome: PromptChromosome, mutation_rate: float = 0.1, 
-               gene_mutation_prob: float = 0.2) -> PromptChromosome:
+    def mutate(self, chromosome: PromptChromosome, mutation_rate: float = 0.1,
+               gene_mutation_prob: float = 0.2,
+               target_style: str | None = None) -> PromptChromosome:
         """
         Mutates a chromosome based on mutation_rate and gene_mutation_prob.
 
@@ -212,11 +222,14 @@ class GeneticOperators:
         mutated_chromosome = chromosome.clone()
         mutated_chromosome.fitness_score = 0.0
 
+        mutation_applied = False
+
         if random.random() < mutation_rate:
             genes_modified = False
             for i in range(len(mutated_chromosome.genes)):
                 if random.random() < gene_mutation_prob:
                     genes_modified = True
+                    mutation_applied = True
                     original_gene_str = str(mutated_chromosome.genes[i])
                     # Added "style_optimization_placeholder" to the list of choices
                     mutation_type = random.choice(["append_char", "reverse_slice", "placeholder_replace", "style_optimization_placeholder"])
@@ -242,8 +255,19 @@ class GeneticOperators:
                     else: # Fallback for placeholder_replace or short strings (if placeholder_replace was chosen or other conditions failed)
                         mutated_chromosome.genes[i] = "[MUTATED_GENE_SEGMENT]"
             if not genes_modified and len(mutated_chromosome.genes) > 0:
+                mutation_applied = True
                 gene_to_mutate_idx = random.randrange(len(mutated_chromosome.genes))
                 mutated_chromosome.genes[gene_to_mutate_idx] = str(mutated_chromosome.genes[gene_to_mutate_idx]) + "*"
+
+        if mutation_applied and target_style and self.style_optimizer_agent:
+            try:
+                request = {"prompt_chromosome": mutated_chromosome, "target_style": target_style}
+                optimized = self.style_optimizer_agent.process_request(request)
+                if isinstance(optimized, PromptChromosome):
+                    mutated_chromosome = optimized
+            except Exception as e:  # pragma: no cover - logging/exception path
+                logger.error(f"Style optimization failed during mutation: {e}")
+
         return mutated_chromosome
 
 
@@ -455,11 +479,12 @@ class PopulationManager:
     through generations using genetic operators and fitness evaluation.
     """
 
-    def __init__(self, genetic_operators: GeneticOperators, 
-                 fitness_evaluator: FitnessEvaluator, 
+    def __init__(self, genetic_operators: GeneticOperators,
+                 fitness_evaluator: FitnessEvaluator,
                  prompt_architect_agent: 'PromptArchitectAgent',
-                 population_size: int = 50, 
-                 elitism_count: int = 2):
+                 population_size: int = 50,
+                 elitism_count: int = 2,
+                 population_path: str | None = None):
         """
         Initializes the PopulationManager.
 
@@ -470,6 +495,9 @@ class PopulationManager:
             population_size (int, optional): The desired size of the population. Defaults to 50.
             elitism_count (int, optional): The number of top individuals to carry over
                                            to the next generation without modification. Defaults to 2.
+            population_path (str | None, optional): Path to load/save population JSON.
+                If provided and the file exists, the population will be loaded
+                from this file on initialization.
         """
         if not isinstance(genetic_operators, GeneticOperators):
             raise TypeError("genetic_operators must be an instance of GeneticOperators.")
@@ -488,10 +516,14 @@ class PopulationManager:
         self.prompt_architect_agent = prompt_architect_agent
         self.population_size = population_size
         self.elitism_count = elitism_count
-        
+        self.population_path = population_path
+
 
         self.population: list[PromptChromosome] = []
         self.generation_number: int = 0
+
+        if self.population_path:
+            self.load_population(self.population_path)
 
     def initialize_population(self, initial_task_description: str, 
                               initial_keywords: list | None = None, 
@@ -532,13 +564,16 @@ class PopulationManager:
         self.generation_number = 0
         print(f"PopulationManager: Population initialized. Generation: {self.generation_number}")
 
-    def evolve_population(self, task_description: str, success_criteria: dict | None = None):
+    def evolve_population(self, task_description: str, success_criteria: dict | None = None,
+                          target_style: str | None = None):
         """
         Orchestrates one generation of evolution: evaluation, selection, crossover, and mutation.
 
         Args:
             task_description (str): The task description for fitness evaluation.
             success_criteria (dict | None, optional): Success criteria for fitness evaluation. Defaults to None.
+            target_style (str | None, optional): Desired style used during mutation when
+                StyleOptimizerAgent is available. Defaults to None.
         """
         if not self.population:
             print("PopulationManager: Cannot evolve an empty population. Please initialize first.")
@@ -599,8 +634,8 @@ class PopulationManager:
             child1, child2 = self.genetic_operators.crossover(parent1, parent2)
             
             # Mutation
-            mutated_child1 = self.genetic_operators.mutate(child1)
-            mutated_child2 = self.genetic_operators.mutate(child2)
+            mutated_child1 = self.genetic_operators.mutate(child1, target_style=target_style)
+            mutated_child2 = self.genetic_operators.mutate(child2, target_style=target_style)
             
             new_population.append(mutated_child1)
             generated_offspring_count += 1
@@ -630,3 +665,39 @@ class PopulationManager:
         # Ensure population is sorted by fitness in descending order
         self.population.sort(key=lambda chromo: chromo.fitness_score, reverse=True)
         return self.population[0]
+
+    def save_population(self, file_path: str) -> None:
+        """Save current population to a JSON file."""
+        data = {
+            "generation_number": self.generation_number,
+            "population": [
+                {"genes": c.genes, "fitness_score": c.fitness_score}
+                for c in self.population
+            ],
+        }
+        try:
+            with open(file_path, "w", encoding="utf-8") as fh:
+                json.dump(data, fh, indent=2)
+            print(f"PopulationManager: Population saved to {file_path}.")
+        except Exception as e:
+            logger.error(f"Error saving population to {file_path}: {e}")
+
+    def load_population(self, file_path: str) -> None:
+        """Load population from a JSON file if it exists."""
+        if not os.path.exists(file_path):
+            logger.info(f"PopulationManager: No population file at {file_path}; starting fresh.")
+            return
+        try:
+            with open(file_path, "r", encoding="utf-8") as fh:
+                data = json.load(fh)
+            individuals = data.get("population", [])
+            self.generation_number = data.get("generation_number", 0)
+            self.population = [
+                PromptChromosome(genes=item.get("genes", []),
+                                 fitness_score=item.get("fitness_score", 0.0))
+                for item in individuals
+            ]
+            self.population_size = len(self.population) or self.population_size
+            print(f"PopulationManager: Loaded {len(self.population)} individuals from {file_path}.")
+        except Exception as e:
+            logger.error(f"Error loading population from {file_path}: {e}")

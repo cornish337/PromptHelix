@@ -95,7 +95,8 @@ async def create_prompt_ui_submit(
 
     # Redirect to the new prompt's detail page
     # Use request.url_for to get the URL for the named route
-    redirect_url = request.url_for('view_prompt_ui', prompt_id=db_prompt.id)
+    message = f"Prompt '{db_prompt.name}' created successfully."
+    redirect_url = request.url_for('view_prompt_ui', prompt_id=db_prompt.id) + f"?message={message}"
     return RedirectResponse(url=redirect_url, status_code=303)
 
 
@@ -147,8 +148,9 @@ async def run_experiment_ui_submit(
             created_version = schemas.PromptVersion(**returned_prompt_version_data)
 
             # Redirect to the prompt detail page, highlighting the new version
+            message = f"New version (ID: {created_version.id}) created successfully from experiment."
             redirect_url = request.url_for('view_prompt_ui', prompt_id=created_version.prompt_id)
-            redirect_url += f"?new_version_id={created_version.id}" # Pass as query param
+            redirect_url += f"?new_version_id={created_version.id}&message={message}" # Pass as query param
             return RedirectResponse(url=redirect_url, status_code=303)
 
         except httpx.HTTPStatusError as e:
@@ -177,6 +179,16 @@ async def run_experiment_ui_submit(
             "error_message": error_message,
             "form_data": form_data_retained
         }
+    )
+
+
+@router.get("/ui/playground", name="llm_playground_ui")
+async def get_llm_playground_ui(request: Request, db: Session = Depends(get_db)):
+    # For now, using the static list from SUPPORTED_LLM_SERVICES
+    llm_providers = SUPPORTED_LLM_SERVICES
+    return templates.TemplateResponse(
+        "llm_playground.html",
+        {"request": request, "llm_providers": llm_providers}
     )
 
 
@@ -253,8 +265,10 @@ async def save_api_keys_settings(
                 try:
                     crud.create_or_update_api_key(
                         db,
-                        service_name=submitted_service_name,
-                        api_key_value=submitted_api_key_value
+                        api_key_create=schemas.APIKeyCreate(
+                            service_name=submitted_service_name,
+                            api_key=submitted_api_key_value,
+                        ),
                     )
                     # Add to processed_services_names only if key has some value, or if you want to indicate "processed" even if cleared
                     if submitted_api_key_value: # Key has a value
@@ -281,7 +295,7 @@ async def save_api_keys_settings(
         # No errors, but no services processed (e.g., form submitted with no changes to actual values, or all keys blank)
         final_message = "No changes to API keys were applied."
 
-    redirect_url = request.url_for('view_settings_ui')
+    redirect_url = str(request.url_for('view_settings_ui'))
     redirect_url += f"?message={final_message}"
     if error_status:
         redirect_url += f"&error={error_status}"
