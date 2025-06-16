@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session as DbSession # Use DbSession for type hinting
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
@@ -16,6 +16,7 @@ from prompthelix.orchestrator import main_ga_loop
 from prompthelix.genetics.engine import PromptChromosome
 
 from . import conversation_routes # Added for conversation logs
+from .dependencies import get_current_user, oauth2_scheme
 
 # Import services (individual functions, not classes, based on previous service structure)
 from prompthelix.services import user_service, performance_service
@@ -24,33 +25,6 @@ from prompthelix.services import user_service, performance_service
 router = APIRouter()
 
 router.include_router(conversation_routes.router) # Added for conversation logs
-
-# --- Authentication Setup ---
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
-
-async def get_current_user(token: str = Depends(oauth2_scheme), db: DbSession = Depends(get_db)) -> UserModel:
-    db_session = user_service.get_session_by_token(db, session_token=token)
-    if not db_session:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    if db_session.expires_at < datetime.utcnow():
-        user_service.delete_session(db, session_token=token) # Clean up expired session
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Session expired",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    user = user_service.get_user(db, user_id=db_session.user_id)
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found for session",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    return user
 
 # --- User Management Routes ---
 @router.post("/users/", response_model=schemas.User, status_code=status.HTTP_201_CREATED, tags=["Users"], summary="Create a new user", description="Registers a new user in the system.")
