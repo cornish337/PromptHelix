@@ -1,8 +1,9 @@
 from prompthelix.agents.base import BaseAgent
 from prompthelix.utils.llm_utils import call_llm_api
-from prompthelix.config import AGENT_SETTINGS # Import AGENT_SETTINGS
+from prompthelix.config import AGENT_SETTINGS, KNOWLEDGE_DIR
 import json # For trying to parse LLM responses
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,15 @@ class DomainExpertAgent(BaseAgent):
                                                  Defaults to "domain_expert_knowledge.json".
         """
         super().__init__(agent_id="DomainExpert", message_bus=message_bus)
-        self.knowledge_file_path = knowledge_file_path
+        if knowledge_file_path:
+            self.knowledge_file_path = (
+                knowledge_file_path
+                if os.path.isabs(knowledge_file_path)
+                else os.path.join(KNOWLEDGE_DIR, knowledge_file_path)
+            )
+        else:
+            self.knowledge_file_path = os.path.join(KNOWLEDGE_DIR, "domain_expert_knowledge.json")
+        os.makedirs(os.path.dirname(self.knowledge_file_path), exist_ok=True)
 
         agent_config = AGENT_SETTINGS.get(self.agent_id, {})
         self.llm_provider = agent_config.get("default_llm_provider", FALLBACK_LLM_PROVIDER)
@@ -123,8 +132,11 @@ class DomainExpertAgent(BaseAgent):
                 self.knowledge_base = json.load(f)
             logger.info(f"Agent '{self.agent_id}': Knowledge base loaded successfully from '{self.knowledge_file_path}'.")
         except FileNotFoundError:
-            logger.warning(f"Agent '{self.agent_id}': Knowledge file '{self.knowledge_file_path}' not found. Using default knowledge.")
+            logger.warning(
+                f"Agent '{self.agent_id}': Knowledge file '{self.knowledge_file_path}' not found. Using default knowledge and creating the file."
+            )
             self.knowledge_base = self._get_default_knowledge()
+            self.save_knowledge()
         except json.JSONDecodeError as e:
             logger.error(f"Agent '{self.agent_id}': Error decoding JSON from '{self.knowledge_file_path}': {e}. Using default knowledge.", exc_info=True)
             self.knowledge_base = self._get_default_knowledge()

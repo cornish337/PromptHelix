@@ -1,0 +1,17 @@
+{
+    "summary_v1": {
+        "instruction": "Summarize the following text:",
+        "context_placeholder": "[text_to_summarize]",
+        "output_format": "Concise summary."
+    },
+    "question_answering_v1": {
+        "instruction": "Answer the question based on the provided context:",
+        "context_placeholder": "Context: [context_text]\nQuestion: [question_text]",
+        "output_format": "Clear and direct answer."
+    },
+    "generic_v1": {
+        "instruction": "Perform the following task:",
+        "context_placeholder": "[details]",
+        "output_format": "As requested."
+    }
+}

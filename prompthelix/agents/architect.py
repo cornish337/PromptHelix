@@ -1,7 +1,9 @@
 from prompthelix.agents.base import BaseAgent
 from prompthelix.genetics.engine import PromptChromosome
 from prompthelix.utils.llm_utils import call_llm_api
-from prompthelix.config import AGENT_SETTINGS # Import AGENT_SETTINGS
+from prompthelix.config import AGENT_SETTINGS, KNOWLEDGE_DIR
+import os
+import json
 import logging
 
 logger = logging.getLogger(__name__)
@@ -41,7 +43,15 @@ class PromptArchitectAgent(BaseAgent):
         ]
 
         # Load initial templates
-        self.knowledge_file_path = knowledge_file_path or "architect_knowledge.json"
+        if knowledge_file_path:
+            self.knowledge_file_path = (
+                knowledge_file_path
+                if os.path.isabs(knowledge_file_path)
+                else os.path.join(KNOWLEDGE_DIR, knowledge_file_path)
+            )
+        else:
+            self.knowledge_file_path = os.path.join(KNOWLEDGE_DIR, "architect_knowledge.json")
+        os.makedirs(os.path.dirname(self.knowledge_file_path), exist_ok=True)
 
         self.templates = {} # Initialize before loading
         self.load_knowledge()
