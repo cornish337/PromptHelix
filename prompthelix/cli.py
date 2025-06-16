@@ -9,13 +9,25 @@ import subprocess
 import sys
 import os
 import unittest
-
+import logging # Added for logging configuration
+import openai # Added for openai.RateLimitError
 
 def main_cli():
     """
     Main function for the PromptHelix CLI.
     Parses arguments and dispatches commands.
     """
+    # Configure logging for CLI visibility
+    # Set up basic configuration for the root logger.
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        stream=sys.stdout  # Ensure logs go to stdout
+    )
+    # Control verbosity of noisy libraries
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("openai._base_client").setLevel(logging.WARNING)
+
     parser = argparse.ArgumentParser(description="PromptHelix CLI")
     parser.add_argument(
         "--version", action="version", version="%(prog)s 0.1.0"
@@ -141,6 +153,11 @@ def main_cli():
                     # print(f"Best prompt content: {best_chromosome.to_prompt_string()}") # Could be very long
                 else:
                     print("\nCLI: Genetic Algorithm completed, but no best prompt was found.")
+            except openai.RateLimitError as rle:
+                print(f"CLI: CRITICAL ERROR - OpenAI Rate Limit Exceeded: {rle}", file=sys.stderr)
+                print("Your OpenAI account has hit its usage quota or rate limits. The Genetic Algorithm cannot proceed with LLM evaluations.", file=sys.stderr)
+                print("Please check your OpenAI plan and billing details. https://platform.openai.com/docs/guides/error-codes/api-errors", file=sys.stderr)
+                sys.exit(1) # Exit with error
             except Exception as e:
                 print(f"CLI: Error running Genetic Algorithm: {e}", file=sys.stderr)
                 import traceback
