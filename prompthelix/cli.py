@@ -51,6 +51,7 @@ def main_cli():
     run_parser.add_argument("--task-description", type=str, help="Detailed task description for the GA.")
     run_parser.add_argument("--keywords", type=str, nargs='+', help="Keywords for the GA.")
     run_parser.add_argument("--num-generations", type=int, help="Number of generations for the GA.")
+    run_parser.add_argument("--parallel-workers", type=int, default=None, help="Number of parallel workers for fitness evaluation. 1 for serial execution. Default: None (uses os.cpu_count() or similar).")
     run_parser.add_argument("--population-size", type=int, help="Population size for the GA.")
     run_parser.add_argument("--elitism-count", type=int, help="Elitism count for the GA.")
     run_parser.add_argument("--output-file", type=str, help="File path to save the best prompt.")
@@ -212,6 +213,7 @@ def main_cli():
                     initial_prompt_str=initial_prompt_str,
                     agent_settings_override=agent_settings_override,
                     llm_settings_override=llm_settings_override,
+                    parallel_workers=args.parallel_workers, # Pass the new argument
                     return_best=True
                 )
 

@@ -10,7 +10,18 @@ class TestCli(unittest.TestCase):
         # Construct the command to run the CLI module
         # Assumes the tests are run from the root of the project or a similar context
         # where 'python -m prompthelix.cli' is valid.
-        command = [sys.executable, "-m", "prompthelix.cli", "run"]
+        command = [
+            sys.executable,
+            "-m",
+            "prompthelix.cli",
+            "run",
+            "--parallel-workers",
+            "1",  # Force serial execution for this test
+            # Using default GA parameters for this test, e.g. num_generations=2, pop_size=5
+            # Ensure execution mode is TEST to avoid real LLM calls if not mocked
+            "--execution-mode",
+            "TEST"
+        ]
 
         try:
             # Execute the command

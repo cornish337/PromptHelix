@@ -31,6 +31,7 @@ def main_ga_loop(
     initial_prompt_str: Optional[str] = None,
     agent_settings_override: Optional[Dict] = None,
     llm_settings_override: Optional[Dict] = None,
+    parallel_workers: Optional[int] = None, # New parameter
     return_best: bool = True,
     population_path: Optional[str] = None
 ):
@@ -61,6 +62,10 @@ def main_ga_loop(
         logger.info(f"Agent Settings Override provided: {agent_settings_override}")
     if llm_settings_override:
         logger.info(f"LLM Settings Override provided: {llm_settings_override}")
+    if parallel_workers is not None:
+        logger.info(f"Parallel Workers specified: {parallel_workers}")
+    else:
+        logger.info("Parallel Workers: Using default (None).")
 
     # 0. Instantiate Message Bus
     logger.debug("Initializing Message Bus...")
@@ -133,12 +138,14 @@ def main_ga_loop(
         prompt_architect_agent=prompt_architect, # Architect is used for initial prompt generation
         population_size=population_size,
         elitism_count=elitism_count,
+        parallel_workers=parallel_workers, # Pass the new parameter
         population_path=population_path
         # TODO: Pass agent_settings_override or specific agent configs if PopulationManager
         # is responsible for creating/configuring more agents during its operations.
         # For now, agents are configured above.
     )
     # TODO: PopulationManager needs to be updated to accept and use initial_prompt_str.
+    #       Actually, initial_prompt_str is passed to initialize_population and also handled by PopulationManager's __init__
     logger.debug("GA components initialized.")
 
     # 3. Use GA Parameters (already logged)
@@ -403,6 +410,7 @@ if __name__ == "__main__":
         population_size=example_pop,
         elitism_count=example_elitism,
         execution_mode=ExecutionMode.TEST, # Added for the example call
+        parallel_workers=None, # Example: use default for this specific call
         return_best=True
     )
     if best_chromosome:
