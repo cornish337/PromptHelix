@@ -13,20 +13,6 @@ class TestApi(unittest.TestCase):
         # For a minimal change, we'll keep it but acknowledge it doesn't use the shared test_client fixture.
         self.client = TestClient(app)
 
-    # def test_run_ga_endpoint(self):
-    #     """Test the /api/run-ga endpoint.
-    #     This endpoint is deprecated or its functionality changed.
-    #     The new GA endpoint /api/experiments/run-ga is tested in test_api_experiments.py.
-    #     """
-    #     # response = self.client.get("/api/run-ga")
-    #     # self.assertEqual(response.status_code, 200, f"API request failed with status {response.status_code}: {response.text}")
-    #     # try:
-    #     #     data = response.json()
-    #     # except ValueError:
-    #     #     self.fail("API response is not valid JSON.")
-    #     # self.assertIn("best_prompt", data)
-    #     # self.assertIn("fitness", data)
-    #     pass # Test removed / passing trivially
 
     def test_root_endpoint(self):
         """Test the root / endpoint."""
