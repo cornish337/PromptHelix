@@ -205,7 +205,7 @@ Execute the following command from the root of the project:
 python -m prompthelix.cli run
 ```
 
-By default the CLI runs in **TEST** mode which avoids real API calls. Use the `--mode REAL` flag to run with live LLM access (API keys required).
+This command runs the `run_ga.py` script via the CLI, which prints the progress of the genetic algorithm and the best prompt at the end of the process.
 
 ### API
 

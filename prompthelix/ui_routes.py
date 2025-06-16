@@ -15,7 +15,6 @@ from prompthelix.api import crud            # Ensure this is imported
 from prompthelix import schemas # Import all schemas
 from prompthelix.enums import ExecutionMode # Added import
 from prompthelix.agents.base import BaseAgent
-from prompthelix.utils import llm_utils # Added import
 
 
 router = APIRouter()
@@ -287,57 +286,3 @@ async def save_api_keys_settings(
         redirect_url += f"&error={error_status}"
 
     return RedirectResponse(url=redirect_url, status_code=HTTP_303_SEE_OTHER)
-
-
-@router.get("/ui/llm_tester", name="llm_tester_ui")
-async def llm_tester_ui(request: Request, db: Session = Depends(get_db)):
-    """
-    Renders the LLM Tester UI page.
-    Fetches available LLMs and current statistics to display.
-    """
-    available_llms = []
-    statistics = []
-    error_message = None
-    try:
-        # Option 1: Call llm_utils directly (if it's simple and doesn't require async client calls)
-        available_llms = llm_utils.list_available_llms(db=db)
-
-        # Option 2: Call your own API endpoint (if you prefer to keep UI routes calling API routes)
-        # This requires httpx and careful handling of base_url if app is not fully running in this context
-        # For simplicity, direct util call is used here.
-        # async with httpx.AsyncClient(app=request.app, base_url=request.base_url) as client:
-        #     response_available = await client.get(request.url_for('get_available_llms'))
-        #     response_available.raise_for_status()
-        #     available_llms = response_available.json()
-
-        #     response_stats = await client.get(request.url_for('get_llm_statistics'))
-        #     response_stats.raise_for_status()
-        #     statistics_raw = response_stats.json()
-        #     # Convert to schema if necessary, though API should return them as per schema
-        #     statistics = [schemas.LLMStatistic(**stat) for stat in statistics_raw]
-
-        db_statistics = crud.get_all_llm_statistics(db=db)
-        # Convert to LLMStatistic schema if needed, but crud returns models.
-        # The template might directly use model attributes or you can convert here.
-        # For consistency with plan schema names:
-        statistics = [schemas.LLMStatistic(llm_service=stat.llm_service, request_count=stat.request_count) for stat in db_statistics]
-
-
-    except HTTPException as http_exc: # Catch HTTP exceptions from potential API calls
-        error_message = f"API Error: {http_exc.detail}"
-    except Exception as e:
-        error_message = f"An unexpected error occurred while fetching data: {str(e)}"
-        # Log this error as well
-        print(f"Error in llm_tester_ui: {e}")
-
-    return templates.TemplateResponse(
-        "llm_tester.html",
-        {
-            "request": request,
-            "available_llms": available_llms,
-            "statistics": statistics,
-            "error_message": error_message,
-            "llm_response": None, # For initial state
-            "submitted_prompt": None # For initial state
-        }
-    )

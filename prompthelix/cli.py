@@ -10,8 +10,6 @@ import sys
 import os
 import unittest
 
-from prompthelix.enums import ExecutionMode
-
 
 def main_cli():
     """
@@ -33,12 +31,6 @@ def main_cli():
     # "run" command
     run_parser = subparsers.add_parser("run", help="Run the PromptHelix application or a specific module")
     run_parser.add_argument("module", nargs="?", default="ga", help="Module to run (e.g., 'ga')")
-    run_parser.add_argument(
-        "--mode",
-        choices=["TEST", "REAL"],
-        default="TEST",
-        help="Execution mode for the GA run (defaults to TEST)",
-    )
 
 
     args = parser.parse_args()
@@ -129,10 +121,7 @@ def main_cli():
             default_population_size = 5 # Keep low for CLI example
             default_elitism_count = 1   # Keep low for CLI example
 
-            print(
-                f"Using default parameters for GA: task='{default_task_desc}', "
-                f"generations={default_num_generations}, population={default_population_size}, mode={args.mode}"
-            )
+            print(f"Using default parameters for GA: task='{default_task_desc}', generations={default_num_generations}, population={default_population_size}")
             
             try:
                 # Call main_ga_loop directly
@@ -144,7 +133,6 @@ def main_cli():
                     population_size=default_population_size,
                     elitism_count=default_elitism_count,
                     execution_mode=ExecutionMode.TEST, # Pass execution_mode
-
                     return_best=True  # Ensure it returns to potentially print results
                 )
                 if best_chromosome:
