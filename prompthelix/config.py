@@ -7,16 +7,19 @@ configurations from environment variables and potentially .env files.
 """
 # Load environment variables from a .env file if present
 import os
+import logging
 from sqlalchemy.orm import Session
 from typing import Optional
 from prompthelix.api import crud
 from dotenv import load_dotenv
 # from pydantic import BaseSettings # Uncomment if Pydantic is used for settings management
 
+logger = logging.getLogger(__name__)
+
 # Automatically load variables from a .env file in the project root.
 # This allows users to define their API keys and other configuration
 # settings in a local .env file without exporting them manually.
-load_dotenv()
+load_dotenv(override=True)
 
 # IMPORTANT: LLM API Key Configuration
 # The system requires API keys for the Large Language Models it interfaces with.
@@ -71,6 +74,7 @@ class Settings:
 
 # Instantiate the settings
 settings = Settings()
+logger.info(f"Loaded OPENAI_API_KEY: {settings.OPENAI_API_KEY[:5]}...{settings.OPENAI_API_KEY[-4:] if settings.OPENAI_API_KEY and len(settings.OPENAI_API_KEY) > 9 else 'INVALID_OR_SHORT_KEY'}")
 
 # Example of how to access a setting:
 # print(settings.DATABASE_URL)
