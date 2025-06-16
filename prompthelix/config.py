@@ -5,16 +5,18 @@ This file defines the settings for the application, including API keys,
 database URLs, and other operational parameters. It supports loading
 configurations from environment variables and potentially .env files.
 """
+# Load environment variables from a .env file if present
 import os
 from sqlalchemy.orm import Session
 from typing import Optional
 from prompthelix.api import crud
+from dotenv import load_dotenv
 # from pydantic import BaseSettings # Uncomment if Pydantic is used for settings management
 
-# Consider using a library like python-dotenv to load .env files
-# Example:
-# from dotenv import load_dotenv
-# load_dotenv()
+# Automatically load variables from a .env file in the project root.
+# This allows users to define their API keys and other configuration
+# settings in a local .env file without exporting them manually.
+load_dotenv()
 
 # IMPORTANT: LLM API Key Configuration
 # The system requires API keys for the Large Language Models it interfaces with.
