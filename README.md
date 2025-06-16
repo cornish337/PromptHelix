@@ -14,6 +14,15 @@ AI prompts through innovative techniques inspired by genetic algorithms and mult
 *   API for programmatic access and integration
 *   User interface for managing and experimenting with prompts (basic HTML interface available)
 
+### Inter-Agent Messaging
+
+Agents communicate via an asynchronous message bus. Each agent can subscribe to
+specific message types and react when messages are broadcast. For example, the
+`ResultsEvaluatorAgent` broadcasts an `evaluation_result` message after scoring a
+prompt. The `MetaLearnerAgent` subscribes to both `evaluation_result` and
+`critique_result` messages so it can update its knowledge base whenever new
+feedback is produced.
+
 ## Getting Started
 
 ### Prerequisites

@@ -51,6 +51,11 @@ class MetaLearnerAgent(BaseAgent):
 
         self.persist_on_update = agent_config.get("persist_knowledge_on_update", PERSIST_ON_UPDATE_DEFAULT)
 
+        # Subscribe to evaluation and critique results if a message bus is available
+        if self.message_bus:
+            self.subscribe_to("evaluation_result")
+            self.subscribe_to("critique_result")
+
         # Default structure for knowledge_base
         self._default_knowledge_base_structure = {
             "successful_prompt_features": [], # Features of prompts that led to high fitness_score
