@@ -7,11 +7,12 @@ from sqlalchemy.orm import Session # For typing if needed for mocks
 from prompthelix.main import app # Your FastAPI app
 from prompthelix import schemas
 from prompthelix.enums import ExecutionMode
+from prompthelix.tests.utils import get_auth_headers
 from urllib.parse import urlparse, parse_qs # For robust query param checking
 
 
 @patch('prompthelix.ui_routes.httpx.AsyncClient') # Target for patching
-def test_run_experiment_ui_submit_success(MockedAsyncClient, client: TestClient): # Added client type hint
+def test_run_experiment_ui_submit_success(MockedAsyncClient, client: TestClient, db_session: Session):
     # Mock the crud.get_prompts call, which might be called if an error occurs before redirect
     with patch('prompthelix.ui_routes.crud.get_prompts') as mock_get_prompts:
         mock_get_prompts.return_value = [] # Return an empty list
@@ -54,8 +55,9 @@ def test_run_experiment_ui_submit_success(MockedAsyncClient, client: TestClient)
             "prompt_description": "A prompt generated via UI test."
         }
 
-        # Simulate logged-in user by setting the auth cookie
-        test_token = "test_auth_token_for_ui_call"
+        # Create a valid session and obtain its token
+        auth_headers = get_auth_headers(client, db_session)
+        test_token = auth_headers["Authorization"].split(" ")[1]
         cookies = {"prompthelix_access_token": test_token}
 
         # Make the request to the UI endpoint using the TestClient
@@ -169,25 +171,15 @@ def test_run_experiment_ui_submit_no_token(MockedAsyncClient, client: TestClient
         response = client.post(
             "/ui/experiments/new",
             data=form_data,
-            follow_redirects=False # We expect to stay on the same page with an error
+            follow_redirects=False
         )
 
-        # Assert that we didn't redirect, but re-rendered the page (status 200) with an error
-        assert response.status_code == 200, f"Expected status 200 (re-render with error), got {response.status_code}"
+        # Expect unauthorized due to missing cookie
+        assert response.status_code == 401
+        assert response.json()["detail"] == "Not authenticated"
 
-        # Check that the error message is present in the response content
-        # This depends on how error messages are rendered in experiment.html
-        content = response.text
-        assert "Authentication failed" in content
-        assert "Please ensure you are logged in and try again" in content
-
-        # Verify that the httpx call was made without Authorization header
-        mock_post_method.assert_called_once()
-        _, kwargs = mock_post_method.call_args
-        if "headers" in kwargs:
-            assert "Authorization" not in kwargs["headers"], \
-                "Authorization header should not be present when no token cookie is set."
-        # If no headers dict is passed at all, kwargs might not have 'headers' key, which is also fine.
+        # The API should not be called when authentication fails at dependency level
+        mock_post_method.assert_not_called()
 
 
 def test_get_login_page_ui(client: TestClient):
