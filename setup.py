@@ -20,8 +20,8 @@ setup(
         "redis",
         "openai",
         "httpx",
-        # "anthropic",
-        # "google-generativeai",
+        "anthropic",
+        "google-generativeai",
     ],
     classifiers=[
         "Development Status :: 3 - Alpha", # Or "4 - Beta", "5 - Production/Stable"
