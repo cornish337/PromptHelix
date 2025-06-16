@@ -1,10 +1,11 @@
 from prompthelix.agents.base import BaseAgent
 from prompthelix.genetics.engine import PromptChromosome
 from prompthelix.utils.llm_utils import call_llm_api
-import random # For placeholder metric generation
-import json # For parsing LLM responses
+import random  # For placeholder metric generation
+import json  # For parsing LLM responses
 import logging
-from prompthelix.config import AGENT_SETTINGS # Import AGENT_SETTINGS
+import os
+from prompthelix.config import AGENT_SETTINGS, KNOWLEDGE_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,15 @@ class ResultsEvaluatorAgent(BaseAgent):
         self.fitness_score_weights = agent_config.get("fitness_score_weights", DEFAULT_FITNESS_WEIGHTS)
         logger.info(f"Agent '{self.agent_id}' initialized with LLM provider: {self.llm_provider}, Evaluation model: {self.evaluation_llm_model}")
 
-        self.knowledge_file_path = knowledge_file_path or "results_evaluator_config.json"
+        if knowledge_file_path:
+            self.knowledge_file_path = (
+                knowledge_file_path
+                if os.path.isabs(knowledge_file_path)
+                else os.path.join(KNOWLEDGE_DIR, knowledge_file_path)
+            )
+        else:
+            self.knowledge_file_path = os.path.join(KNOWLEDGE_DIR, "results_evaluator_config.json")
+        os.makedirs(os.path.dirname(self.knowledge_file_path), exist_ok=True)
 
         self.evaluation_metrics_config = {} # Initialize before loading
         self.load_knowledge()

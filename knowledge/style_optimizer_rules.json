@@ -1,0 +1,30 @@
+{
+    "formal": {
+        "replace": {
+            "don't": "do not",
+            "stuff": "items",
+            "gonna": "going to",
+            "wanna": "want to"
+        },
+        "prepend_politeness": "Please ",
+        "ensure_ending_punctuation": true
+    },
+    "casual": {
+        "replace": {
+            "do not": "don't",
+            "items": "stuff",
+            "please ": "",
+            "Please ": "",
+            "kindly ": "",
+            "Kindly ": ""
+        },
+        "remove_ending_punctuation": false
+    },
+    "instructional": {
+        "prepend_politeness": "Could you ",
+        "append_request_marker": "?",
+        "replace": {
+            "tell me": "explain"
+        }
+    }
+}

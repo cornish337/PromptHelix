@@ -1,0 +1,96 @@
+{
+    "medical": {
+        "keywords": [
+            "patient",
+            "diagnosis",
+            "treatment",
+            "symptom",
+            "prognosis",
+            "EHR"
+        ],
+        "constraints": [
+            "Avoid speculative language.",
+            "Cite sources if possible.",
+            "Ensure patient confidentiality (simulated for prompts, e.g., use placeholders like [PATIENT_NAME])."
+        ],
+        "evaluation_tips": [
+            "Check for HIPAA compliance implications (even in simulated contexts).",
+            "Accuracy and clarity are paramount.",
+            "Verify if advice aligns with current medical guidelines (if applicable/possible)."
+        ],
+        "sample_prompt_starters": [
+            "Summarize the patient's history regarding [CONDITION]...",
+            "Outline a differential diagnosis for a patient presenting with [SYMPTOMS]...",
+            "Explain the standard treatment protocol for [DISEASE]..."
+        ]
+    },
+    "legal": {
+        "keywords": [
+            "contract",
+            "liability",
+            "precedent",
+            "jurisdiction",
+            "plaintiff",
+            "defendant"
+        ],
+        "constraints": [
+            "Do not provide legal advice (state as disclaimer if needed).",
+            "Reference specific laws or cases where appropriate (if known).",
+            "Maintain formal and precise language."
+        ],
+        "evaluation_tips": [
+            "Check for factual accuracy of legal statements.",
+            "Ensure arguments are logically sound.",
+            "Verify if interpretations are consistent with provided legal context."
+        ],
+        "sample_prompt_starters": [
+            "Analyze the provided contract clause regarding [CLAUSE_TOPIC]...",
+            "Discuss potential liabilities in a scenario where [SCENARIO_DETAILS]...",
+            "Research precedents related to [LEGAL_ISSUE]..."
+        ]
+    },
+    "coding_python": {
+        "keywords": [
+            "def",
+            "class",
+            "import",
+            "return",
+            "list comprehension",
+            "decorator",
+            "async"
+        ],
+        "constraints": [
+            "Follow PEP 8 guidelines.",
+            "Include docstrings for functions/classes.",
+            "Specify Python version if behavior differs significantly."
+        ],
+        "evaluation_tips": [
+            "Check for code execution (if possible via a sandbox).",
+            "Assess efficiency (Big O notation if applicable).",
+            "Evaluate readability and maintainability.",
+            "Ensure correctness for given problem statement."
+        ],
+        "sample_prompt_starters": [
+            "Write a Python function to [TASK_DESCRIPTION]...",
+            "Create a Python class `[CLASS_NAME]` that implements [FEATURES]...",
+            "Refactor the following Python code for better readability: [CODE_SNIPPET]..."
+        ]
+    },
+    "general_knowledge": {
+        "keywords": [
+            "explain",
+            "compare",
+            "describe",
+            "list",
+            "pros and cons"
+        ],
+        "constraints": [
+            "Provide factual information.",
+            "Cite sources if the information is obscure or critical."
+        ],
+        "evaluation_tips": [
+            "Check for accuracy.",
+            "Assess completeness and clarity of explanation."
+        ]
+    }
+}

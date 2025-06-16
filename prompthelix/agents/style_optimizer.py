@@ -1,9 +1,10 @@
 from prompthelix.agents.base import BaseAgent
 from prompthelix.genetics.engine import PromptChromosome
 from prompthelix.utils.llm_utils import call_llm_api
-from prompthelix.config import AGENT_SETTINGS # Import AGENT_SETTINGS
-import json # For parsing LLM response
+from prompthelix.config import AGENT_SETTINGS, KNOWLEDGE_DIR
+import json  # For parsing LLM response
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,7 @@ class StyleOptimizerAgent(BaseAgent):
     Refines prompts to enhance their style, tone, clarity, and persuasiveness,
     often based on specific target audience or desired communication effect.
     """
-    def __init__(self, message_bus=None):
+    def __init__(self, message_bus=None, knowledge_file_path=None):
         """
         Initializes the StyleOptimizerAgent.
         Loads style transformation rules or lexicons and agent configuration.
@@ -32,9 +33,15 @@ class StyleOptimizerAgent(BaseAgent):
         self.llm_model = agent_config.get("default_llm_model", FALLBACK_LLM_MODEL)
         logger.info(f"Agent '{self.agent_id}' initialized with LLM provider: {self.llm_provider} and model: {self.llm_model}")
 
-        self.knowledge_file_path = knowledge_file_path
-        if self.knowledge_file_path is None:
-            self.knowledge_file_path = "style_optimizer_rules.json"
+        if knowledge_file_path:
+            self.knowledge_file_path = (
+                knowledge_file_path
+                if os.path.isabs(knowledge_file_path)
+                else os.path.join(KNOWLEDGE_DIR, knowledge_file_path)
+            )
+        else:
+            self.knowledge_file_path = os.path.join(KNOWLEDGE_DIR, "style_optimizer_rules.json")
+        os.makedirs(os.path.dirname(self.knowledge_file_path), exist_ok=True)
 
         self.style_rules = {} # Initialize before loading
         self.load_knowledge()

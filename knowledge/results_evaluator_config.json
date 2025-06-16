@@ -1,0 +1,16 @@
+{
+    "default_metrics": [
+        "relevance_placeholder",
+        "coherence_placeholder"
+    ],
+    "task_specific": {
+        "summarization": [
+            "rouge_score_placeholder",
+            "conciseness_placeholder"
+        ],
+        "code_generation": [
+            "execution_success_placeholder",
+            "code_quality_placeholder"
+        ]
+    }
+}
