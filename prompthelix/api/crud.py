@@ -52,3 +52,6 @@ def create_prompt_version(db: Session, version: PromptVersionCreate, prompt_id: 
     db.commit()
     db.refresh(db_version)
     return db_version
+
+def get_prompt_version_by_id(db: Session, version_id: int) -> PromptVersion | None:
+    return db.query(PromptVersion).filter(PromptVersion.id == version_id).first()

@@ -16,7 +16,37 @@ AI prompts through innovative techniques inspired by genetic algorithms and mult
 
 ## Getting Started
 
-(Instructions to be added once the project is more mature)
+### Setup and Run the Web UI
+
+1.  **Clone the repository:**
+    ```bash
+    git clone <repository_url> # Replace <repository_url> with the actual URL later if known, otherwise leave as placeholder
+    cd prompthelix
+    ```
+2.  **Create and activate a virtual environment:**
+    ```bash
+    # On macOS and Linux
+    python3 -m venv .venv
+    source .venv/bin/activate
+
+    # On Windows
+    python -m venv .venv
+    .venv\Scripts\activate
+    ```
+    *Note: Ensure you have Python 3.9+ installed.*
+3.  **Install dependencies:**
+    ```bash
+    pip install -r requirements.txt
+    ```
+4.  **Initialize the database:**
+    The application uses SQLite and will automatically create and initialize the database (`prompthelix.db`) on first run via `init_db()` in `main.py`. For production deployments, you might consider using Alembic for database migrations if you switch to a database like PostgreSQL.
+5.  **Run the Web UI:**
+    ```bash
+    uvicorn prompthelix.main:app --reload
+    ```
+    This will start the Uvicorn server. The `--reload` flag enables auto-reloading when code changes, which is useful for development.
+6.  **Access the Web UI:**
+    Open your web browser and navigate to [http://127.0.0.1:8000/ui/prompts](http://127.0.0.1:8000/ui/prompts).
 
 ## Project Structure
 
@@ -51,11 +81,7 @@ This command runs the `run_ga.py` script via the CLI, which prints the progress 
 PromptHelix also provides an API endpoint to trigger the genetic algorithm.
 
 1.  **Start the FastAPI server**:
-    Run the following command from the root of the project:
-    ```bash
-    uvicorn prompthelix.main:app --reload
-    ```
-    This will start the Uvicorn server. The `--reload` flag enables auto-reloading when code changes, which is useful for development.
+    Ensure the FastAPI server is running as described in the "Setup and Run the Web UI" section.
 
 2.  **Access the GA endpoint**:
     Once the server is running, you can trigger the genetic algorithm by sending a GET request to the `/api/run-ga` endpoint. For example, using `curl`:
@@ -65,8 +91,7 @@ PromptHelix also provides an API endpoint to trigger the genetic algorithm.
     Or you can open `http://127.0.0.1:8000/api/run-ga` in your web browser.
 
 3.  **Try the Prompt Manager UI**:
-    Navigate to `http://127.0.0.1:8000/ui/prompts` to experiment with a simple
-    HTML interface for adding and viewing prompts.
+    The Prompt Manager UI, for adding and viewing prompts, can be accessed as described in the "Setup and Run the Web UI" section.
 
 4.  **Expected Response**:
     The API will return a JSON response containing the best prompt found by the genetic algorithm and its fitness score:
