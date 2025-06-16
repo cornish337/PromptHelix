@@ -42,7 +42,7 @@ class BaseAgent(abc.ABC):
         """
         pass
 
-    def send_message(self, recipient_agent_id: str, message_content: dict, message_type: str = "generic_message") -> bool:
+    def send_message(self, recipient_agent_id: str, message_content: dict, message_type: str = "generic_message"):
         """
         Constructs and sends a message to another agent, potentially via a message bus.
 
@@ -53,8 +53,8 @@ class BaseAgent(abc.ABC):
                                           to determine handling. Defaults to "generic_message".
 
         Returns:
-            bool: True if the message was sent or attempted to be sent, False otherwise.
-                  In this implementation, it always returns True after attempting.
+            The response from the recipient agent's `receive_message` method if successfully dispatched,
+            or an error dictionary / None if dispatch fails or message bus is not available.
         """
 
         message = {
@@ -67,18 +67,15 @@ class BaseAgent(abc.ABC):
 
         if self.message_bus and callable(getattr(self.message_bus, "dispatch_message", None)):
             try:
-                self.message_bus.dispatch_message(message)
-                logger.info(f"Agent '{self.agent_id}' sent message to '{recipient_agent_id}' via message bus: Type='{message_type}', Payload Snippet='{str(message_content)[:50]}...'")
-                return True
+                response = self.message_bus.dispatch_message(message)
+                logger.info(f"Agent '{self.agent_id}' sent message to '{recipient_agent_id}' via message bus: Type='{message_type}', Payload Snippet='{str(message_content)[:50]}...'. Response: {response}")
+                return response
             except Exception as e:
                 logger.error(f"Agent '{self.agent_id}' failed to send message to '{recipient_agent_id}' via message bus: {e}", exc_info=True)
-                # Fallback to direct print if bus dispatch fails (for debugging, though not true delivery)
-                logger.warning(f"Agent '{self.agent_id}' (bus dispatch failed) falling back to print for message to '{recipient_agent_id}': Type='{message_type}', Payload='{message_content}'")
-                return False # Indicate dispatch failed
+                return {"status": "error", "error": f"Exception during message dispatch by sender: {str(e)}"}
         else:
             logger.warning(f"Agent '{self.agent_id}' (no message bus) attempting to print message for '{recipient_agent_id}': Type='{message_type}', Payload='{message_content}'")
-            # This is not actual delivery, just a log/print action.
-            return False # Indicate no bus to dispatch
+            return {"status": "error", "error": "No message bus available to send message."}
 
 
     def receive_message(self, message: dict):
@@ -107,6 +104,13 @@ class BaseAgent(abc.ABC):
         if msg_type == "direct_request":
             logger.info(f"Agent '{self.agent_id}' processing 'direct_request' from '{sender_id}'.")
             return self.process_request(payload)
+        elif msg_type == "ping":
+            logger.info(f"Agent '{self.agent_id}' received ping from '{sender_id}'. Responding with pong.")
+            return {
+                "status": "pong",
+                "agent_id": self.agent_id,
+                "timestamp": datetime.utcnow().isoformat()
+            }
         elif msg_type == "info_update": # Example of another message type
             logger.info(f"Agent '{self.agent_id}' received 'info_update' from '{sender_id}'. Logging payload: {payload}")
             # Potentially update internal state based on this info

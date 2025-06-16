@@ -7,7 +7,7 @@ class TestPromptCriticAgent(unittest.TestCase):
 
     def setUp(self):
         """Instantiate the PromptCriticAgent for each test."""
-        self.critic = PromptCriticAgent()
+        self.critic = PromptCriticAgent(knowledge_file_path=None)
 
     def test_agent_creation(self):
         """Test basic creation and initialization of the agent."""

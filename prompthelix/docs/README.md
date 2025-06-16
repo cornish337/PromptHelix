@@ -1,25 +1,40 @@
-# PromptHelix
+# PromptHelix Documentation
 
-A Python framework for AI prompt generation and optimization using a Prompt DNA System.
+This document provides a more detailed overview of the internal structure, components, and advanced testing procedures for PromptHelix. For general information, getting started, setup, and deployment, please refer to the main [README.md](../../README.md) in the root directory.
 
 ## Project Structure
 
+For overall project setup, deployment, and basic usage, please refer to the main [README.md](../../README.md).
+
+The core components of PromptHelix are organized as follows:
+
 -   `prompthelix/agents/`: Contains different types of AI agents (Architect, Critic, etc.).
 -   `prompthelix/api/`: Defines the FastAPI endpoints and routing.
--   `prompthelix/config.py`: Application configuration settings.
--   `prompthelix/docs/`: Project documentation.
-    -   `agent_specifications.md`: Detailed specifications for each agent.
--   `prompthelix/evaluation/`: Modules for evaluating prompt performance (placeholder).
--   `prompthelix/genetics/`: Core logic for the genetic algorithm (chromosomes, operators, population).
+-   `prompthelix/cli.py`: Command-line interface entry point and commands.
+-   `prompthelix/config.py`: Application configuration settings. See the main `README.md` for how to configure API keys and database URLs via environment variables.
+-   `prompthelix/core/`: Core functionalities like the Prompt DNA system.
+-   `prompthelix/database/`: Database models (SQLAlchemy), session management, and initialization.
+-   `prompthelix/docs/`: Project documentation, including this file and `agent_specifications.md`.
+-   `prompthelix/evaluation/`: Modules for evaluating prompt performance.
+-   `prompthelix/evolution/`: Core logic for the genetic algorithm (chromosomes, operators, population), previously `prompthelix/genetics/`.
+-   `prompthelix/llm_integrations/`: Modules for interacting with various LLM providers.
 -   `prompthelix/main.py`: Main FastAPI application entry point.
--   `prompthelix/models/`: Data models (SQLAlchemy or Pydantic, currently placeholders).
--   `prompthelix/services/`: Business logic and services (placeholder).
+-   `prompthelix/schemas/`: Pydantic schemas for data validation and serialization.
+-   `prompthelix/services/`: Business logic and services.
 -   `prompthelix/tests/`: Unit and integration tests.
-    -   `unit/`: Contains unit tests for individual components, including each agent.
--   `prompthelix/utils/`: Utility functions and helpers (placeholder).
--   `setup.py`: Project setup script.
+    -   `unit/`: Contains unit tests for individual components.
+    -   `integration/`: Contains integration tests.
+-   `prompthelix/ui/`: HTML templates and static files for the web UI.
+-   `prompthelix/utils/`: Utility functions and helpers.
+-   `.env.example`: Example environment variable file.
+-   `alembic/`: Alembic migration scripts and configuration (if used for DB migrations).
+-   `main.py`: (Potentially a root-level script, verify if it's different from `prompthelix/main.py` or if this is a typo in original, assuming `prompthelix/main.py` is the primary one).
 -   `requirements.txt`: Project dependencies.
 -   `Dockerfile`: Docker configuration for containerization.
+-   `CONTRIBUTING.md`: Guidelines for contributing (in root directory).
+-   `LICENSE`: Project license information (in root directory).
+
+*Note: The project structure might evolve. Refer to the actual directory layout for the most current information.*
 
 ## Implemented Agents
 
@@ -61,19 +76,22 @@ python prompthelix/tests/test_llm_connectivity.py [options]
 
 -   `--provider`: Specifies the LLM provider.
     -   Default: `openai`
-    -   Example: `openai`, `claude`
+    -   Example: `openai`, `anthropic`, `google` (adjust based on actual provider keys in `llm_integrations`)
 -   `--model`: Specifies the model name for the chosen provider.
     -   Default: `gpt-3.5-turbo`
-    -   Example: `gpt-3.5-turbo`, `claude-2`
+    -   Example: `gpt-3.5-turbo` (for OpenAI), `claude-2` (for Anthropic), `gemini-pro` (for Google)
+
+**Important Note:**
+This script requires the appropriate API key environment variables to be set for the provider you are testing (e.g., `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`). Refer to the "Environment Variable Setup" section in the main `README.md` for details on how to set these.
 
 **Usage Examples:**
 
 ```bash
-python prompthelix/tests/test_llm_connectivity.py --provider openai --model gpt-3.5-turbo
+python -m prompthelix.tests.test_llm_connectivity --provider openai --model gpt-3.5-turbo
 ```
 
 ```bash
-python prompthelix/tests/test_llm_connectivity.py --provider claude --model claude-2
+python -m prompthelix.tests.test_llm_connectivity --provider anthropic --model claude-2
 ```
 
 ## Genetic Algorithm Engine
@@ -83,22 +101,25 @@ PromptHelix employs a Genetic Algorithm (GA) to iteratively evolve and optimize 
 For a detailed explanation of the GA components and flow, please see:
 `[Read more about the Genetic Algorithm](./genetic_algorithm.md)`
 
-## Running the Project
+## Running Parts of the Application
 
-Currently, the primary way to see the system in action (beyond unit tests) is by running the placeholder genetic algorithm orchestrator.
+For instructions on running the main Web UI or the CLI for tasks like running the genetic algorithm or tests, please refer to the main `README.md` in the root directory. The main `README.md` covers:
 
-### Running the Genetic Algorithm Orchestrator
+*   Setting up the virtual environment.
+*   Installing dependencies.
+*   Setting up environment variables (including API keys).
+*   Running the FastAPI web server.
+*   Using the `prompthelix.cli` for various operations.
 
-The `prompthelix/orchestrator.py` script provides a basic command-line demonstration of the GA loop. It initializes the necessary agents and GA components, creates an initial population of prompts, and runs the evolutionary process for a predefined number of generations.
-
-To run the orchestrator:
-1.  Ensure you are in the root directory of the `prompthelix` project.
-2.  Make sure your Python environment has the project and its dependencies installed (e.g., by running `pip install .` or `pip install -e .` if you have a `setup.py` and want an editable install).
-3.  Execute the orchestrator module:
-    ```bash
-    python -m prompthelix.orchestrator
-    ```
-    This will print output to the console, showing the initialization steps, progress through generations, and information about the fittest prompts found.
+The `prompthelix/orchestrator.py` mentioned in previous versions of this document has likely been integrated into or superseded by the CLI and API functionalities described in the main `README.md`.
 
 ## Future Directions
-(Placeholder for outlining future development plans, such as full LLM integration, database setup, UI development, etc.)
+(This section can be maintained here if it pertains to more granular, internal development plans not covered in the main README.)
+
+## License
+
+This project is licensed under the GNU General Public License v3.0. See the [LICENSE](../../LICENSE) file in the root directory for details.
+
+## Contributing
+
+We welcome contributions! Please see our [CONTRIBUTING.md](../../CONTRIBUTING.md) file in the root directory for detailed guidelines.

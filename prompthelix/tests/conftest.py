@@ -1,76 +1,73 @@
 import pytest
 import os
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from prompthelix.database import Base, DATABASE_URL, init_db as main_init_db
+from sqlalchemy.orm import sessionmaker, Session as SQLAlchemySession # Renamed for clarity
 from fastapi.testclient import TestClient
-from prompthelix.main import app # Import your FastAPI app
 
-# Use a separate SQLite database for testing
-TEST_DATABASE_URL = "sqlite:///./test_prompthelix.db"
+# Import Base and all models to ensure they are registered with Base.metadata
+from prompthelix.models.base import Base
+import prompthelix.models # This should trigger imports in models/__init__.py
+
+from prompthelix.main import app # Import your FastAPI app
+from prompthelix.database import get_db # The dependency to override
+
+# Use an in-memory SQLite database for testing
+TEST_DATABASE_URL = "sqlite:///:memory:"
 
 @pytest.fixture(scope="session")
 def db_engine():
-    # Remove old test database file if it exists
-    if os.path.exists("./test_prompthelix.db"):
-        os.remove("./test_prompthelix.db")
-
     engine = create_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False})
-    Base.metadata.create_all(bind=engine) # Create tables for the test DB
+    # All models should be imported before this line so Base.metadata knows about them
+    Base.metadata.create_all(bind=engine) # Create tables once per session
     yield engine
-    # Teardown: optionally remove the test database file after tests
-    # if os.path.exists("./test_prompthelix.db"):
-    #     os.remove("./test_prompthelix.db")
+    Base.metadata.drop_all(bind=engine) # Drop tables at the end of the test session
 
-@pytest.fixture(scope="function") # function scope for session to ensure clean state for each test
-def db_session(db_engine):
+@pytest.fixture(scope="function")
+def db_session(db_engine) -> SQLAlchemySession: # Use the specific type hint
+    """
+    Provides a transactional scope for tests. Each test gets a new session,
+    and any changes are rolled back at the end of the test.
+    """
     connection = db_engine.connect()
     transaction = connection.begin()
-    SessionLocalTest = sessionmaker(autocommit=False, autoflush=False, bind=connection)
-    session = SessionLocalTest()
+    # Use a session that is bound to the connection, within the transaction
+    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False) # Bind to engine is not needed here
+    session = TestingSessionLocal(bind=connection)
 
-    yield session # Provide the session to the test
+    try:
+        yield session
+    finally:
+        session.close()
+        transaction.rollback()
+        connection.close()
 
-    session.close()
-    transaction.rollback() # Rollback any changes after each test
-    connection.close()
-
-
-@pytest.fixture(scope="session")
-def test_client(db_engine):
-    # Override the app's dependency for get_db to use the test session
-    from prompthelix.database import get_db as app_get_db
+@pytest.fixture(scope="session") # test_client can be session-scoped if get_db override provides function-scoped sessions
+def test_client_fixture(db_engine): # Renamed to avoid conflict if 'test_client' is used as a function name
+    """
+    Provides a TestClient for the FastAPI application, with the database
+    dependency overridden to use the test database.
+    """
+    # This TestingSessionLocal is for the FastAPI app when it calls get_db
+    AppTestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=db_engine)
 
     def override_get_db():
-        # This is a simplified override. For a full override ensuring transactions
-        # are handled correctly per test, the db_session fixture logic might need
-        # to be integrated more directly or use a pattern where TestClient manages
-        # the transaction lifecycle with the test DB.
-        # For now, we'll use a new session for each override_get_db call,
-        # relying on the db_session fixture to manage overall test db state (like table creation).
-        # This is a common pattern but might need refinement for complex scenarios.
-
-        # Recreate SessionLocal for test DB if not already configured for it
-        # This setup assumes DATABASE_URL in database.py is NOT changed globally by tests.
-        # A more robust approach might involve app factory pattern for FastAPI.
-        TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=db_engine)
-        db = TestSessionLocal()
+        db = AppTestingSessionLocal()
         try:
             yield db
         finally:
             db.close()
 
-    app.dependency_overrides[app_get_db] = override_get_db
-
-    # It's important that main_init_db() (which creates tables based on DATABASE_URL)
-    # is not called here again if db_engine fixture already created tables for TEST_DATABASE_URL.
-    # Base.metadata.create_all(bind=db_engine) in db_engine fixture handles table creation.
+    original_get_db = app.dependency_overrides.get(get_db)
+    app.dependency_overrides[get_db] = override_get_db
 
     client = TestClient(app)
     yield client
 
     # Clean up overrides after tests
-    app.dependency_overrides.clear()
+    if original_get_db:
+        app.dependency_overrides[get_db] = original_get_db
+    else:
+        del app.dependency_overrides[get_db]
 
 
 @pytest.fixture

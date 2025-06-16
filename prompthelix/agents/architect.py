@@ -41,18 +41,22 @@ class PromptArchitectAgent(BaseAgent):
         ]
 
         # Load initial templates
-        self.templates = self._load_templates()
+        self.knowledge_file_path = knowledge_file_path
+        if self.knowledge_file_path is None:
+            self.knowledge_file_path = "architect_knowledge.json"
+
+        self.templates = {} # Initialize before loading
+        self.load_knowledge()
 
 
-    def _load_templates(self) -> dict:
+    def _get_default_templates(self) -> dict:
         """
-        Loads mock prompt templates.
-
-        In a real scenario, this would load from a configuration file or database.
+        Provides default mock prompt templates.
 
         Returns:
             dict: A dictionary of prompt templates.
         """
+        logger.info(f"Agent '{self.agent_id}': Using default prompt templates.")
         return {
             "summary_v1": {
                 "instruction": "Summarize the following text:",
@@ -70,6 +74,38 @@ class PromptArchitectAgent(BaseAgent):
                 "output_format": "As requested."
             }
         }
+
+    def load_knowledge(self):
+        """
+        Loads prompt templates from the specified JSON file.
+        If the file is not found or is invalid, it loads default templates
+        and saves them to a new file.
+        """
+        try:
+            with open(self.knowledge_file_path, 'r') as f:
+                self.templates = json.load(f)
+            logger.info(f"Agent '{self.agent_id}': Prompt templates loaded successfully from '{self.knowledge_file_path}'.")
+        except FileNotFoundError:
+            logger.warning(f"Agent '{self.agent_id}': Knowledge file '{self.knowledge_file_path}' not found. Using default templates and creating the file.")
+            self.templates = self._get_default_templates()
+            self.save_knowledge() # Save defaults if file not found
+        except json.JSONDecodeError as e:
+            logger.error(f"Agent '{self.agent_id}': Error decoding JSON from '{self.knowledge_file_path}': {e}. Using default templates.", exc_info=True)
+            self.templates = self._get_default_templates()
+        except Exception as e:
+            logger.error(f"Agent '{self.agent_id}': Failed to load templates from '{self.knowledge_file_path}': {e}. Using default templates.", exc_info=True)
+            self.templates = self._get_default_templates()
+
+    def save_knowledge(self):
+        """
+        Saves the current prompt templates to the specified JSON file.
+        """
+        try:
+            with open(self.knowledge_file_path, 'w') as f:
+                json.dump(self.templates, f, indent=4)
+            logger.info(f"Agent '{self.agent_id}': Prompt templates saved successfully to '{self.knowledge_file_path}'.")
+        except Exception as e:
+            logger.error(f"Agent '{self.agent_id}': Failed to save prompt templates to '{self.knowledge_file_path}': {e}", exc_info=True)
 
     def _parse_requirements(self, task_desc: str, keywords: list, constraints: dict) -> dict:
         """

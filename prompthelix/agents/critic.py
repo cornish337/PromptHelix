@@ -34,11 +34,16 @@ class PromptCriticAgent(BaseAgent):
         self.llm_model = agent_config.get("default_llm_model", FALLBACK_LLM_MODEL)
         logger.info(f"Agent '{self.agent_id}' initialized with LLM provider: {self.llm_provider} and model: {self.llm_model}")
 
-        self.critique_rules = self._load_critique_rules()
+        self.knowledge_file_path = knowledge_file_path
+        if self.knowledge_file_path is None:
+            self.knowledge_file_path = "critic_rules.json"
 
-    def _load_critique_rules(self) -> list:
+        self.critique_rules = [] # Initialize before loading
+        self.load_knowledge()
+
+    def _get_default_critique_rules(self) -> list:
         """
-        Loads mock critique rules.
+        Provides default mock critique rules.
 
         In a real scenario, this would load from a configuration file,
         a database, or be dynamically updated by the MetaLearnerAgent.
@@ -46,6 +51,7 @@ class PromptCriticAgent(BaseAgent):
         Returns:
             list: A list of critique rule dictionaries.
         """
+        logger.info(f"Agent '{self.agent_id}': Using default critique rules.")
         return [
             {"name": "PromptTooShort", "type": "length_check", "min_genes": 3, "message": "Prompt might be too short to be effective (less than 3 gene segments)."},
             {"name": "PromptTooLong", "type": "length_check", "max_genes": 7, "message": "Prompt might be too long and complex (more than 7 gene segments)."},
@@ -63,6 +69,38 @@ class PromptCriticAgent(BaseAgent):
                 "message": "Avoid negative phrasing in prompts to keep instructions positive and direct.",
             },
         ]
+
+    def load_knowledge(self):
+        """
+        Loads critique rules from the specified JSON file.
+        If the file is not found or is invalid, it loads default rules
+        and saves them to a new file.
+        """
+        try:
+            with open(self.knowledge_file_path, 'r') as f:
+                self.critique_rules = json.load(f)
+            logger.info(f"Agent '{self.agent_id}': Critique rules loaded successfully from '{self.knowledge_file_path}'.")
+        except FileNotFoundError:
+            logger.warning(f"Agent '{self.agent_id}': Knowledge file '{self.knowledge_file_path}' not found. Using default rules and creating the file.")
+            self.critique_rules = self._get_default_critique_rules()
+            self.save_knowledge() # Save defaults if file not found
+        except json.JSONDecodeError as e:
+            logger.error(f"Agent '{self.agent_id}': Error decoding JSON from '{self.knowledge_file_path}': {e}. Using default rules.", exc_info=True)
+            self.critique_rules = self._get_default_critique_rules()
+        except Exception as e:
+            logger.error(f"Agent '{self.agent_id}': Failed to load critique rules from '{self.knowledge_file_path}': {e}. Using default rules.", exc_info=True)
+            self.critique_rules = self._get_default_critique_rules()
+
+    def save_knowledge(self):
+        """
+        Saves the current critique rules to the specified JSON file.
+        """
+        try:
+            with open(self.knowledge_file_path, 'w') as f:
+                json.dump(self.critique_rules, f, indent=4)
+            logger.info(f"Agent '{self.agent_id}': Critique rules saved successfully to '{self.knowledge_file_path}'.")
+        except Exception as e:
+            logger.error(f"Agent '{self.agent_id}': Failed to save critique rules to '{self.knowledge_file_path}': {e}", exc_info=True)
 
     def _structural_analysis(self, prompt_chromosome: PromptChromosome) -> list:
         """
