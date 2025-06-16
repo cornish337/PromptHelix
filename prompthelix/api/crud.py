@@ -1,9 +1,16 @@
 from sqlalchemy.orm import Session
 from typing import Optional, List
-
-# Import models that are still directly used (APIKey, LLMUsageStatistic)
+from sqlalchemy import func
+from typing import Optional
+from prompthelix.models import Prompt, PromptVersion
 from prompthelix.models.settings_models import APIKey
+from prompthelix.schemas import PromptCreate, PromptVersionCreate
+# Import models that are still directly used (APIKey, LLMUsageStatistic)
 from prompthelix.models.statistics_models import LLMUsageStatistic
+# Assuming schemas for APIKey will be created in a later step,
+# for now, create_or_update_api_key will just take strings.
+# We might need: from prompthelix import schemas
+
 
 # Import Pydantic Schemas required for function signatures
 from prompthelix import schemas # This will make all schemas available under schemas.<SchemaName>

@@ -1,5 +1,5 @@
+from fastapi.testclient import TestClient
 import pytest
-
 from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient # Import TestClient
 from prompthelix.enums import ExecutionMode
@@ -7,38 +7,61 @@ from prompthelix import schemas # Moved import here
 from prompthelix.genetics.engine import PromptChromosome # Not strictly needed if using MagicMock without spec for return
 # from prompthelix.schemas import PromptVersion # Not strictly needed for these tests if just checking status and basic fields
 
+# client will be provided by the test_client fixture from conftest.py
 
-def test_run_experiment_creates_new_prompt_and_version(test_client, db_session):
-    experiment_payload = {
-        "task_description": "Generate a short story about a robot learning to paint",
+# Store ID of a prompt created for testing experiment association
+shared_prompt_id_for_experiment_test = None
+
+def test_create_prompt_for_experiment_tests(test_client: TestClient):
+    """Helper to create a prompt to be used as a parent in another test."""
+    global shared_prompt_id_for_experiment_test
+    response = test_client.post(
+        "/api/prompts",
+        json={"name": "Experiment Parent Prompt", "description": "Prompt for GA experiment to attach to"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    shared_prompt_id_for_experiment_test = data["id"]
+    assert shared_prompt_id_for_experiment_test is not None
+
+def test_run_ga_experiment_new_prompt(test_client: TestClient):
+    experiment_params = {
+        "task_description": "Generate a short story about a robot learning to paint.",
         "keywords": ["robot", "art", "creativity"],
-
         "num_generations": 1, # Keep low for faster tests
         "population_size": 2, # Keep low for faster tests
         "elitism_count": 1,   # Keep low for faster tests
         "prompt_name": "GA Test - New Prompt",
         "prompt_description": "Result of a GA experiment creating a new prompt.",
         "execution_mode": ExecutionMode.REAL.value # Added
-
     }
+    response = test_client.post("/api/experiments/run-ga", json=experiment_params)
 
-    response = test_client.post("/api/experiments/run-ga", json=experiment_payload)
+    assert response.status_code == 200, f"API call failed: {response.text}"
+    data = response.json()
 
-    assert response.status_code == 200, response.text
+    assert "id" in data # PromptVersion ID
+    assert data["content"] # Check that some content was generated
+    assert "fitness_score" in data # Even if None, key should be there
+    assert "parameters_used" in data
 
-    result_version_data = response.json()
-    assert "id" in result_version_data
-    assert "prompt_id" in result_version_data
-    assert result_version_data["content"] is not None
-    assert result_version_data["fitness_score"] is not None
-    # Ensure GA parameters are stored in the version's parameters_used field
-    assert "task_description" in result_version_data["parameters_used"]
-    assert result_version_data["parameters_used"]["task_description"] == experiment_payload["task_description"]
-    assert result_version_data["parameters_used"]["num_generations"] == experiment_payload["num_generations"]
+    # Check if parameters_used reflect input, excluding association fields
+    params_in_response = data["parameters_used"]
+    assert params_in_response["task_description"] == experiment_params["task_description"]
+    assert params_in_response["keywords"] == experiment_params["keywords"]
+    assert params_in_response["num_generations"] == experiment_params["num_generations"]
+    # ... other params as needed
 
+    # Verify the new prompt was created (by checking its name in the version's parent prompt)
+    new_prompt_id = data["prompt_id"]
+    prompt_response = test_client.get(f"/api/prompts/{new_prompt_id}")
+    assert prompt_response.status_code == 200
+    prompt_data = prompt_response.json()
+    assert prompt_data["name"] == experiment_params["prompt_name"]
+    assert len(prompt_data["versions"]) == 1 # Should have one version, the result
 
-    # Verify in DB
-    from prompthelix.api import crud
+def test_run_ga_experiment_existing_prompt(test_client: TestClient):
+    assert shared_prompt_id_for_experiment_test is not None, "Parent prompt ID for experiment not set."
 
     created_prompt = crud.get_prompt(db_session, prompt_id=result_version_data["prompt_id"])
     assert created_prompt is not None
@@ -198,4 +221,3 @@ def test_run_ga_experiment_api_real_mode_mocked_loop(mock_main_ga_loop, test_cli
     args, kwargs = mock_main_ga_loop.call_args
     assert kwargs.get('execution_mode') == ExecutionMode.REAL
     assert kwargs.get('keywords') == payload["keywords"]
-
