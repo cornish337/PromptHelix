@@ -9,6 +9,12 @@ from alembic import context
 # access to the values within the .ini file in use.
 config = context.config
 
+# Allow DATABASE_URL environment variable to override alembic.ini setting
+import os
+from prompthelix.database import DATABASE_URL as DEFAULT_DB_URL
+database_url = os.environ.get("DATABASE_URL", DEFAULT_DB_URL)
+config.set_main_option("sqlalchemy.url", database_url)
+
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
 if config.config_file_name is not None:
