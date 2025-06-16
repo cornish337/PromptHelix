@@ -140,7 +140,7 @@ async def run_experiment_ui_submit(
 
     async with httpx.AsyncClient(app=request.app, base_url=str(request.base_url)) as client:
         try:
-            response = await client.post(api_experiment_url, json=ga_params.model_dump(exclude_none=True))
+            response = await client.post(str(api_experiment_url), json=ga_params.model_dump(exclude_none=True))
             response.raise_for_status()  # Raises an exception for 4XX/5XX responses
 
             returned_prompt_version_data = response.json()
@@ -184,11 +184,27 @@ async def run_experiment_ui_submit(
 
 @router.get("/ui/playground", name="llm_playground_ui")
 async def get_llm_playground_ui(request: Request, db: Session = Depends(get_db)):
-    # For now, using the static list from SUPPORTED_LLM_SERVICES
-    llm_providers = SUPPORTED_LLM_SERVICES
+    llm_providers = SUPPORTED_LLM_SERVICES # Static list for now
+    db_prompts = crud.get_prompts(db, limit=1000) # Fetch available prompts
+
+    prompts_content_map = {}
+    if db_prompts:
+        for p in db_prompts:
+            if p.versions:  # Check if there are any versions
+                # Sort versions by version_number descending to get the latest
+                latest_version = sorted(p.versions, key=lambda v: v.version_number, reverse=True)[0]
+                prompts_content_map[str(p.id)] = latest_version.content
+            else:
+                prompts_content_map[str(p.id)] = "" # Default content if no versions
+
     return templates.TemplateResponse(
         "llm_playground.html",
-        {"request": request, "llm_providers": llm_providers}
+        {
+            "request": request,
+            "llm_providers": llm_providers,
+            "available_prompts": db_prompts, # For dropdown list
+            "prompts_content_map": prompts_content_map # For JS to get content
+        }
     )
 
 

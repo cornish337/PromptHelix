@@ -89,14 +89,24 @@ def test_call_llm_api_unsupported_provider(sample_prompt_text, db_session):
 
 # --- New tests for specific error handling ---
 
+# Helper function to create the problematic exception
+def make_openai_invalid_request_error():
+    # Ensure the correct exception is imported and used here.
+    # This mirrors the original import logic at the top of the file.
+    try:
+        from openai import InvalidRequestError as ActualOpenAIInvalidRequestError
+    except ImportError:
+        from openai import BadRequestError as ActualOpenAIInvalidRequestError
+    return ActualOpenAIInvalidRequestError(message="invalid req", body=None)
+
 # OpenAI Error Handling Tests
 @patch("prompthelix.utils.llm_utils.get_openai_api_key", return_value="fake_key")
 @patch("openai.OpenAI")
 @pytest.mark.parametrize("openai_exception, expected_error_string", [
     (OpenAIRateLimitError("rate limit", response=MagicMock(), body=None), "RATE_LIMIT_ERROR"),
     (OpenAIAuthenticationError("auth error", response=MagicMock(), body=None), "AUTHENTICATION_ERROR"),
-    (OpenAIAPIConnectionError("conn error", request=MagicMock()), "API_CONNECTION_ERROR"),
-    (OpenAIInvalidRequestError("invalid req", "param", body=None), "INVALID_REQUEST_ERROR"),
+    (OpenAIAPIConnectionError(message="conn error", request=MagicMock()), "API_CONNECTION_ERROR"),
+    (make_openai_invalid_request_error(), "INVALID_REQUEST_ERROR"), # Use helper
 
     (OpenAPIApiError("api error", request=MagicMock(), body=None), "API_ERROR"),
     (OpenAIError("generic openai error"), "OPENAI_ERROR"),

@@ -60,10 +60,89 @@
         </div>
     </fieldset>
     <div>
+        <button type="button" id="clearExperimentForm" style="margin-right: 10px;">Clear Saved Form Data</button>
         <button type="submit">Run Experiment</button>
         <a href="{{ url_for('list_prompts_ui') }}" class="btn-secondary" style="margin-left: 10px;">Cancel</a>
     </div>
 </form>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const pagePrefix = 'experiment_';
+    const fieldsToPersist = [
+        'task_description',
+        'keywords',
+        'execution_mode', // This is a select element
+        'num_generations',
+        'population_size',
+        'elitism_count',
+        'parent_prompt_id', // This is a select element
+        'prompt_name',
+        'prompt_description'
+    ];
+
+    // Load saved data
+    fieldsToPersist.forEach(id => {
+        const field = document.getElementById(id);
+        if (field) {
+            const savedValue = localStorage.getItem(pagePrefix + id);
+            if (savedValue !== null) {
+                // For select elements, field.value should work for setting the value
+                // For checkboxes or radios, one would set field.checked
+                if (field.type === 'checkbox') {
+                    // field.checked = savedValue === 'true'; // Example for checkbox
+                } else if (field.type === 'radio') {
+                    // document.querySelector(`input[name="${field.name}"][value="${savedValue}"]`).checked = true; // Example for radio
+                } else {
+                    field.value = savedValue;
+                }
+            }
+        }
+    });
+
+    // Save data on input
+    fieldsToPersist.forEach(id => {
+        const field = document.getElementById(id);
+        if (field) {
+            // Use 'change' event for select elements, 'input' for others
+            const eventType = (field.tagName === 'SELECT') ? 'change' : 'input';
+            field.addEventListener(eventType, () => {
+                const valueToSave = (field.type === 'checkbox') ? field.checked : field.value;
+                localStorage.setItem(pagePrefix + id, valueToSave);
+            });
+        }
+    });
+
+    // Clear button functionality
+    const clearButton = document.getElementById('clearExperimentForm');
+    if (clearButton) {
+        clearButton.addEventListener('click', () => {
+            let clearedSomething = false;
+            fieldsToPersist.forEach(id => {
+                if (localStorage.getItem(pagePrefix + id) !== null) {
+                    localStorage.removeItem(pagePrefix + id);
+                    clearedSomething = true;
+                }
+                const field = document.getElementById(id);
+                if (field) {
+                    if (field.type === 'checkbox') {
+                        // field.checked = false; // Or default state
+                    } else if (field.type === 'radio') {
+                        // Clear radio group if needed
+                    } else {
+                        field.value = ''; // Clear the field in the UI
+                    }
+                }
+            });
+            if (clearedSomething) {
+                alert('Saved data for this form has been cleared. Form fields have been reset.');
+            } else {
+                alert('No saved data found to clear.');
+            }
+        });
+    }
+});
+</script>
 
 {# Removed the result block and the paragraph-wrapped cancel link #}
 {% endblock %}

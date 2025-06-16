@@ -17,6 +17,21 @@
             </div>
 
             <div>
+                <label for="select_prompt" class="block text-sm font-medium text-gray-700">Select an existing prompt (optional):</label>
+                <select id="select_prompt" name="select_prompt"
+                        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    <option value="">-- Select a prompt --</option>
+                    {% if available_prompts %}
+                        {% for prompt in available_prompts %}
+                            <option value="{{ prompt.id }}">{{ prompt.name }} (ID: {{ prompt.id }})</option>
+                        {% endfor %}
+                    {% else %}
+                        <option value="" disabled>No prompts available</option>
+                    {% endif %}
+                </select>
+            </div>
+
+            <div>
                 <label for="prompt_text" class="block text-sm font-medium text-gray-700">Enter your prompt:</label>
                 <textarea id="prompt_text" name="prompt_text" rows="5"
                           class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
@@ -27,6 +42,10 @@
                 <button type="submit"
                         class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
                     Submit to LLM
+                </button>
+                <button type="button" id="clearPlaygroundForm" style="margin-left: 10px;"
+                        class="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    Clear Saved Prompt
                 </button>
             </div>
         </form>
@@ -41,12 +60,89 @@
 </div>
 
 <script>
+    const promptsContent = {{ prompts_content_map | tojson | safe }};
+
 document.addEventListener('DOMContentLoaded', function () {
+    // ---- localStorage Persistence for LLM Playground ----
+    const playgroundPagePrefix = 'playground_';
+    const playgroundFieldsToPersist = ['llm_provider', 'prompt_text'];
+
+    // Load saved data for playground
+    playgroundFieldsToPersist.forEach(id => {
+        const field = document.getElementById(id);
+        if (field) {
+            const savedValue = localStorage.getItem(playgroundPagePrefix + id);
+            if (savedValue !== null) {
+                field.value = savedValue;
+            }
+        }
+    });
+
+    // Save data on input for playground
+    playgroundFieldsToPersist.forEach(id => {
+        const field = document.getElementById(id);
+        if (field) {
+            const eventType = (field.tagName === 'SELECT') ? 'change' : 'input';
+            field.addEventListener(eventType, () => {
+                localStorage.setItem(playgroundPagePrefix + id, field.value);
+            });
+        }
+    });
+
+    // Clear button functionality for playground
+    const clearPlaygroundButton = document.getElementById('clearPlaygroundForm');
+    if (clearPlaygroundButton) {
+        clearPlaygroundButton.addEventListener('click', () => {
+            let clearedSomething = false;
+            playgroundFieldsToPersist.forEach(id => {
+                if (localStorage.getItem(playgroundPagePrefix + id) !== null) {
+                    localStorage.removeItem(playgroundPagePrefix + id);
+                    clearedSomething = true;
+                }
+                const field = document.getElementById(id);
+                if (field) {
+                    field.value = ''; // Clear the field in the UI
+                    if (id === 'llm_provider') { // Reset select to its first option (placeholder)
+                        field.selectedIndex = 0;
+                    }
+                }
+            });
+            if (clearedSomething) {
+                alert('Saved data for this form has been cleared. Form fields have been reset.');
+            } else {
+                alert('No saved data found to clear.');
+            }
+        });
+    }
+    // ---- End of localStorage Persistence ----
+
     const llmProviderSelect = document.getElementById('llm_provider');
-    const promptTextarea = document.getElementById('prompt_text');
+    const promptTextarea = document.getElementById('prompt_text'); // This is the correct ID
     const llmPlaygroundForm = document.getElementById('llm-playground-form');
     const responseStatusDiv = document.getElementById('llm-response-status');
     const responseContentPre = document.getElementById('llm-response-content');
+    const promptSelectDropdown = document.getElementById('select_prompt');
+
+    // ---- Populate Existing Prompts Dropdown (New Logic) ----
+    // The dropdown is now populated by Jinja templating directly.
+    // We just need the event listener for it.
+
+    if (promptSelectDropdown && promptTextarea && promptsContent) {
+        promptSelectDropdown.addEventListener('change', (event) => {
+            const selectedPromptId = event.target.value;
+            if (selectedPromptId && promptsContent[selectedPromptId] !== undefined) {
+                promptTextarea.value = promptsContent[selectedPromptId];
+                // Trigger input event for localStorage saving and other listeners
+                promptTextarea.dispatchEvent(new Event('input', { bubbles: true }));
+            } else if (!selectedPromptId) {
+                // Optional: Clear textarea if "-- Select a prompt --" is chosen
+                // promptTextarea.value = "";
+                // promptTextarea.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+        });
+    }
+    // ---- End of Existing Prompts Dropdown Logic ----
+
 
     // 1. Populate LLM Providers Dropdown
     // The `llm_providers` variable is passed from the Python route to the template.
