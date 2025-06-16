@@ -47,7 +47,25 @@ class ResultsEvaluatorAgent(BaseAgent):
         os.makedirs(os.path.dirname(self.knowledge_file_path), exist_ok=True)
 
         self.evaluation_metrics_config = {} # Initialize before loading
+        self.db = None # Assuming ResultsEvaluatorAgent might not have direct db access. call_llm_api handles db=None
         self.load_knowledge()
+
+    def _get_fallback_llm_metrics(self, errors: list = None, status_message: str = 'fallback_due_to_error') -> dict:
+        """
+        Provides a fallback dictionary of LLM-derived metrics when analysis fails.
+        """
+        error_message = "; ".join(errors) if errors else "N/A"
+        logger.warning(f"Agent '{self.agent_id}': Using fallback LLM metrics. Reason: {error_message}")
+        return {
+            'llm_assessed_relevance': 0.0,
+            'llm_assessed_coherence': 0.0,
+            'llm_assessed_completeness': 0.0,
+            'llm_accuracy_assessment': 'N/A',
+            'llm_safety_score': 0.0,
+            'llm_assessed_quality': 0.0,
+            'llm_assessment_feedback': f"Fallback: {error_message}",
+            'llm_analysis_status': status_message
+        }
 
     def _get_default_metrics_config(self) -> dict:
         """
@@ -220,6 +238,18 @@ class ResultsEvaluatorAgent(BaseAgent):
         """
         logger.info(f"Agent '{self.agent_id}': LLM Analyzing content for task: '{task_desc[:50]}...' using model {self.evaluation_llm_model}")
 
+        # Defined error strings from llm_utils.py
+        LLM_API_ERROR_STRINGS = {
+            "RATE_LIMIT_ERROR", "API_KEY_MISSING_ERROR", "AUTHENTICATION_ERROR",
+            "API_CONNECTION_ERROR", "INVALID_REQUEST_ERROR", "API_ERROR", "OPENAI_ERROR",
+            "UNEXPECTED_OPENAI_CALL_ERROR", "ANTHROPIC_ERROR", "UNEXPECTED_ANTHROPIC_CALL_ERROR",
+            "GOOGLE_SDK_ERROR", "UNEXPECTED_GOOGLE_CALL_ERROR", "BLOCKED_PROMPT_ERROR",
+            "API_STATUS_ERROR", "API_SERVER_ERROR", "EMPTY_GOOGLE_RESPONSE", "INVALID_ARGUMENT_ERROR", # Added INVALID_ARGUMENT_ERROR for Google
+            "MALFORMED_CLAUDE_RESPONSE_CONTENT", "EMPTY_CLAUDE_RESPONSE", "UNSUPPORTED_PROVIDER_ERROR",
+            "GENERATION_STOPPED_SAFETY", "GENERATION_STOPPED_RECITATION" # Common Google stop reasons
+            # Any other specific error strings returned by llm_utils.py should be added here.
+        }
+
         prompt_str_for_llm = f"""
 You are an expert evaluator of AI-generated text. Evaluate the "Generated Output" based on the "Original Task Description" and the "Prompt Used".
 
@@ -254,58 +284,79 @@ Example:
   "feedback_text": "The output is highly relevant and coherent, but could be more complete in addressing X."
 }}
 """
-        # Initialize metrics that should be provided by the LLM to avoid KeyErrors later if LLM fails
-        metrics = {
-            "llm_assessed_relevance": 0.0,
-            "llm_assessed_coherence": 0.0,
-            "llm_assessed_completeness": 0.0,
-            "llm_accuracy_assessment": "N/A",
-            "llm_safety_score": 0.0,
-            "llm_assessed_quality": 0.0,
-            "llm_assessment_feedback": "LLM analysis not performed or failed."
-        }
-        errors = []
+        llm_derived_metrics = {}
+        errors = [] # Errors specific to this analysis process
 
-        try:
-            response_str = call_llm_api(prompt_str_for_llm, provider=self.llm_provider, model=self.evaluation_llm_model)
-            logger.info(f"Agent '{self.agent_id}': LLM raw response for content analysis: {response_str}")
+        # Pass self.db if available and needed by call_llm_api. Assuming self.db might be None.
+        # call_llm_api is designed to handle db=None.
+        response_str = call_llm_api(prompt_str_for_llm, provider=self.llm_provider, model=self.evaluation_llm_model, db=self.db)
 
-            # Attempt to parse JSON from the LLM response
-            json_start = response_str.find('{')
-            json_end = response_str.rfind('}') + 1
-            if json_start != -1 and json_end != -1 and json_start < json_end:
-                parsed_response = json.loads(response_str[json_start:json_end])
+        if response_str in LLM_API_ERROR_STRINGS:
+            logger.warning(f"Agent '{self.agent_id}': LLM call for content analysis failed with error code: {response_str}. Using fallback metrics.")
+            api_error_message = f"LLM API Error: {response_str}"
+            errors.append(api_error_message)
+            llm_derived_metrics = self._get_fallback_llm_metrics(errors=[api_error_message])
+        else:
+            # LLM call was successful (not an error string), now try to parse its response
+            logger.info(f"Agent '{self.agent_id}': LLM raw response for content analysis: {response_str[:500]}...") # Log snippet
+            try:
+                # Attempt to parse JSON from the LLM response
+                json_start = response_str.find('{')
+                json_end = response_str.rfind('}') + 1
+                if json_start != -1 and json_end != -1 and json_start < json_end:
+                    parsed_response = json.loads(response_str[json_start:json_end])
 
-                metrics["llm_assessed_relevance"] = float(parsed_response.get("relevance_score", 0.0))
-                metrics["llm_assessed_coherence"] = float(parsed_response.get("coherence_score", 0.0))
-                metrics["llm_assessed_completeness"] = float(parsed_response.get("completeness_score", 0.0))
-                metrics["llm_accuracy_assessment"] = str(parsed_response.get("accuracy_assessment", "N/A"))
-                metrics["llm_safety_score"] = float(parsed_response.get("safety_score", 0.0)) # Assuming 0.0 if unsafe, 1.0 if safe
-                metrics["llm_assessed_quality"] = float(parsed_response.get("overall_quality_score", 0.0))
-                metrics["llm_assessment_feedback"] = str(parsed_response.get("feedback_text", "No textual feedback from LLM."))
-                logger.info(f"Agent '{self.agent_id}': LLM content analysis successful: {metrics}")
-            else:
-                errors.append("LLM content analysis response was not in expected JSON format.")
-                metrics["llm_assessment_feedback"] = f"LLM analysis failed to produce valid JSON. Raw: {response_str[:200]}..." # Already initialized
-                logger.error(f"Agent '{self.agent_id}': LLM analysis response not in JSON format. Raw: {response_str}")
+                    llm_derived_metrics["llm_assessed_relevance"] = float(parsed_response.get("relevance_score", 0.0))
+                    llm_derived_metrics["llm_assessed_coherence"] = float(parsed_response.get("coherence_score", 0.0))
+                    llm_derived_metrics["llm_assessed_completeness"] = float(parsed_response.get("completeness_score", 0.0))
+                    llm_derived_metrics["llm_accuracy_assessment"] = str(parsed_response.get("accuracy_assessment", "N/A"))
+                    llm_derived_metrics["llm_safety_score"] = float(parsed_response.get("safety_score", 0.0))
+                    llm_derived_metrics["llm_assessed_quality"] = float(parsed_response.get("overall_quality_score", 0.0))
+                    llm_derived_metrics["llm_assessment_feedback"] = str(parsed_response.get("feedback_text", "No textual feedback from LLM."))
+                    llm_derived_metrics['llm_analysis_status'] = 'success'
+                    logger.info(f"Agent '{self.agent_id}': LLM content analysis parsed successfully.")
+                else:
+                    parsing_error_message = "LLM content analysis response was not in expected JSON format."
+                    errors.append(parsing_error_message)
+                    logger.warning(f"Agent '{self.agent_id}': {parsing_error_message} Raw response snippet: {response_str[:200]}. Using fallback.")
+                    llm_derived_metrics = self._get_fallback_llm_metrics(errors=[parsing_error_message, f"Raw Response Snippet: {response_str[:200]}"])
 
-        except Exception as e:
-            errors.append(f"Error during LLM content analysis: {str(e)}")
-            metrics["llm_assessment_feedback"] = f"Exception during LLM analysis: {str(e)}" # Already initialized
-            logger.error(f"Agent '{self.agent_id}': Exception during LLM content analysis: {e}", exc_info=True)
+            except json.JSONDecodeError as je:
+                json_error_message = f"JSON decoding failed: {str(je)}"
+                errors.append(json_error_message)
+                logger.error(f"Agent '{self.agent_id}': Error parsing LLM evaluation response (JSONDecodeError): {je}. Raw response snippet: {response_str[:200]}", exc_info=True)
+                llm_derived_metrics = self._get_fallback_llm_metrics(errors=[json_error_message, f"Raw Response Snippet: {response_str[:200]}"])
+            except Exception as e: # Catch other potential errors during parsing (e.g., float conversion)
+                parsing_exception_message = f"Parsing LLM response failed: {str(e)}"
+                errors.append(parsing_exception_message)
+                logger.error(f"Agent '{self.agent_id}': Error parsing LLM evaluation response: {e}. Raw response snippet: {response_str[:200]}", exc_info=True)
+                llm_derived_metrics = self._get_fallback_llm_metrics(errors=[parsing_exception_message, f"Raw Response Snippet: {response_str[:200]}"])
 
-        # Fallback for individual scores if not provided by LLM, even if JSON was valid but incomplete
-        # The initial metrics dict already provides these defaults, so setdefault isn't strictly needed
-        # unless the LLM could return partial valid JSON without some keys.
-        if metrics.get("llm_assessed_quality", 0.0) == 0.0 and "LLM analysis not performed or failed" in metrics.get("llm_assessment_feedback"):
-            # This implies a more significant failure of the LLM analysis to return any meaningful score.
-            metrics["llm_assessed_quality"] = round(random.uniform(0.2, 0.5), 2) # Penalize more if LLM eval failed
-            metrics["llm_assessed_relevance"] = round(random.uniform(0.2, 0.5), 2)
-            metrics["llm_assessed_coherence"] = round(random.uniform(0.2, 0.5), 2)
-            if not errors: errors.append("LLM content analysis did not return usable scores or failed; used random fallbacks.")
-            logger.warning(f"Agent '{self.agent_id}': LLM content analysis failed or returned no scores. Using random fallbacks for quality metrics.")
+            # Final check if metrics were populated, even if parsing seemed to start
+            if not llm_derived_metrics or llm_derived_metrics.get('llm_analysis_status') != 'success':
+                 # This case handles if parsed_response was empty or some other logic path was missed.
+                if not llm_derived_metrics.get('llm_analysis_status'): # Avoid overwriting if already fallback
+                    logger.warning(f"Agent '{self.agent_id}': LLM evaluation response parse attempt did not yield metrics or status. Raw response snippet: {response_str[:200]}. Using fallback.")
+                    unparseable_error = "LLM response unparseable or empty after attempt."
+                    if not errors: errors.append(unparseable_error) # Add if no specific error was caught yet
+                    llm_derived_metrics = self._get_fallback_llm_metrics(errors=errors if errors else [unparseable_error])
 
-        return metrics, errors
+
+        # Ensure all expected keys are present, even if using fallback (which _get_fallback_llm_metrics should do)
+        # This is more of a safeguard. _get_fallback_llm_metrics should be comprehensive.
+        expected_metric_keys = [
+            'llm_assessed_relevance', 'llm_assessed_coherence', 'llm_assessed_completeness',
+            'llm_accuracy_assessment', 'llm_safety_score', 'llm_assessed_quality',
+            'llm_assessment_feedback', 'llm_analysis_status'
+        ]
+        for key in expected_metric_keys:
+            if key not in llm_derived_metrics:
+                logger.error(f"CRITICAL: Fallback metrics are missing key '{key}'. This should not happen. Re-applying generic fallback.")
+                llm_derived_metrics = self._get_fallback_llm_metrics(errors=["Critical: Fallback was incomplete. Overridden."])
+                if not errors: errors.append("Critical: Fallback logic error, metrics incomplete.")
+                break # Exit loop after applying generic fallback
+
+        return llm_derived_metrics, errors
 
     def process_request(self, request_data: dict) -> dict:
         """
