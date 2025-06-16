@@ -1,6 +1,7 @@
 from sqlalchemy import Column, Integer, String, DateTime, UniqueConstraint
 from datetime import datetime
 
+
 from prompthelix.models.base import Base
 
 class LLMUsageStatistic(Base):
@@ -18,3 +19,4 @@ class LLMUsageStatistic(Base):
 
     def __repr__(self) -> str:
         return f"<LLMUsageStatistic(service={self.llm_service}, count={self.request_count})>"
+
