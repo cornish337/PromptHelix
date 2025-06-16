@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+
+{% block title %}Real-Time Dashboard{% endblock %}
+
+{% block content %}
+<div class="container mx-auto p-4">
+    <h1 class="text-2xl font-bold mb-4">Real-Time Monitoring Dashboard</h1>
+
+    <!-- GA Progress Section -->
+    <section id="ga-progress" class="mb-6 p-4 bg-white rounded shadow">
+        <h2 class="text-xl font-semibold mb-3">Genetic Algorithm Progress</h2>
+        <div id="ga-progress-data">
+            <p>GA Status: <span id="ga-status">Idle</span></p>
+            <p>Current Generation: <span id="ga-generation">-</span></p>
+            <p>Best Fitness: <span id="ga-best-fitness">-</span></p>
+            <!-- Placeholder for charts -->
+            <div id="ga-charts-placeholder" class="mt-2">
+                Chart will appear here.
+            </div>
+        </div>
+    </section>
+
+    <!-- Conversation Logs Section -->
+    <section id="conversation-logs" class="mb-6 p-4 bg-white rounded shadow">
+        <h2 class="text-xl font-semibold mb-3">Live Conversation Logs</h2>
+        <div id="logs-container" class="max-h-96 overflow-y-auto space-y-2 pr-2 border rounded p-2 bg-gray-50">
+            <!-- Logs will be appended here by JavaScript -->
+            <div class="log-entry text-gray-500">Waiting for logs...</div>
+        </div>
+    </section>
+
+    <!-- Agent Metrics Section -->
+    <section id="agent-metrics" class="p-4 bg-white rounded shadow">
+        <h2 class="text-xl font-semibold mb-3">Agent Metrics</h2>
+        <div id="agent-metrics-data">
+            <p>Metrics will appear here.</p>
+            <!-- Placeholder for metrics display -->
+        </div>
+    </section>
+
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const gaStatus = document.getElementById('ga-status');
+        const gaGeneration = document.getElementById('ga-generation');
+        const gaBestFitness = document.getElementById('ga-best-fitness');
+        const logsContainer = document.getElementById('logs-container');
+        const agentMetricsData = document.getElementById('agent-metrics-data');
+
+        // Determine WebSocket protocol
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${wsProtocol}//${window.location.host}/ws/dashboard`;
+
+        console.log(`Attempting to connect to WebSocket at: ${wsUrl}`);
+        const socket = new WebSocket(wsUrl);
+
+        socket.onopen = function(event) {
+            console.log("WebSocket connection established.");
+            logsContainer.innerHTML = '<div class="log-entry text-green-600">Connected to real-time updates.</div>';
+            socket.send(JSON.stringify({ message: "Hello Server from Dashboard!" }));
+        };
+
+        socket.onmessage = function(event) {
+            console.log("WebSocket message received:", event.data);
+            const message = JSON.parse(event.data);
+
+            if (message.type === 'new_conversation_log' && message.data) {
+                const logEntry = document.createElement('div');
+                logEntry.classList.add('log-entry', 'p-2', 'rounded', 'text-xs', 'mb-1');
+
+                // Basic styling based on sender/recipient (can be refined)
+                if (message.data.sender_id && message.data.sender_id.toLowerCase().includes('agent')) {
+                    logEntry.classList.add('bg-blue-50');
+                } else if (message.data.sender_id === 'SYSTEM') {
+                    logEntry.classList.add('bg-yellow-50');
+                } else {
+                    logEntry.classList.add('bg-gray-100');
+                }
+
+                const timestamp = new Date(message.data.timestamp || Date.now()).toLocaleTimeString();
+                let contentHtml = '';
+                if (typeof message.data.content === 'object') {
+                    contentHtml = `<pre class="whitespace-pre-wrap">${JSON.stringify(message.data.content, null, 2)}</pre>`;
+                } else {
+                    contentHtml = `<p class="whitespace-pre-wrap">${message.data.content}</p>`;
+                }
+
+                logEntry.innerHTML = `
+                    <div class="font-semibold">${timestamp} | ${message.data.sender_id} &rarr; ${message.data.recipient_id || 'BROADCAST'} (${message.data.message_type})</div>
+                    <div class="pl-2">${contentHtml}</div>
+                    <div class="text-gray-500 text-right text-xs">Session: ${message.data.session_id}</div>
+                `;
+
+                // If it was "Waiting for logs...", remove it
+                const waitingMsg = logsContainer.querySelector('.text-gray-500');
+                if (waitingMsg && waitingMsg.textContent === 'Waiting for logs...') {
+                    logsContainer.innerHTML = '';
+                }
+                const connectedMsg = logsContainer.querySelector('.text-green-600');
+                 if (connectedMsg && connectedMsg.textContent === 'Connected to real-time updates.') {
+                    logsContainer.innerHTML = ''; // Clear "Connected..." message on first actual log
+                }
+
+
+                logsContainer.appendChild(logEntry);
+                logsContainer.scrollTop = logsContainer.scrollHeight; // Auto-scroll
+            } else if (message.type === 'ga_update' && message.data) {
+                // Placeholder for GA updates
+                gaStatus.textContent = message.data.status || 'N/A';
+                gaGeneration.textContent = message.data.generation || '-';
+                gaBestFitness.textContent = message.data.best_fitness || '-';
+                console.log("GA Update:", message.data);
+            } else if (message.type === 'agent_metric_update' && message.data) {
+                const metricsData = message.data;
+                const agentId = metricsData.agent_id;
+                const metricsContainer = document.getElementById('agent-metrics-data');
+
+                // Find or create a div for this agent's metrics
+                let agentDiv = document.getElementById(`agent-metric-${agentId}`);
+                if (!agentDiv) {
+                    agentDiv = document.createElement('div');
+                    agentDiv.id = `agent-metric-${agentId}`;
+                    agentDiv.classList.add('agent-metric-entry', 'p-2', 'mb-2', 'border', 'rounded', 'bg-gray-50');
+
+                    // If it's the first metric entry, clear the placeholder "Metrics will appear here."
+                    const placeholder = metricsContainer.querySelector('p');
+                    if (placeholder && placeholder.textContent === 'Metrics will appear here.') {
+                        metricsContainer.innerHTML = '';
+                    }
+                    metricsContainer.appendChild(agentDiv);
+                }
+
+                // Update the content of the agent's div
+                agentDiv.innerHTML = `
+                    <h4 class="font-semibold text-md">${agentId}</h4>
+                    <p class="text-sm">Messages Processed: <span class="font-medium">${metricsData.messages_processed}</span></p>
+                    <p class="text-sm">Errors Encountered: <span class="font-medium text-red-600">${metricsData.errors_encountered}</span></p>
+                    <p class="text-xs text-gray-500">Last updated: ${new Date(metricsData.timestamp).toLocaleTimeString()}</p>
+                `;
+            } else if (message.message) { // For generic messages like connection acks
+                 const infoEntry = document.createElement('div');
+                 infoEntry.classList.add('log-entry', 'p-1', 'text-sm', 'text-gray-600', 'italic');
+                 infoEntry.textContent = `System: ${message.message}`;
+                 logsContainer.appendChild(infoEntry);
+                 logsContainer.scrollTop = logsContainer.scrollHeight;
+            }
+            // Add more handlers for other message types (agent_metrics, etc.)
+        };
+
+        socket.onerror = function(error) {
+            console.error("WebSocket Error:", error);
+            const errorEntry = document.createElement('div');
+            errorEntry.classList.add('log-entry', 'text-red-600');
+            errorEntry.textContent = 'WebSocket connection error. See console for details.';
+            logsContainer.appendChild(errorEntry);
+            logsContainer.scrollTop = logsContainer.scrollHeight;
+        };
+
+        socket.onclose = function(event) {
+            console.log("WebSocket connection closed:", event);
+            const closeEntry = document.createElement('div');
+            closeEntry.classList.add('log-entry', 'text-orange-600');
+            if (event.wasClean) {
+                closeEntry.textContent = `WebSocket connection closed cleanly, code=${event.code} reason=${event.reason}`;
+            } else {
+                closeEntry.textContent = 'WebSocket connection died.';
+            }
+            logsContainer.appendChild(closeEntry);
+            logsContainer.scrollTop = logsContainer.scrollHeight;
+        };
+    });
+</script>
+{% endblock %}

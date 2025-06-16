@@ -1,16 +1,13 @@
 import abc
 from datetime import datetime
 import logging
+import asyncio # Added
+from typing import Optional, Dict # Keep this one
 
 logger = logging.getLogger(__name__)
 
-class BaseAgent(abc.ABC):
-    """
-    Abstract base class for all agents in the PromptHelix system.
-    Includes basic inter-agent communication capabilities.
-    """
-
-from typing import Optional, Dict
+# Assuming the first definition is the one to be kept and augmented.
+# The second one seems like a duplication.
 
 class BaseAgent(abc.ABC):
     """
@@ -32,6 +29,8 @@ class BaseAgent(abc.ABC):
         self.agent_id = agent_id
         self.message_bus = message_bus
         self.settings: Dict = settings if settings is not None else {}
+        self.messages_processed: int = 0 # Added
+        self.errors_encountered: int = 0 # Added
 
     @abc.abstractmethod
     def process_request(self, request_data: dict) -> dict:
@@ -100,51 +99,82 @@ class BaseAgent(abc.ABC):
         else:
             logger.warning(f"Agent '{self.agent_id}': No message bus available to subscribe to '{message_type}'.")
 
+    def publish_metrics(self):
+        # Publishes current agent metrics via the message bus's connection manager.
+        if hasattr(self, 'message_bus') and self.message_bus and \
+           hasattr(self.message_bus, 'connection_manager') and self.message_bus.connection_manager:
+
+            payload_data = {
+                "agent_id": self.agent_id,
+                "messages_processed": self.messages_processed,
+                "errors_encountered": self.errors_encountered,
+                "timestamp": datetime.utcnow().isoformat() # Add a timestamp for the metric update
+            }
+
+            try:
+                asyncio.create_task(
+                    self.message_bus.connection_manager.broadcast_json({
+                        "type": "agent_metric_update",
+                        "data": payload_data
+                    })
+                )
+            except RuntimeError as e:
+                logger.error(f"Agent '{self.agent_id}': Could not publish metrics due to asyncio RuntimeError: {e}. Ensure an event loop is running.")
+            except Exception as e:
+                logger.error(f"Agent '{self.agent_id}': Exception during metrics publishing: {e}", exc_info=True)
+        else:
+            logger.debug(f"Agent '{self.agent_id}': Message bus or connection manager not available. Skipping metrics publish.")
 
     def receive_message(self, message: dict):
         """
         Handles an incoming message received by this agent.
-
-        This method would typically be called by a message bus when a message
-        is routed to this agent. It logs the message and, based on the 
-        message_type, may delegate processing to `self.process_request`.
-
-        Args:
-            message (dict): The message dictionary, expected to contain keys like
-                            'sender_id', 'recipient_id', 'message_type', 'payload'.
-
-        Returns:
-            The result of `self.process_request(payload)` if the message_type
-            is "direct_request", or None for other message types in this basic setup.
         """
+        self.messages_processed += 1
 
         sender_id = message.get('sender_id', 'UnknownSender')
         msg_type = message.get('message_type', 'UnknownType')
         payload = message.get('payload', {})
+        response = None
 
         logger.info(f"Agent '{self.agent_id}' received message from '{sender_id}': Type='{msg_type}', Payload Snippet='{str(payload)[:50]}...'")
 
-        if msg_type == "direct_request":
-            logger.info(f"Agent '{self.agent_id}' processing 'direct_request' from '{sender_id}'.")
-            return self.process_request(payload)
-        elif msg_type == "ping":
-            logger.info(f"Agent '{self.agent_id}' received ping from '{sender_id}'. Responding with pong.")
-            return {
-                "status": "pong",
+        try:
+            if msg_type == "direct_request":
+                logger.info(f"Agent '{self.agent_id}' processing 'direct_request' from '{sender_id}'.")
+                response = self.process_request(payload)
+            elif msg_type == "ping":
+                logger.info(f"Agent '{self.agent_id}' received ping from '{sender_id}'. Responding with pong.")
+                response = {
+                    "status": "pong",
+                    "agent_id": self.agent_id,
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+            elif msg_type == "info_update":
+                logger.info(
+                    f"Agent '{self.agent_id}' received 'info_update' from '{sender_id}'. Logging payload: {payload}"
+                )
+                response = {"status": "info_logged", "agent_id": self.agent_id}
+            elif msg_type in {"evaluation_result", "critique_result"}: # Specific for MetaLearnerAgent
+                logger.info(f"Agent '{self.agent_id}' processing '{msg_type}' from '{sender_id}'.")
+                # This assumes process_request can handle this structure, which it does for MetaLearnerAgent
+                response = self.process_request({"data_type": msg_type, "data": payload})
+            else:
+                logger.info(
+                    f"Agent '{self.agent_id}' logged message of type '{msg_type}' from '{sender_id}'. No specific handler implemented in BaseAgent."
+                )
+                response = {"status": "message_logged_by_base_agent", "type": msg_type, "agent_id": self.agent_id}
+
+        except Exception as e:
+            self.errors_encountered += 1
+            logger.error(f"Agent '{self.agent_id}' encountered an error while processing message type '{msg_type}': {e}", exc_info=True)
+            response = {
+                "status": "error",
                 "agent_id": self.agent_id,
-                "timestamp": datetime.utcnow().isoformat()
+                "error_message": f"Error processing message: {str(e)}",
+                "original_message_type": msg_type
             }
-        elif msg_type == "info_update":  # Example of another message type
-            logger.info(
-                f"Agent '{self.agent_id}' received 'info_update' from '{sender_id}'. Logging payload: {payload}"
-            )
-            return {"status": "info_logged", "agent_id": self.agent_id}
-        elif msg_type in {"evaluation_result", "critique_result"}:
-            logger.info(f"Agent '{self.agent_id}' processing '{msg_type}' from '{sender_id}'.")
-            return self.process_request({"data_type": msg_type, "data": payload})
-        else:
-            logger.info(
-                f"Agent '{self.agent_id}' logged message of type '{msg_type}' from '{sender_id}'. No specific handler implemented in BaseAgent."
-            )
-            return {"status": "message_logged_by_base_agent", "type": msg_type, "agent_id": self.agent_id}
+        finally:
+            self.publish_metrics()
+
+        return response
 

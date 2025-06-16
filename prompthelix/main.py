@@ -5,12 +5,13 @@ Initializes the FastAPI application and includes the root endpoint.
 import traceback
 from fastapi import Request
 from fastapi.responses import JSONResponse
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 # from fastapi.templating import Jinja2Templates # Moved to templating.py
 from fastapi.staticfiles import StaticFiles
 from prompthelix.templating import templates # Import templates object
 from prompthelix.api import routes as api_routes
 from prompthelix.ui_routes import router as ui_router # Import the UI router
+from prompthelix.websocket_manager import ConnectionManager
 from prompthelix.database import init_db
 
 # Call init_db to create database tables on startup
@@ -19,6 +20,7 @@ init_db()
 
 # Initialize FastAPI application
 app = FastAPI()
+websocket_manager = ConnectionManager() # Renamed and confirmed module level
 
 # Mount static files
 # templates object is now imported, no need to initialize here
@@ -70,6 +72,34 @@ async def generic_exception_handler(request: Request, exc: Exception):
 # TODO: Implement WebSocket support for real-time communication (future feature).
 # TODO: Implement robust authentication and authorization mechanisms (future feature).
 # TODO: Implement rate limiting to protect the API (future feature).
+
+
+@app.websocket("/ws/dashboard")
+async def websocket_dashboard_endpoint(websocket: WebSocket):
+    """
+    WebSocket endpoint for dashboard real-time updates.
+    """
+    await websocket_manager.connect(websocket)
+    await websocket_manager.broadcast_json({"message": "A new client has connected!"})
+    try:
+        while True:
+            data = await websocket.receive_text()
+            print(f"WebSocket dashboard received: {data}")
+            await websocket_manager.send_personal_json({"response": f"You wrote: {data}"}, websocket)
+    except WebSocketDisconnect:
+        websocket_manager.disconnect(websocket)
+        print("WebSocket dashboard disconnected")
+        await websocket_manager.broadcast_json({"message": "A client has disconnected."})
+    except Exception as e:
+        websocket_manager.disconnect(websocket)
+        print(f"WebSocket dashboard error: {e}")
+        # It's good practice to try and close the websocket if it's still open during an unexpected error.
+        # However, manager.disconnect already removed it from the list.
+        # Depending on the error, the websocket might already be closed or in an unusable state.
+        # For now, we'll rely on the client or server to eventually clean up the connection.
+        # Consider await websocket.close(code=1011) if appropriate for specific errors.
+        await websocket_manager.broadcast_json({"message": f"A client connection had an error: {type(e).__name__}"})
+
 
 @app.get("/")
 async def root():
