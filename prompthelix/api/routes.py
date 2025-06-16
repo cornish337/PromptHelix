@@ -1,20 +1,16 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List, Optional # Ensure List, Optional are imported
+from typing import List
 from datetime import datetime # For default prompt name
 
 from prompthelix.database import get_db
-from prompthelix.api import crud # Assuming crud is already imported
-from prompthelix import schemas # Assuming schemas is already imported
-# Add specific schema imports if not covered by 'from prompthelix import schemas'
-from prompthelix.schemas import LLMTestRequest, LLMTestResponse, LLMStatistic as LLMStatisticSchema
-from prompthelix.utils import llm_utils # Import llm_utils
-
+from prompthelix.api import crud
+from prompthelix import schemas
 from prompthelix.orchestrator import main_ga_loop
 from prompthelix.genetics.engine import PromptChromosome # To check instance type
 
-router = APIRouter() # This should already exist at the top of routes.py
+router = APIRouter()
 
 @router.post("/api/prompts", response_model=schemas.Prompt)
 def create_prompt_route(prompt: schemas.PromptCreate, db: Session = Depends(get_db)):
@@ -129,65 +125,3 @@ def run_ga_experiment(params: schemas.GAExperimentParams, db: Session = Depends(
 #         # Catch if main_ga_loop fails due to changed signature / missing params
 #         raise HTTPException(status_code=500, detail=f"Old GA endpoint failed: {e}")
 #     raise HTTPException(status_code=404, detail="Old GA endpoint: No best prompt found or error in execution.")
-
-
-@router.post("/api/llm/test_prompt", response_model=schemas.LLMTestResponse, name="test_llm_prompt")
-async def test_llm_prompt_route(
-    request_data: schemas.LLMTestRequest,
-    db: Session = Depends(get_db)
-):
-    """
-    Receives a prompt and an LLM service, calls the LLM,
-    logs the request, and returns the LLM's response.
-    """
-    try:
-        # Call the LLM API (passing db session if your llm_utils.call_llm_api expects it for key retrieval)
-        response_text = llm_utils.call_llm_api(
-            prompt=request_data.prompt_text,
-            provider=request_data.llm_service,
-            # model=None, # Or pass a specific model if desired/available from request_data
-            db=db
-        )
-
-        # Increment usage statistics
-        try:
-            crud.increment_llm_statistic(db=db, service_name=request_data.llm_service)
-        except Exception as e:
-            # Log this error but don't let it fail the main operation
-            # (e.g., if DB connection has an issue for stats but LLM call was successful)
-            print(f"Error incrementing LLM statistic for {request_data.llm_service}: {e}")
-            # Depending on policy, you might want to raise an alert here
-
-        return schemas.LLMTestResponse(
-            llm_service=request_data.llm_service,
-            response_text=response_text
-        )
-    except ValueError as ve: # Catch errors like "Unsupported LLM provider" or "API key not configured"
-        raise HTTPException(status_code=400, detail=str(ve))
-    except Exception as e:
-        # Catch-all for other unexpected errors during LLM call
-        print(f"Unexpected error in test_llm_prompt_route: {e}") # Log it
-        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
-
-@router.get("/api/llm/statistics", response_model=List[schemas.LLMStatistic], name="get_llm_statistics")
-async def get_llm_statistics_route(db: Session = Depends(get_db)):
-    """
-    Retrieves usage statistics for all LLM services.
-    """
-    db_statistics = crud.get_all_llm_statistics(db=db)
-    # Convert model instances to Pydantic schemas if your response_model expects it
-    # and the conversion is not automatic (e.g. if orm_mode/from_attributes is not set everywhere)
-    # In this case, LLMStatistic schema has from_attributes = True, so direct return should work.
-    return db_statistics
-
-@router.get("/api/llm/available", response_model=List[str], name="get_available_llms")
-async def get_available_llms_route(db: Session = Depends(get_db)):
-    """
-    Retrieves a list of LLM services that are configured and available for use.
-    """
-    try:
-        available_llms = llm_utils.list_available_llms(db=db)
-        return available_llms
-    except Exception as e:
-        print(f"Error getting available LLMs: {e}") # Log it
-        raise HTTPException(status_code=500, detail="Failed to retrieve available LLMs.")

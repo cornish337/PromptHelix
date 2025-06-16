@@ -74,19 +74,3 @@ class APIKey(APIKeyBase):
 
     class Config:
         from_attributes = True # For ORM mode
-
-# New Schemas for LLM Testing and Statistics
-class LLMTestRequest(BaseModel):
-    llm_service: str = Field(..., description="The LLM service to use (e.g., OpenAI, Anthropic, Google)")
-    prompt_text: str = Field(..., description="The text prompt to send to the LLM")
-
-class LLMTestResponse(BaseModel):
-    llm_service: str = Field(..., description="The LLM service used")
-    response_text: str = Field(..., description="The text response from the LLM")
-
-class LLMStatistic(BaseModel):
-    llm_service: str = Field(..., description="The LLM service")
-    request_count: int = Field(..., description="The number of requests made to this LLM service")
-
-    class Config:
-        from_attributes = True # For ORM mode if we map it directly to a model later
