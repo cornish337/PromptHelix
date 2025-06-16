@@ -42,6 +42,46 @@ class TestResultsEvaluatorAgent(unittest.TestCase):
         self.assertIsInstance(self.evaluator.evaluation_metrics_config["default_metrics"], list)
         self.assertIsInstance(self.evaluator.evaluation_metrics_config["task_specific"], dict)
 
+    def test_agent_creation_with_settings_override(self):
+        """Test agent creation with settings override."""
+        override_settings = {
+            "default_llm_provider": "override_provider",
+            "evaluation_llm_model": "override_eval_model",
+            "fitness_score_weights": {"constraint_adherence": 0.7, "llm_quality_assessment": 0.3},
+            "knowledge_file_path": "override_eval_config.json",
+            "custom_key": "custom_value"
+        }
+
+        evaluator_with_override = ResultsEvaluatorAgent(settings=override_settings)
+
+        self.assertEqual(evaluator_with_override.settings, override_settings)
+        self.assertEqual(evaluator_with_override.llm_provider, "override_provider")
+        self.assertEqual(evaluator_with_override.evaluation_llm_model, "override_eval_model")
+        self.assertEqual(evaluator_with_override.fitness_score_weights, {"constraint_adherence": 0.7, "llm_quality_assessment": 0.3})
+
+        from prompthelix.config import KNOWLEDGE_DIR
+        import os
+        expected_kfp_override = os.path.join(KNOWLEDGE_DIR, "override_eval_config.json")
+        self.assertEqual(evaluator_with_override.knowledge_file_path, expected_kfp_override)
+
+    def test_agent_creation_no_settings_uses_fallbacks(self):
+        """Test agent uses fallbacks if no settings dict is passed and global config is empty for it."""
+        # Temporarily clear AGENT_SETTINGS for this agent to test hardcoded fallbacks in the module
+        with patch.dict("prompthelix.config.AGENT_SETTINGS", {"ResultsEvaluatorAgent": {}}, clear=True):
+            evaluator_no_settings = ResultsEvaluatorAgent(settings=None, knowledge_file_path="specific_kfp.json")
+
+        from prompthelix.agents.results_evaluator import FALLBACK_LLM_PROVIDER, FALLBACK_EVAL_MODEL, FALLBACK_FITNESS_WEIGHTS
+        from prompthelix.config import KNOWLEDGE_DIR
+        import os
+
+        self.assertEqual(evaluator_no_settings.llm_provider, FALLBACK_LLM_PROVIDER)
+        self.assertEqual(evaluator_no_settings.evaluation_llm_model, FALLBACK_EVAL_MODEL)
+        self.assertEqual(evaluator_no_settings.fitness_score_weights, FALLBACK_FITNESS_WEIGHTS)
+
+        # kfp param should be used if settings doesn't provide it
+        expected_kfp = os.path.join(KNOWLEDGE_DIR, "specific_kfp.json")
+        self.assertEqual(evaluator_no_settings.knowledge_file_path, expected_kfp)
+
     def test_process_request_basic_evaluation(self):
         """Test process_request with a basic evaluation scenario."""
         request_data = {
