@@ -1,6 +1,7 @@
 from prompthelix.message_bus import MessageBus
 from prompthelix.agents.architect import PromptArchitectAgent
 from prompthelix.agents.results_evaluator import ResultsEvaluatorAgent
+from prompthelix.agents.style_optimizer import StyleOptimizerAgent
 from prompthelix.agents.meta_learner import MetaLearnerAgent
 from prompthelix.agents.domain_expert import DomainExpertAgent # Added for demo
 from prompthelix.agents.critic import PromptCriticAgent # Added for demo
@@ -39,17 +40,19 @@ def main_ga_loop(
     print("Initializing agents with message bus...")
     prompt_architect = PromptArchitectAgent(message_bus=message_bus, knowledge_file_path="architect_ga_knowledge.json")
     results_evaluator = ResultsEvaluatorAgent(message_bus=message_bus, knowledge_file_path="results_evaluator_ga_config.json")
+    style_optimizer = StyleOptimizerAgent(message_bus=message_bus, knowledge_file_path=None)
     # Note: PromptCriticAgent and StyleOptimizerAgent are typically used within FitnessEvaluator or other
     # GA components. If they were instantiated directly here for the GA loop, they'd also get specific paths.
 
     # Register agents with the message bus
     message_bus.register(prompt_architect.agent_id, prompt_architect)
     message_bus.register(results_evaluator.agent_id, results_evaluator)
+    message_bus.register(style_optimizer.agent_id, style_optimizer)
     print("Agents initialized and registered.")
 
     # 2. Instantiate GA Components
     print("Initializing GA components...")
-    genetic_ops = GeneticOperators()
+    genetic_ops = GeneticOperators(style_optimizer_agent=style_optimizer)
 
     # Ensure OPENAI_API_KEY (and other necessary keys for LLMs like ANTHROPIC_API_KEY, GOOGLE_API_KEY if used)
     # are set in the environment for the FitnessEvaluator to function correctly with actual LLM calls.
@@ -120,8 +123,9 @@ def main_ga_loop(
         current_generation_num = pop_manager.generation_number + 1
         print(f"\n--- Generation {current_generation_num} of {num_generations} ---")
         pop_manager.evolve_population(
-            task_description=evaluation_task_desc, # Use consistent task for evaluation
-            success_criteria=evaluation_success_criteria
+            task_description=evaluation_task_desc,  # Use consistent task for evaluation
+            success_criteria=evaluation_success_criteria,
+            target_style="formal"
         )
         
         fittest_in_gen = pop_manager.get_fittest_individual()
