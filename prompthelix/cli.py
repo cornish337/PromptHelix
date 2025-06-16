@@ -11,6 +11,7 @@ import os
 import unittest
 import logging # Added for logging configuration
 import openai # Added for openai.RateLimitError
+import json # For parsing settings overrides
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +47,16 @@ def main_cli():
     # "run" command
     run_parser = subparsers.add_parser("run", help="Run the PromptHelix application or a specific module")
     run_parser.add_argument("module", nargs="?", default="ga", help="Module to run (e.g., 'ga')")
+    run_parser.add_argument("--prompt", type=str, help="Custom prompt string for the GA.")
+    run_parser.add_argument("--task-description", type=str, help="Detailed task description for the GA.")
+    run_parser.add_argument("--keywords", type=str, nargs='+', help="Keywords for the GA.")
+    run_parser.add_argument("--num-generations", type=int, help="Number of generations for the GA.")
+    run_parser.add_argument("--population-size", type=int, help="Population size for the GA.")
+    run_parser.add_argument("--elitism-count", type=int, help="Elitism count for the GA.")
+    run_parser.add_argument("--output-file", type=str, help="File path to save the best prompt.")
+    run_parser.add_argument("--agent-settings", type=str, help="JSON string or file path to override agent configurations.")
+    run_parser.add_argument("--llm-settings", type=str, help="JSON string or file path to override LLM utility settings.")
+    run_parser.add_argument("--execution-mode", type=str, choices=['TEST', 'REAL'], default='TEST', help="Set the execution mode for the GA (TEST or REAL).")
 
     # "check-llm" command for quick connectivity testing
     check_parser = subparsers.add_parser("check-llm", help="Test LLM provider connectivity")
@@ -131,40 +142,102 @@ def main_cli():
 
     elif args.command == "run":
         if args.module == "ga":
-            print("CLI: Running Genetic Algorithm...")
-            logger.info("Running Genetic Algorithm")
+            logger.info("CLI: Initializing Genetic Algorithm run...")
             from prompthelix.orchestrator import main_ga_loop # Import directly
             from prompthelix.enums import ExecutionMode # Import ExecutionMode
-            # Define default parameters for the CLI run
-            default_task_desc = "Generate a creative story about a space explorer."
-            default_keywords = ["space", "adventure", "discovery"]
-            default_num_generations = 2 # Keep low for CLI example
-            default_population_size = 5 # Keep low for CLI example
-            default_elitism_count = 1   # Keep low for CLI example
 
-            print(f"Using default parameters for GA: task='{default_task_desc}', generations={default_num_generations}, population={default_population_size}")
-            
+            # Prepare parameters for main_ga_loop, using defaults if not provided
+            task_desc = args.task_description if args.task_description else "Generate a creative story about a space explorer."
+            keywords = args.keywords if args.keywords else ["space", "adventure", "discovery"]
+            num_generations = args.num_generations if args.num_generations is not None else 2
+            population_size = args.population_size if args.population_size is not None else 5
+            elitism_count = args.elitism_count if args.elitism_count is not None else 1
+            initial_prompt_str = args.prompt # Can be None
+
             try:
-                # Call main_ga_loop directly
-                # main_ga_loop prints its own progress, including "Generation X of Y"
-                best_chromosome = main_ga_loop(
-                    task_desc=default_task_desc,
-                    keywords=default_keywords,
-                    num_generations=default_num_generations,
-                    population_size=default_population_size,
-                    elitism_count=default_elitism_count,
-                    execution_mode=ExecutionMode.TEST, # Pass execution_mode
-                    return_best=True  # Ensure it returns to potentially print results
-                )
-                if best_chromosome:
-                    print("\nCLI: Genetic Algorithm completed.")
-                    print(f"Best prompt fitness: {best_chromosome.fitness_score}")
-                    logger.info("GA finished with best fitness %.4f", best_chromosome.fitness_score)
-                    # print(f"Best prompt content: {best_chromosome.to_prompt_string()}") # Could be very long
-                else:
-                    print("\nCLI: Genetic Algorithm completed, but no best prompt was found.")
+                execution_mode = ExecutionMode[args.execution_mode.upper()]
+            except KeyError:
+                logger.error(f"Invalid execution mode: {args.execution_mode}. Defaulting to TEST.")
+                execution_mode = ExecutionMode.TEST
 
-                    logger.info("GA finished with no best prompt")
+            logger.info(f"GA Parameters: Task Description='{task_desc}'")
+            logger.info(f"GA Parameters: Keywords={keywords}")
+            logger.info(f"GA Parameters: Generations={num_generations}, Population Size={population_size}, Elitism Count={elitism_count}")
+            logger.info(f"GA Parameters: Execution Mode='{execution_mode.name}'")
+            if initial_prompt_str:
+                logger.info(f"GA Parameters: Initial Prompt Provided.")
+            
+            agent_settings_override = None
+            if args.agent_settings:
+                try:
+                    if os.path.isfile(args.agent_settings):
+                        with open(args.agent_settings, 'r') as f:
+                            agent_settings_override = json.load(f)
+                        logger.info(f"Loaded agent settings override from file: {args.agent_settings}")
+                    else:
+                        agent_settings_override = json.loads(args.agent_settings)
+                        logger.info("Loaded agent settings override from JSON string.")
+                except json.JSONDecodeError as e:
+                    logger.error(f"Invalid JSON for agent_settings: {e}. Using default agent settings.")
+                except Exception as e:
+                    logger.error(f"Error processing agent_settings: {e}. Using default agent settings.")
+
+            llm_settings_override = None
+            if args.llm_settings:
+                try:
+                    if os.path.isfile(args.llm_settings):
+                        with open(args.llm_settings, 'r') as f:
+                            llm_settings_override = json.load(f)
+                        logger.info(f"Loaded LLM settings override from file: {args.llm_settings}")
+                    else:
+                        llm_settings_override = json.loads(args.llm_settings)
+                        logger.info("Loaded LLM settings override from JSON string.")
+                except json.JSONDecodeError as e:
+                    logger.error(f"Invalid JSON for llm_settings: {e}. Using default LLM settings.")
+                except Exception as e:
+                    logger.error(f"Error processing llm_settings: {e}. Using default LLM settings.")
+
+            # TODO: Pass agent_settings_override and llm_settings_override to main_ga_loop or a config manager
+            # For now, they are just logged. The subtask specifies loading here.
+
+            print("CLI: Running Genetic Algorithm with specified parameters...")
+            try:
+                best_chromosome = main_ga_loop(
+                    task_desc=task_desc,
+                    keywords=keywords,
+                    num_generations=num_generations,
+                    population_size=population_size,
+                    elitism_count=elitism_count,
+                    execution_mode=execution_mode,
+                    initial_prompt_str=initial_prompt_str,
+                    agent_settings_override=agent_settings_override,
+                    llm_settings_override=llm_settings_override,
+                    return_best=True
+                )
+
+                if best_chromosome:
+                    logger.info("CLI: Genetic Algorithm completed successfully.")
+                    logger.info(f"Best prompt fitness: {best_chromosome.fitness_score}")
+                    # logger.debug(f"Best prompt content: {best_chromosome.to_prompt_string()}") # Potentially very long
+
+                    if args.output_file:
+                        try:
+                            with open(args.output_file, 'w') as f:
+                                f.write(best_chromosome.to_prompt_string())
+                            logger.info(f"Best prompt saved to: {args.output_file}")
+                        except IOError as e:
+                            logger.error(f"Error writing best prompt to file {args.output_file}: {e}")
+                            print(f"Error: Could not write to output file: {args.output_file}", file=sys.stderr)
+                    else:
+                        # If no output file, print a concise version or just fitness
+                        print(f"Best prompt fitness: {best_chromosome.fitness_score}")
+                        # Optionally print the prompt if it's not too long or provide a way to view it
+                        # print(f"Best prompt: {best_chromosome.to_prompt_string()[:200]}...")
+
+
+                else:
+                    logger.info("CLI: Genetic Algorithm completed, but no best prompt was found.")
+                    print("\nCLI: Genetic Algorithm completed, but no best prompt was found.")
 
             except openai.RateLimitError as rle:
                 print(f"CLI: CRITICAL ERROR - OpenAI Rate Limit Exceeded: {rle}", file=sys.stderr)
