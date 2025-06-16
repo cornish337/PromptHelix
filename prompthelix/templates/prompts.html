@@ -2,22 +2,31 @@
 {% extends "base.html" %}
 
 {% block content %}
+
+{% if request.query_params.get('message') %}
+    <div class="{% if request.query_params.get('error') %}error-message{% else %}success-message{% endif %}">
+        {{ request.query_params.get('message') }}
+    </div>
+{% endif %}
+
 <h1>Available Prompts</h1>
 <p>
-    <a href="#">Create New Prompt</a> <!-- Placeholder URL -->
+    <a href="{{ url_for('create_prompt_ui_form') }}" class="button">Create New Prompt</a>
 </p>
-<ul>
+<ul style="list-style: none; padding: 0;"> {# Remove default list styling as cards will provide structure #}
     {% for prompt in prompts %}
-    <li>
-        <h2><a href="{{ url_for('view_prompt_ui', prompt_id=prompt.id) }}">{{ prompt.name }}</a></h2>
-        {% if prompt.description %}
-        <p>{{ prompt.description }}</p>
-        {% endif %}
-        <p><small>Created: {{ prompt.created_at.strftime('%Y-%m-%d %H:%M') }}</small></p>
-        <p><small>Versions: {{ prompt.versions | length }}</small></p>
+    <li style="background-color: transparent; border: none; padding: 0; margin-bottom: 10px;"> {# Override general li styles from base.css if any linger, card provides styling #}
+        <div class="card">
+            <h2><a href="{{ url_for('view_prompt_ui', prompt_id=prompt.id) }}">{{ prompt.name }}</a></h2>
+            {% if prompt.description %}
+            <p>{{ prompt.description }}</p>
+            {% endif %}
+            <p><small>Created: {{ prompt.created_at.strftime('%Y-%m-%d %H:%M') }}</small></p>
+            <p><small>Versions: {{ prompt.versions | length }}</small></p>
+        </div>
     </li>
     {% else %}
-    <li>No prompts available yet.</li>
+    <li class="card">No prompts available yet.</li> {# Apply card style to this message too #}
     {% endfor %}
 </ul>
 {% endblock %}

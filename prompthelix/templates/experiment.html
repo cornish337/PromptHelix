@@ -9,45 +9,39 @@
 
 <form method="POST" action="{{ url_for('run_experiment_ui_submit') }}">
     <div>
-        <label for="task_description">Task Description:</label><br>
+        <label for="task_description">Task Description:</label>
         <textarea id="task_description" name="task_description" rows="5" required>{{ form_data.task_description if form_data else '' }}</textarea>
     </div>
-    <br>
     <div>
-        <label for="keywords">Keywords (comma-separated):</label><br>
+        <label for="keywords">Keywords (comma-separated):</label>
         <input type="text" id="keywords" name="keywords" value="{{ form_data.keywords if form_data else '' }}">
     </div>
-    <br>
     <div>
-        <label for="execution_mode">Execution Mode:</label><br>
+        <label for="execution_mode">Execution Mode:</label>
         <select id="execution_mode" name="execution_mode">
             <option value="REAL" {% if form_data and form_data.execution_mode == "REAL" %}selected{% endif %}>Real Mode (Use actual LLMs)</option>
             <option value="TEST" {% if form_data and form_data.execution_mode == "TEST" %}selected{% endif %}>Test Mode (Use dummy data)</option>
         </select>
     </div>
-    <br>
     <fieldset>
         <legend>Genetic Algorithm Parameters</legend>
         <div>
             <label for="num_generations">Number of Generations:</label>
             <input type="number" id="num_generations" name="num_generations" value="{{ form_data.num_generations if form_data else 10 }}" min="1">
         </div>
-        <br>
         <div>
             <label for="population_size">Population Size:</label>
             <input type="number" id="population_size" name="population_size" value="{{ form_data.population_size if form_data else 20 }}" min="2">
         </div>
-        <br>
         <div>
             <label for="elitism_count">Elitism Count (how many top individuals survive directly):</label>
             <input type="number" id="elitism_count" name="elitism_count" value="{{ form_data.elitism_count if form_data else 2 }}" min="0">
         </div>
     </fieldset>
-    <br>
     <fieldset>
         <legend>Output Prompt Association (Optional)</legend>
         <div>
-            <label for="parent_prompt_id">Existing Parent Prompt ID (optional):</label><br>
+            <label for="parent_prompt_id">Existing Parent Prompt ID (optional):</label>
             <select id="parent_prompt_id" name="parent_prompt_id">
                 <option value="">None (Create New Prompt)</option>
                 {% for p in available_prompts %}
@@ -55,30 +49,21 @@
                 {% endfor %}
             </select>
         </div>
-        <br>
         <p><em>If no Parent Prompt ID is selected, a new prompt will be created. You can specify its name and description below:</em></p>
         <div>
-            <label for="prompt_name">New Prompt Name (if not using Parent ID):</label><br>
+            <label for="prompt_name">New Prompt Name (if not using Parent ID):</label>
             <input type="text" id="prompt_name" name="prompt_name" value="{{ form_data.prompt_name if form_data else '' }}">
         </div>
-        <br>
         <div>
-            <label for="prompt_description">New Prompt Description (if not using Parent ID):</label><br>
+            <label for="prompt_description">New Prompt Description (if not using Parent ID):</label>
             <textarea id="prompt_description" name="prompt_description" rows="3">{{ form_data.prompt_description if form_data else '' }}</textarea>
         </div>
     </fieldset>
-    <br>
     <div>
         <button type="submit">Run Experiment</button>
+        <a href="{{ url_for('list_prompts_ui') }}" class="btn-secondary" style="margin-left: 10px;">Cancel</a>
     </div>
 </form>
 
-<!-- Area to display results if needed, though current plan is to redirect -->
-{% if result %}
-    <h2>Experiment Result</h2>
-    <p>Best prompt version created successfully!</p>
-    <p><a href="{{ url_for('view_prompt_ui', prompt_id=result.prompt_id) }}?new_version_id={{ result.id }}">View the new prompt version</a></p>
-{% endif %}
-
-<p><a href="{{ url_for('list_prompts_ui') }}">Cancel and return to Prompts List</a></p>
+{# Removed the result block and the paragraph-wrapped cancel link #}
 {% endblock %}

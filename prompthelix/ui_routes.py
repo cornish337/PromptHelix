@@ -95,7 +95,8 @@ async def create_prompt_ui_submit(
 
     # Redirect to the new prompt's detail page
     # Use request.url_for to get the URL for the named route
-    redirect_url = request.url_for('view_prompt_ui', prompt_id=db_prompt.id)
+    message = f"Prompt '{db_prompt.name}' created successfully."
+    redirect_url = request.url_for('view_prompt_ui', prompt_id=db_prompt.id) + f"?message={message}"
     return RedirectResponse(url=redirect_url, status_code=303)
 
 
@@ -147,8 +148,9 @@ async def run_experiment_ui_submit(
             created_version = schemas.PromptVersion(**returned_prompt_version_data)
 
             # Redirect to the prompt detail page, highlighting the new version
+            message = f"New version (ID: {created_version.id}) created successfully from experiment."
             redirect_url = request.url_for('view_prompt_ui', prompt_id=created_version.prompt_id)
-            redirect_url += f"?new_version_id={created_version.id}" # Pass as query param
+            redirect_url += f"?new_version_id={created_version.id}&message={message}" # Pass as query param
             return RedirectResponse(url=redirect_url, status_code=303)
 
         except httpx.HTTPStatusError as e:
