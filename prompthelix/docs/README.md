@@ -45,6 +45,37 @@ python -m unittest discover -s prompthelix/tests/unit
 ```
 (Further details on test execution and integration tests will be added as the project matures.)
 
+### LLM Connectivity Test
+
+A utility script `prompthelix/tests/test_llm_connectivity.py` is provided to test connectivity to a specified Large Language Model (LLM) provider and model. This script helps ensure that your environment is correctly configured and that the LLM services are accessible.
+
+**Running the Script:**
+
+You can run the script from the command line using Python:
+
+```bash
+python prompthelix/tests/test_llm_connectivity.py [options]
+```
+
+**Command-Line Arguments:**
+
+-   `--provider`: Specifies the LLM provider.
+    -   Default: `openai`
+    -   Example: `openai`, `claude`
+-   `--model`: Specifies the model name for the chosen provider.
+    -   Default: `gpt-3.5-turbo`
+    -   Example: `gpt-3.5-turbo`, `claude-2`
+
+**Usage Examples:**
+
+```bash
+python prompthelix/tests/test_llm_connectivity.py --provider openai --model gpt-3.5-turbo
+```
+
+```bash
+python prompthelix/tests/test_llm_connectivity.py --provider claude --model claude-2
+```
+
 ## Genetic Algorithm Engine
 
 PromptHelix employs a Genetic Algorithm (GA) to iteratively evolve and optimize prompts. This engine uses concepts like selection, crossover, and mutation to refine a population of prompts over generations, aiming to enhance their effectiveness based on defined fitness criteria. The GA is designed to interact with various specialized agents for tasks like initial prompt creation, fitness evaluation (based on LLM output simulation), and potentially for more advanced "smart" mutations.
