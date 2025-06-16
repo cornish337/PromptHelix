@@ -17,14 +17,11 @@ from openai import (
     AuthenticationError as OpenAIAuthenticationError,
     APIConnectionError as OpenAIAPIConnectionError,
 )
-
-# The InvalidRequestError was renamed to BadRequestError in newer versions of
-# the OpenAI SDK. Try the new name first and fall back to the old one so the
-# code works with both old and new SDK releases.
-try:  # pragma: no cover - import resolution depends on installed SDK version
+try:  # pragma: no cover – support both old and new OpenAI SDKs
     from openai import InvalidRequestError as OpenAIInvalidRequestError
-except Exception:  # pragma: no cover - executed when InvalidRequestError is missing
+except ImportError:  # pragma: no cover
     from openai import BadRequestError as OpenAIInvalidRequestError
+
 
 import anthropic
 # Renamed Anthropic client import to avoid conflict with the error type

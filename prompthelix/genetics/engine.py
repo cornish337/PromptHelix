@@ -290,26 +290,74 @@ class FitnessEvaluator:
         from prompthelix.agents.results_evaluator import ResultsEvaluatorAgent
         if not isinstance(results_evaluator_agent, ResultsEvaluatorAgent):
             raise TypeError("results_evaluator_agent must be an instance of ResultsEvaluatorAgent.")
-        self.results_evaluator_agent = results_evaluator_agent
-        self.execution_mode = execution_mode # Stored instance attribute
-        self.openai_client = None  # Initialize to None
 
-        if not settings.OPENAI_API_KEY and self.execution_mode == ExecutionMode.REAL: # Check only if in REAL mode
-            logger.error("OPENAI_API_KEY not found in settings. FitnessEvaluator will not be able to make LLM calls in REAL mode.")
-            # The print warning can be removed or kept for immediate console feedback if desired.
-            # print("Warning: OPENAI_API_KEY not found in settings. FitnessEvaluator may not function correctly.")
-        elif self.execution_mode == ExecutionMode.REAL: # Only init client if REAL mode and key might be present
-            try:
-                self.openai_client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
-                logger.info("OpenAI client initialized successfully for REAL mode.")
-            except Exception as e: # Catch a broader exception during client initialization
-                logger.error(f"Error initializing OpenAI client for REAL mode: {e}", exc_info=True)
-                # Depending on the desired behavior, either raise an error or ensure client remains None
-                # and is handled in _call_llm_api
-                # For robustness, we'll let it remain None and _call_llm_api will handle it.
-                # raise RuntimeError(f"Failed to initialize OpenAI client: {e}") # Or re-raise
+        self.results_evaluator_agent = results_evaluator_agent # Stored for main process
+        self.execution_mode = execution_mode
+
+        # Store info for re-instantiation in subprocesses
+        self.results_evaluator_agent_class = results_evaluator_agent.__class__
+        self.results_evaluator_agent_knowledge_file = getattr(results_evaluator_agent, 'knowledge_file_path', None)
+        # No longer storing provider/model here, agent's __init__ handles it.
+
+        self.openai_client = None
+        if self.execution_mode == ExecutionMode.REAL:
+            if settings.OPENAI_API_KEY:
+                try:
+                    self.openai_client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
+                    logger.info("FitnessEvaluator: OpenAI client initialized successfully for REAL mode in main process.")
+                except Exception as e:
+                    logger.error(f"FitnessEvaluator: Error initializing OpenAI client in main process: {e}", exc_info=True)
+                    self.openai_client = None # Ensure it's None if init fails
+            else:
+                logger.error("FitnessEvaluator: OPENAI_API_KEY not found in settings. LLM calls in REAL mode will fail.")
         else: # TEST mode
-            logger.info("FitnessEvaluator initialized in TEST mode. LLM calls will be skipped.")
+            logger.info("FitnessEvaluator: Initialized in TEST mode. LLM calls will be skipped by _call_llm_api.")
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        # Remove attributes that cannot or should not be pickled
+        if 'results_evaluator_agent' in state:
+            del state['results_evaluator_agent']
+        if 'openai_client' in state:
+            del state['openai_client']
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+
+        # Re-initialize results_evaluator_agent
+        # Logger should be available as it's a module-level global
+        if hasattr(self, 'results_evaluator_agent_class') and self.results_evaluator_agent_class:
+            try:
+                self.results_evaluator_agent = self.results_evaluator_agent_class(
+                    message_bus=None, # Message bus not strictly needed for evaluation logic
+                    knowledge_file_path=self.results_evaluator_agent_knowledge_file
+                )
+                self.results_evaluator_agent.db = None # Ensure db is None in subprocess
+                logger.info("FitnessEvaluator (subprocess): ResultsEvaluatorAgent re-initialized.")
+            except Exception as e:
+                logger.error(f"FitnessEvaluator (subprocess): Failed to re-initialize ResultsEvaluatorAgent: {e}", exc_info=True)
+                # Consider how to handle this; perhaps a dummy agent or raise error
+                self.results_evaluator_agent = None # Ensure it's None if re-init fails
+        else:
+            logger.error("FitnessEvaluator (subprocess): results_evaluator_agent_class not found in state. Cannot re-initialize agent.")
+            self.results_evaluator_agent = None
+
+
+        # Re-initialize openai_client
+        self.openai_client = None
+        if self.execution_mode == ExecutionMode.REAL:
+            if settings.OPENAI_API_KEY:
+                try:
+                    self.openai_client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
+                    logger.info("FitnessEvaluator (subprocess): OpenAI client re-initialized for REAL mode.")
+                except Exception as e:
+                    logger.error(f"FitnessEvaluator (subprocess): Error re-initializing OpenAI client for REAL mode: {e}", exc_info=True)
+                    self.openai_client = None # Client remains None, _call_llm_api will handle it.
+            else:
+                logger.warning("FitnessEvaluator (subprocess): OpenAI API key not found in settings. Cannot re-initialize client for REAL mode.")
+        else:
+            logger.info("FitnessEvaluator (subprocess): In TEST mode, LLM client not re-initialized.")
 
     def _call_llm_api(self, prompt_string: str, model_name: str = "gpt-3.5-turbo") -> str:
         """

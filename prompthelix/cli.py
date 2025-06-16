@@ -14,6 +14,7 @@ import openai # Added for openai.RateLimitError
 
 logger = logging.getLogger(__name__)
 
+
 def main_cli():
     """
     Main function for the PromptHelix CLI.
@@ -162,7 +163,9 @@ def main_cli():
                     # print(f"Best prompt content: {best_chromosome.to_prompt_string()}") # Could be very long
                 else:
                     print("\nCLI: Genetic Algorithm completed, but no best prompt was found.")
+
                     logger.info("GA finished with no best prompt")
+
             except openai.RateLimitError as rle:
                 print(f"CLI: CRITICAL ERROR - OpenAI Rate Limit Exceeded: {rle}", file=sys.stderr)
                 print("Your OpenAI account has hit its usage quota or rate limits. The Genetic Algorithm cannot proceed with LLM evaluations.", file=sys.stderr)
