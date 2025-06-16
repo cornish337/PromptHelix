@@ -6,14 +6,14 @@ from sqlalchemy import func
 from prompthelix.models.prompt_models import Prompt, PromptVersion
 # Assuming schemas.py will exist and define these Pydantic models
 from prompthelix.schemas import (
-    PromptCreateSchema,
-    PromptUpdateSchema,
-    PromptVersionCreateSchema,
-    PromptVersionUpdateSchema
+    PromptCreate,
+    PromptUpdate,
+    PromptVersionCreate,
+    PromptVersionUpdate
 )
 
 class PromptService:
-    def create_prompt(self, db: DbSession, prompt_create: PromptCreateSchema) -> Prompt:
+    def create_prompt(self, db: DbSession, prompt_create: PromptCreate) -> Prompt:
         """
         Creates a new prompt.
         """
@@ -38,7 +38,7 @@ class PromptService:
         """
         return db.query(Prompt).options(selectinload(Prompt.versions)).offset(skip).limit(limit).all()
 
-    def update_prompt(self, db: DbSession, prompt_id: int, prompt_update: PromptUpdateSchema) -> Optional[Prompt]:
+    def update_prompt(self, db: DbSession, prompt_id: int, prompt_update: PromptUpdate) -> Optional[Prompt]:
         """
         Updates a prompt's details (name, description).
         """
@@ -68,7 +68,7 @@ class PromptService:
             return db_prompt
         return None
 
-    def create_prompt_version(self, db: DbSession, prompt_id: int, version_create: PromptVersionCreateSchema) -> Optional[PromptVersion]:
+    def create_prompt_version(self, db: DbSession, prompt_id: int, version_create: PromptVersionCreate) -> Optional[PromptVersion]:
         """
         Creates a new version for a prompt.
         It automatically determines the next version_number.
@@ -105,7 +105,7 @@ class PromptService:
         """
         return db.query(PromptVersion).filter(PromptVersion.prompt_id == prompt_id).order_by(PromptVersion.version_number).offset(skip).limit(limit).all()
 
-    def update_prompt_version(self, db: DbSession, prompt_version_id: int, version_update: PromptVersionUpdateSchema) -> Optional[PromptVersion]:
+    def update_prompt_version(self, db: DbSession, prompt_version_id: int, version_update: PromptVersionUpdate) -> Optional[PromptVersion]:
         """
         Updates a prompt version's content or other fields.
         """
