@@ -50,7 +50,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: DbSession = 
     return user
 
 # --- User Management Routes ---
-@router.post("/users/", response_model=schemas.User, status_code=status.HTTP_201_CREATED, tags=["Users"])
+@router.post("/users/", response_model=schemas.User, status_code=status.HTTP_201_CREATED, tags=["Users"], summary="Create a new user", description="Registers a new user in the system.")
 def create_user_route(user_data: schemas.UserCreate, db: DbSession = Depends(get_db)):
     existing_user = user_service.get_user_by_username(db, username=user_data.username)
     if existing_user:
@@ -63,7 +63,7 @@ def create_user_route(user_data: schemas.UserCreate, db: DbSession = Depends(get
     except IntegrityError: # Should be caught by above checks, but as a safeguard
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Username or email already exists")
 
-@router.post("/auth/token", response_model=schemas.Token, tags=["Authentication"])
+@router.post("/auth/token", response_model=schemas.Token, tags=["Authentication"], summary="User login", description="Authenticates a user and returns an access token.")
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: DbSession = Depends(get_db)):
     user = user_service.get_user_by_username(db, username=form_data.username)
     if not user or not user_service.verify_password(form_data.password, user.hashed_password):
@@ -80,7 +80,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     )
     return {"access_token": session.session_token, "token_type": "bearer"}
 
-@router.post("/auth/logout", tags=["Authentication"])
+@router.post("/auth/logout", tags=["Authentication"], summary="User logout", description="Logs out the current user by invalidating their session token.")
 async def logout(current_user: UserModel = Depends(get_current_user), token: str = Depends(oauth2_scheme), db: DbSession = Depends(get_db)):
     # The token is implicitly the one used by get_current_user
     deleted = user_service.delete_session(db=db, session_token=token)
@@ -91,12 +91,12 @@ async def logout(current_user: UserModel = Depends(get_current_user), token: str
     raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not log out")
 
 
-@router.get("/users/me", response_model=schemas.User, tags=["Users"])
+@router.get("/users/me", response_model=schemas.User, tags=["Users"], summary="Get current user", description="Retrieves the details of the currently authenticated user.")
 async def read_users_me(current_user: UserModel = Depends(get_current_user)):
     return current_user
 
 # --- Prompt Routes (Verified, using CRUD layer which delegates to PromptService) ---
-@router.post("/api/prompts", response_model=schemas.Prompt, tags=["Prompts"])
+@router.post("/api/prompts", response_model=schemas.Prompt, tags=["Prompts"], summary="Create a new prompt", description="Creates a new prompt for the authenticated user.")
 def create_prompt_route(
     prompt: schemas.PromptCreate,
     db: DbSession = Depends(get_db),
@@ -104,19 +104,19 @@ def create_prompt_route(
 ):
     return crud.create_prompt(db=db, prompt=prompt, owner_id=current_user.id)
 
-@router.get("/api/prompts", response_model=List[schemas.Prompt], tags=["Prompts"])
+@router.get("/api/prompts", response_model=List[schemas.Prompt], tags=["Prompts"], summary="List all prompts", description="Retrieves a list of all prompts, with optional pagination.")
 def read_prompts_route(skip: int = 0, limit: int = 100, db: DbSession = Depends(get_db)):
     prompts = crud.get_prompts(db, skip=skip, limit=limit)
     return prompts
 
-@router.get("/api/prompts/{prompt_id}", response_model=schemas.Prompt, tags=["Prompts"])
+@router.get("/api/prompts/{prompt_id}", response_model=schemas.Prompt, tags=["Prompts"], summary="Get a specific prompt", description="Retrieves a single prompt by its ID.")
 def read_prompt_route(prompt_id: int, db: DbSession = Depends(get_db)):
     db_prompt = crud.get_prompt(db, prompt_id=prompt_id)
     if db_prompt is None:
         raise HTTPException(status_code=404, detail="Prompt not found")
     return db_prompt
 
-@router.put("/api/prompts/{prompt_id}", response_model=schemas.Prompt, tags=["Prompts"])
+@router.put("/api/prompts/{prompt_id}", response_model=schemas.Prompt, tags=["Prompts"], summary="Update a prompt", description="Updates an existing prompt by its ID. User must be the owner.")
 def update_prompt_route(prompt_id: int, prompt_update_data: schemas.PromptUpdate, db: DbSession = Depends(get_db), current_user: UserModel = Depends(get_current_user)):
     db_prompt_existing = crud.get_prompt(db, prompt_id=prompt_id)
     if db_prompt_existing is None:
@@ -126,7 +126,7 @@ def update_prompt_route(prompt_id: int, prompt_update_data: schemas.PromptUpdate
     db_prompt = crud.update_prompt(db, prompt_id=prompt_id, prompt_update=prompt_update_data)
     return db_prompt
 
-@router.delete("/api/prompts/{prompt_id}", response_model=schemas.Prompt, tags=["Prompts"])
+@router.delete("/api/prompts/{prompt_id}", response_model=schemas.Prompt, tags=["Prompts"], summary="Delete a prompt", description="Deletes a prompt by its ID. User must be the owner.")
 def delete_prompt_route(prompt_id: int, db: DbSession = Depends(get_db), current_user: UserModel = Depends(get_current_user)):
     db_prompt_existing = crud.get_prompt(db, prompt_id=prompt_id)
     if db_prompt_existing is None:
@@ -137,7 +137,7 @@ def delete_prompt_route(prompt_id: int, db: DbSession = Depends(get_db), current
     return db_prompt
 
 # --- PromptVersion Routes ---
-@router.post("/api/prompts/{prompt_id}/versions", response_model=schemas.PromptVersion, tags=["Prompt Versions"])
+@router.post("/api/prompts/{prompt_id}/versions", response_model=schemas.PromptVersion, tags=["Prompt Versions"], summary="Create a new prompt version", description="Creates a new version for a specific prompt. User must be owner of the parent prompt or have appropriate permissions.")
 def create_prompt_version_route(prompt_id: int, version: schemas.PromptVersionCreate, db: DbSession = Depends(get_db), current_user: UserModel = Depends(get_current_user)):
     # TODO: Check if current_user can add versions to this prompt
     db_prompt_check = crud.get_prompt(db, prompt_id=prompt_id) # Check prompt exists
@@ -148,19 +148,19 @@ def create_prompt_version_route(prompt_id: int, version: schemas.PromptVersionCr
         raise HTTPException(status_code=500, detail="Could not create prompt version")
     return created_version
 
-@router.get("/api/prompt_versions/{version_id}", response_model=schemas.PromptVersion, tags=["Prompt Versions"])
+@router.get("/api/prompt_versions/{version_id}", response_model=schemas.PromptVersion, tags=["Prompt Versions"], summary="Get a specific prompt version", description="Retrieves a single prompt version by its ID.")
 def get_prompt_version_route(version_id: int, db: DbSession = Depends(get_db)):
     db_version = crud.get_prompt_version(db, prompt_version_id=version_id)
     if db_version is None:
         raise HTTPException(status_code=404, detail="Prompt version not found")
     return db_version
 
-@router.get("/api/prompts/{prompt_id}/versions", response_model=List[schemas.PromptVersion], tags=["Prompt Versions"])
+@router.get("/api/prompts/{prompt_id}/versions", response_model=List[schemas.PromptVersion], tags=["Prompt Versions"], summary="List versions for a prompt", description="Retrieves all versions associated with a specific prompt ID, with optional pagination.")
 def get_versions_for_prompt_route(prompt_id: int, skip: int = 0, limit: int = 100, db: DbSession = Depends(get_db)):
     versions = crud.get_prompt_versions_for_prompt(db, prompt_id=prompt_id, skip=skip, limit=limit)
     return versions
 
-@router.put("/api/prompt_versions/{version_id}", response_model=schemas.PromptVersion, tags=["Prompt Versions"])
+@router.put("/api/prompt_versions/{version_id}", response_model=schemas.PromptVersion, tags=["Prompt Versions"], summary="Update a prompt version", description="Updates an existing prompt version by its ID. User must have appropriate permissions (e.g., owner of parent prompt).")
 def update_prompt_version_route(version_id: int, version_update_data: schemas.PromptVersionUpdate, db: DbSession = Depends(get_db), current_user: UserModel = Depends(get_current_user)):
     # TODO: Check ownership/permissions
     updated_version = crud.update_prompt_version(db, prompt_version_id=version_id, version_update=version_update_data)
@@ -168,7 +168,7 @@ def update_prompt_version_route(version_id: int, version_update_data: schemas.Pr
         raise HTTPException(status_code=404, detail="Prompt version not found")
     return updated_version
 
-@router.delete("/api/prompt_versions/{version_id}", response_model=schemas.PromptVersion, tags=["Prompt Versions"])
+@router.delete("/api/prompt_versions/{version_id}", response_model=schemas.PromptVersion, tags=["Prompt Versions"], summary="Delete a prompt version", description="Deletes a prompt version by its ID. User must have appropriate permissions (e.g., owner of parent prompt).")
 def delete_prompt_version_route(version_id: int, db: DbSession = Depends(get_db), current_user: UserModel = Depends(get_current_user)):
     # TODO: Check ownership/permissions
     deleted_version = crud.delete_prompt_version(db, prompt_version_id=version_id)
@@ -177,7 +177,7 @@ def delete_prompt_version_route(version_id: int, db: DbSession = Depends(get_db)
     return deleted_version
 
 # --- Performance Metrics Routes ---
-@router.post("/api/performance_metrics/", response_model=schemas.PerformanceMetric, status_code=status.HTTP_201_CREATED, tags=["Performance Metrics"])
+@router.post("/api/performance_metrics/", response_model=schemas.PerformanceMetric, status_code=status.HTTP_201_CREATED, tags=["Performance Metrics"], summary="Record a performance metric", description="Records a new performance metric for a specific prompt version. User should have permissions to submit metrics for the version.")
 def create_performance_metric_route(metric_data: schemas.PerformanceMetricCreate, db: DbSession = Depends(get_db), current_user: UserModel = Depends(get_current_user)):
     # TODO: Authorization: Ensure user can submit metrics for this prompt_version_id
     # Check if prompt version exists
@@ -186,7 +186,7 @@ def create_performance_metric_route(metric_data: schemas.PerformanceMetricCreate
         raise HTTPException(status_code=404, detail=f"PromptVersion with id {metric_data.prompt_version_id} not found.")
     return performance_service.record_performance_metric(db=db, metric_create=metric_data)
 
-@router.get("/api/prompt_versions/{prompt_version_id}/performance_metrics/", response_model=List[schemas.PerformanceMetric], tags=["Performance Metrics"])
+@router.get("/api/prompt_versions/{prompt_version_id}/performance_metrics/", response_model=List[schemas.PerformanceMetric], tags=["Performance Metrics"], summary="Get performance metrics for a version", description="Retrieves all performance metrics recorded for a specific prompt version.")
 def get_metrics_for_version_route(prompt_version_id: int, db: DbSession = Depends(get_db)):
     # Check if prompt version exists
     prompt_version = crud.get_prompt_version(db, prompt_version_id=prompt_version_id)
@@ -195,7 +195,7 @@ def get_metrics_for_version_route(prompt_version_id: int, db: DbSession = Depend
     return performance_service.get_metrics_for_prompt_version(db=db, prompt_version_id=prompt_version_id)
 
 # --- GA Experiment Route (Verified, using CRUD layer) ---
-@router.post("/api/experiments/run-ga", response_model=schemas.PromptVersion, name="api_run_ga_experiment", tags=["Experiments"])
+@router.post("/api/experiments/run-ga", response_model=schemas.PromptVersion, name="api_run_ga_experiment", tags=["Experiments"], summary="Run a Genetic Algorithm experiment", description="Executes a Genetic Algorithm to generate and optimize a prompt based on the provided parameters. The best resulting prompt is saved as a new version under a specified or new prompt.")
 def run_ga_experiment_route(params: schemas.GAExperimentParams, db: DbSession = Depends(get_db), current_user: UserModel = Depends(get_current_user)):
     # ... (existing GA logic from file, ensuring it calls new crud methods)
     best_chromosome = main_ga_loop(
@@ -239,9 +239,11 @@ def run_ga_experiment_route(params: schemas.GAExperimentParams, db: DbSession = 
     return created_version
 
 # --- LLM Utility Routes (Verified, using CRUD layer for stats) ---
-@router.post("/api/llm/test_prompt", response_model=schemas.LLMTestResponse, name="test_llm_prompt", tags=["LLM Utilities"])
+
+@router.post("/api/llm/test_prompt", response_model=schemas.LLMTestResponse, name="test_llm_prompt", tags=["LLM Utilities"], summary="Test a prompt with an LLM", description="Sends a given prompt text to a specified LLM service and returns the response. Increments usage statistics for the LLM service.")
 #async def test_llm_prompt_route(request_data: schemas.LLMTestRequest, db: DbSession = Depends(get_db), current_user: UserModel = Depends(get_current_user)):
 async def test_llm_prompt_route(request_data: schemas.LLMTestRequest, db: DbSession = Depends(get_db)):
+
     try:
         response_text = llm_utils.call_llm_api(
             prompt=request_data.prompt_text, provider=request_data.llm_service, db=db
@@ -257,11 +259,11 @@ async def test_llm_prompt_route(request_data: schemas.LLMTestRequest, db: DbSess
         print(f"Unexpected error in test_llm_prompt_route: {e}")
         raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
 
-@router.get("/api/llm/statistics", response_model=List[schemas.LLMStatistic], name="get_llm_statistics", tags=["LLM Utilities"])
+@router.get("/api/llm/statistics", response_model=List[schemas.LLMStatistic], name="get_llm_statistics", tags=["LLM Utilities"], summary="Get LLM usage statistics", description="Retrieves statistics on the usage of different LLM services, such as call counts.")
 async def get_llm_statistics_route(db: DbSession = Depends(get_db)):
     return crud.get_all_llm_statistics(db=db)
 
-@router.get("/api/llm/available", response_model=List[str], name="get_available_llms", tags=["LLM Utilities"])
+@router.get("/api/llm/available", response_model=List[str], name="get_available_llms", tags=["LLM Utilities"], summary="List available LLM services", description="Returns a list of LLM service names that are configured and available for use in the system.")
 async def get_available_llms_route(db: DbSession = Depends(get_db)):
     try:
         return llm_utils.list_available_llms(db=db)
