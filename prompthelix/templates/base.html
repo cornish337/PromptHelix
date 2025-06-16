@@ -12,6 +12,7 @@
         <a href="{{ url_for('list_prompts_ui') }}">All Prompts</a>
         <a href="{{ url_for('create_prompt_ui_form') }}">Create New Prompt</a>
         <a href="{{ url_for('run_experiment_ui_form') }}">Run New Experiment</a>
+        <a href="{{ request.url_for('llm_playground_ui') }}">LLM Playground</a>
         <a href="{{ url_for('view_settings_ui') }}">Settings</a>
         <!-- Add other navigation links here -->
     </nav>
