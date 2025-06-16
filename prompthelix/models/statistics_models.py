@@ -1,15 +1,22 @@
-from sqlalchemy import Column, Integer, String
+from sqlalchemy import Column, Integer, String, DateTime, UniqueConstraint
+from datetime import datetime
+
 
 from prompthelix.models.base import Base
 
 class LLMUsageStatistic(Base):
-    """Tracks how often a particular LLM service is used."""
+    """Tracks how many times each LLM provider is used."""
 
     __tablename__ = "llm_usage_statistics"
-
     id = Column(Integer, primary_key=True, autoincrement=True)
-    llm_service = Column(String, unique=True, index=True, nullable=False)
-    request_count = Column(Integer, nullable=False, default=0)
+    llm_service = Column(String, nullable=False, unique=True, index=True)
+    request_count = Column(Integer, default=0, nullable=False)
+    last_used_at = Column(DateTime, default=datetime.utcnow)
 
-    def __repr__(self) -> str:  # pragma: no cover - simple representation
-        return f"<LLMUsageStatistic(service='{self.llm_service}', count={self.request_count})>"
+    __table_args__ = (
+        UniqueConstraint("llm_service", name="uq_llm_usage_service"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<LLMUsageStatistic(service={self.llm_service}, count={self.request_count})>"
+
