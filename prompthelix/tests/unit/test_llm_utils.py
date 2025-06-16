@@ -4,7 +4,18 @@ import re # Import re for escaping
 
 from prompthelix.utils import llm_utils
 
-from openai import OpenAIError, APIError as OpenAPIApiError, RateLimitError as OpenAIRateLimitError, AuthenticationError as OpenAIAuthenticationError, APIConnectionError as OpenAIAPIConnectionError, InvalidRequestError as OpenAIInvalidRequestError
+from openai import (
+    OpenAIError,
+    APIError as OpenAPIApiError,
+    RateLimitError as OpenAIRateLimitError,
+    AuthenticationError as OpenAIAuthenticationError,
+    APIConnectionError as OpenAIAPIConnectionError,
+)
+
+try:  # pragma: no cover - depends on installed OpenAI SDK
+    from openai import InvalidRequestError as OpenAIInvalidRequestError
+except Exception:  # pragma: no cover
+    from openai import BadRequestError as OpenAIInvalidRequestError
 from anthropic import AnthropicError, APIError as AnthropicAPIError, RateLimitError as AnthropicRateLimitError, AuthenticationError as AnthropicAuthenticationError, APIStatusError as AnthropicAPIStatusError, APIConnectionError as AnthropicAPIConnectionError
 from google.api_core import exceptions as google_exceptions
 
@@ -76,8 +87,8 @@ def test_call_llm_api_unsupported_provider(sample_prompt_text, db_session):
 @pytest.mark.parametrize("openai_exception, expected_error_string", [
     (OpenAIRateLimitError("rate limit", response=MagicMock(), body=None), "RATE_LIMIT_ERROR"),
     (OpenAIAuthenticationError("auth error", response=MagicMock(), body=None), "AUTHENTICATION_ERROR"),
-    (OpenAIAPIConnectionError("conn error", request=MagicMock()), "API_CONNECTION_ERROR"),
-    (OpenAIInvalidRequestError("invalid req", "param", body=None), "INVALID_REQUEST_ERROR"),
+    (OpenAIAPIConnectionError(message="conn error", request=MagicMock()), "API_CONNECTION_ERROR"),
+    (OpenAIInvalidRequestError(message="invalid req", response=MagicMock(), body=None), "INVALID_REQUEST_ERROR"),
     (OpenAPIApiError("api error", request=MagicMock(), body=None), "API_ERROR"),
     (OpenAIError("generic openai error"), "OPENAI_ERROR"),
     (Exception("unexpected"), "UNEXPECTED_OPENAI_CALL_ERROR"),
@@ -94,11 +105,11 @@ def test_call_openai_api_error_handling(mock_openai_client_constructor, mock_get
 @patch("prompthelix.utils.llm_utils.get_anthropic_api_key", return_value="fake_key")
 @patch("prompthelix.utils.llm_utils.AnthropicClient") # Mock the aliased client
 @pytest.mark.parametrize("anthropic_exception, expected_error_string", [
-    (AnthropicRateLimitError("rate limit", response=MagicMock()), "RATE_LIMIT_ERROR"),
-    (AnthropicAuthenticationError("auth error", response=MagicMock()), "AUTHENTICATION_ERROR"),
-    (AnthropicAPIStatusError("status error", response=MagicMock(status_code=500)), "API_STATUS_ERROR"),
-    (AnthropicAPIConnectionError("conn error", request=MagicMock()), "API_CONNECTION_ERROR"),
-    (AnthropicAPIError("api error", request=MagicMock()), "API_ERROR"),
+    (AnthropicRateLimitError("rate limit", response=MagicMock(), body=None), "RATE_LIMIT_ERROR"),
+    (AnthropicAuthenticationError("auth error", response=MagicMock(), body=None), "AUTHENTICATION_ERROR"),
+    (AnthropicAPIStatusError("status error", response=MagicMock(status_code=500), body=None), "API_STATUS_ERROR"),
+    (AnthropicAPIConnectionError(message="conn error", request=MagicMock()), "API_CONNECTION_ERROR"),
+    (AnthropicAPIError("api error", request=MagicMock(), body=None), "API_ERROR"),
     (AnthropicError("generic anthropic error"), "ANTHROPIC_ERROR"),
     (Exception("unexpected"), "UNEXPECTED_ANTHROPIC_CALL_ERROR"),
 ])
