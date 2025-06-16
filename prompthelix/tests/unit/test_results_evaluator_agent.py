@@ -8,7 +8,7 @@ class TestResultsEvaluatorAgent(unittest.TestCase):
 
     def setUp(self):
         """Instantiate the ResultsEvaluatorAgent for each test."""
-        self.evaluator = ResultsEvaluatorAgent()
+        self.evaluator = ResultsEvaluatorAgent(knowledge_file_path=None)
         self.test_prompt = PromptChromosome(genes=["Instruction: Test prompt"])
 
     def test_agent_creation(self):

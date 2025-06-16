@@ -53,7 +53,7 @@ class MessageBus:
         """
         if not all(key in message for key in ['sender_id', 'recipient_id', 'message_type', 'payload']):
             logger.error(f"Invalid message structure: {message}. Missing required keys.")
-            return
+            return {"status": "error", "error": "Invalid message structure, missing keys."}
 
         recipient_id = message.get('recipient_id')
         sender_id = message.get('sender_id')
@@ -65,16 +65,19 @@ class MessageBus:
 
         if recipient_agent:
             try:
-                # Assuming the agent has a 'receive_message' method
                 if hasattr(recipient_agent, 'receive_message') and callable(recipient_agent.receive_message):
-                    recipient_agent.receive_message(message)
-                    logger.info(f"Message dispatched and received by '{recipient_id}'.")
+                    response = recipient_agent.receive_message(message)
+                    logger.info(f"Message dispatched and received by '{recipient_id}'. Agent response: {response}")
+                    return response
                 else:
                     logger.error(f"Recipient agent '{recipient_id}' does not have a callable 'receive_message' method.")
+                    return {"status": "error", "error": f"Recipient agent '{recipient_id}' does not have a callable 'receive_message' method."}
             except Exception as e:
                 logger.error(f"Error delivering message to agent '{recipient_id}': {e}", exc_info=True)
+                return {"status": "error", "error": f"Error delivering message to agent '{recipient_id}': {str(e)}"}
         else:
             logger.warning(f"Recipient agent '{recipient_id}' not found in registry. Message from '{sender_id}' of type '{message_type}' could not be delivered.")
+            return {"status": "error", "error": f"Recipient agent '{recipient_id}' not found."}
 
 if __name__ == '__main__':
     # Example Usage (simple test within the file)
