@@ -1,5 +1,7 @@
 import uuid
 import copy
+import json
+import os
 import random
 from typing import TYPE_CHECKING
 import openai
@@ -376,11 +378,12 @@ class PopulationManager:
     through generations using genetic operators and fitness evaluation.
     """
 
-    def __init__(self, genetic_operators: GeneticOperators, 
-                 fitness_evaluator: FitnessEvaluator, 
+    def __init__(self, genetic_operators: GeneticOperators,
+                 fitness_evaluator: FitnessEvaluator,
                  prompt_architect_agent: 'PromptArchitectAgent',
-                 population_size: int = 50, 
-                 elitism_count: int = 2):
+                 population_size: int = 50,
+                 elitism_count: int = 2,
+                 population_path: str | None = None):
         """
         Initializes the PopulationManager.
 
@@ -391,6 +394,9 @@ class PopulationManager:
             population_size (int, optional): The desired size of the population. Defaults to 50.
             elitism_count (int, optional): The number of top individuals to carry over
                                            to the next generation without modification. Defaults to 2.
+            population_path (str | None, optional): Path to load/save population JSON.
+                If provided and the file exists, the population will be loaded
+                from this file on initialization.
         """
         if not isinstance(genetic_operators, GeneticOperators):
             raise TypeError("genetic_operators must be an instance of GeneticOperators.")
@@ -409,10 +415,14 @@ class PopulationManager:
         self.prompt_architect_agent = prompt_architect_agent
         self.population_size = population_size
         self.elitism_count = elitism_count
-        
+        self.population_path = population_path
+
 
         self.population: list[PromptChromosome] = []
         self.generation_number: int = 0
+
+        if self.population_path:
+            self.load_population(self.population_path)
 
     def initialize_population(self, initial_task_description: str, 
                               initial_keywords: list | None = None, 
@@ -551,3 +561,39 @@ class PopulationManager:
         # Ensure population is sorted by fitness in descending order
         self.population.sort(key=lambda chromo: chromo.fitness_score, reverse=True)
         return self.population[0]
+
+    def save_population(self, file_path: str) -> None:
+        """Save current population to a JSON file."""
+        data = {
+            "generation_number": self.generation_number,
+            "population": [
+                {"genes": c.genes, "fitness_score": c.fitness_score}
+                for c in self.population
+            ],
+        }
+        try:
+            with open(file_path, "w", encoding="utf-8") as fh:
+                json.dump(data, fh, indent=2)
+            print(f"PopulationManager: Population saved to {file_path}.")
+        except Exception as e:
+            logger.error(f"Error saving population to {file_path}: {e}")
+
+    def load_population(self, file_path: str) -> None:
+        """Load population from a JSON file if it exists."""
+        if not os.path.exists(file_path):
+            logger.info(f"PopulationManager: No population file at {file_path}; starting fresh.")
+            return
+        try:
+            with open(file_path, "r", encoding="utf-8") as fh:
+                data = json.load(fh)
+            individuals = data.get("population", [])
+            self.generation_number = data.get("generation_number", 0)
+            self.population = [
+                PromptChromosome(genes=item.get("genes", []),
+                                 fitness_score=item.get("fitness_score", 0.0))
+                for item in individuals
+            ]
+            self.population_size = len(self.population) or self.population_size
+            print(f"PopulationManager: Loaded {len(self.population)} individuals from {file_path}.")
+        except Exception as e:
+            logger.error(f"Error loading population from {file_path}: {e}")
