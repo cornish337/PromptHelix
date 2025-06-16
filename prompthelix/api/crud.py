@@ -1,9 +1,13 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from typing import Optional
+from typing import Optional, List # Ensure List and Optional are imported
 from prompthelix.models import Prompt, PromptVersion
 from prompthelix.models.settings_models import APIKey
+from prompthelix.models.statistics_models import LLMUsageStatistic # Import the new model
 from prompthelix.schemas import PromptCreate, PromptVersionCreate
+# Assuming schemas for APIKey will be created in a later step,
+# for now, create_or_update_api_key will just take strings.
+# We might need: from prompthelix import schemas
 # Assuming schemas for APIKey will be created in a later step,
 # for now, create_or_update_api_key will just take strings.
 # We might need: from prompthelix import schemas
@@ -58,6 +62,7 @@ def create_prompt_version(db: Session, version: PromptVersionCreate, prompt_id: 
     db.refresh(db_version)
     return db_version
 
+
 # Functions for APIKey
 
 def get_api_key(db: Session, service_name: str) -> Optional[APIKey]:
@@ -74,3 +79,36 @@ def create_or_update_api_key(db: Session, service_name: str, api_key_value: str)
     db.commit()
     db.refresh(db_api_key)
     return db_api_key
+
+
+# CRUD functions for LLMUsageStatistic
+
+def get_llm_statistic(db: Session, service_name: str) -> Optional[LLMUsageStatistic]:
+    """Retrieves an LLM usage statistic entry by service name."""
+    return db.query(LLMUsageStatistic).filter(LLMUsageStatistic.llm_service == service_name).first()
+
+def create_llm_statistic(db: Session, service_name: str) -> LLMUsageStatistic:
+    """Creates a new LLM usage statistic entry with count 0."""
+    db_statistic = LLMUsageStatistic(llm_service=service_name, request_count=0)
+    db.add(db_statistic)
+    db.commit()
+    db.refresh(db_statistic)
+    return db_statistic
+
+def increment_llm_statistic(db: Session, service_name: str) -> LLMUsageStatistic:
+    """Increments the request count for an LLM service.
+    Creates the entry if it doesn't exist."""
+    db_statistic = get_llm_statistic(db, service_name=service_name)
+    if db_statistic:
+        db_statistic.request_count += 1
+    else:
+        # If no statistic entry exists, create one with count 1
+        db_statistic = LLMUsageStatistic(llm_service=service_name, request_count=1)
+        db.add(db_statistic)
+    db.commit()
+    db.refresh(db_statistic)
+    return db_statistic
+
+def get_all_llm_statistics(db: Session) -> List[LLMUsageStatistic]:
+    """Retrieves all LLM usage statistic entries."""
+    return db.query(LLMUsageStatistic).order_by(LLMUsageStatistic.llm_service).all()
