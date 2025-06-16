@@ -1,0 +1,640 @@
+2025-06-16 00:54:44,905 - prompthelix.message_bus - INFO - MessageBus initialized.
+2025-06-16 00:54:44,905 - prompthelix.agents.architect - INFO - Agent 'PromptArchitect' initialized with LLM provider: openai and model: gpt-3.5-turbo
+2025-06-16 00:54:44,905 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator' initialized with LLM provider: openai, Evaluation model: gpt-4
+2025-06-16 00:54:44,905 - prompthelix.message_bus - INFO - Agent 'PromptArchitect' registered with the message bus.
+2025-06-16 00:54:44,905 - prompthelix.message_bus - INFO - Agent 'ResultsEvaluator' registered with the message bus.
+2025-06-16 00:54:44,905 - prompthelix.genetics.engine - INFO - FitnessEvaluator initialized in TEST mode. LLM calls will be skipped.
+2025-06-16 00:54:44,905 - prompthelix.agents.architect - INFO - Agent 'PromptArchitect' processing request: {'task_description': 'Generate a creative story about a space explorer.', 'keywords': ['space', 'adventure', 'discovery'], 'constraints': {}}
+2025-06-16 00:54:44,905 - prompthelix.utils.llm_utils - ERROR - OpenAI API key not configured in environment variables (OPENAI_API_KEY).
+2025-06-16 00:54:44,905 - prompthelix.agents.architect - ERROR - Agent 'PromptArchitect': Error calling LLM for parsing requirements: OpenAI API key not configured.
+Traceback (most recent call last):
+  File "/app/prompthelix/agents/architect.py", line 103, in _parse_requirements
+    response = call_llm_api(prompt, provider=self.llm_provider, model=self.llm_model)
+  File "/app/prompthelix/utils/llm_utils.py", line 56, in call_llm_api
+    return call_openai_api(prompt, model=model if model else "gpt-3.5-turbo")
+  File "/app/prompthelix/utils/llm_utils.py", line 16, in call_openai_api
+    raise ValueError("OpenAI API key not configured.")
+ValueError: OpenAI API key not configured.
+2025-06-16 00:54:44,906 - prompthelix.utils.llm_utils - ERROR - OpenAI API key not configured in environment variables (OPENAI_API_KEY).
+2025-06-16 00:54:44,906 - prompthelix.agents.architect - ERROR - Agent 'PromptArchitect': Error calling LLM for template selection: OpenAI API key not configured.
+Traceback (most recent call last):
+  File "/app/prompthelix/agents/architect.py", line 150, in _select_template
+    llm_response = call_llm_api(prompt, provider=self.llm_provider, model=self.llm_model)
+  File "/app/prompthelix/utils/llm_utils.py", line 56, in call_llm_api
+    return call_openai_api(prompt, model=model if model else "gpt-3.5-turbo")
+  File "/app/prompthelix/utils/llm_utils.py", line 16, in call_openai_api
+    raise ValueError("OpenAI API key not configured.")
+ValueError: OpenAI API key not configured.
+2025-06-16 00:54:44,906 - prompthelix.agents.architect - INFO - Agent 'PromptArchitect' - Fallback selected template: generic_v1
+2025-06-16 00:54:44,906 - prompthelix.utils.llm_utils - ERROR - OpenAI API key not configured in environment variables (OPENAI_API_KEY).
+2025-06-16 00:54:44,906 - prompthelix.agents.architect - ERROR - Agent 'PromptArchitect': Error calling LLM for gene population: OpenAI API key not configured.. Falling back to basic population.
+Traceback (most recent call last):
+  File "/app/prompthelix/agents/architect.py", line 218, in _populate_genes
+    llm_response = call_llm_api(prompt, provider=self.llm_provider, model=self.llm_model)
+  File "/app/prompthelix/utils/llm_utils.py", line 56, in call_llm_api
+    return call_openai_api(prompt, model=model if model else "gpt-3.5-turbo")
+  File "/app/prompthelix/utils/llm_utils.py", line 16, in call_openai_api
+    raise ValueError("OpenAI API key not configured.")
+ValueError: OpenAI API key not configured.
+2025-06-16 00:54:44,906 - prompthelix.agents.architect - INFO - Agent 'PromptArchitect' - Fallback populated genes: ['Perform the following task:', 'Context: Generate a creative story about a space explorer. Focus on: space, adventure, discovery', 'Output Format: As requested.']
+2025-06-16 00:54:44,906 - prompthelix.agents.architect - INFO - Agent 'PromptArchitect' - Created PromptChromosome: Chromosome ID: da26143b-10cf-4563-afcc-8a0a258aac43
+Fitness: 0.0000
+Genes:
+  - Perform the following task:
+  - Context: Generate a creative story about a space explorer. Focus on: space, adventure, discovery
+  - Output Format: As requested.
+2025-06-16 00:54:44,906 - prompthelix.agents.architect - INFO - Agent 'PromptArchitect' processing request: {'task_description': 'Generate a creative story about a space explorer.', 'keywords': ['space', 'adventure', 'discovery'], 'constraints': {}}
+2025-06-16 00:54:44,906 - prompthelix.utils.llm_utils - ERROR - OpenAI API key not configured in environment variables (OPENAI_API_KEY).
+2025-06-16 00:54:44,906 - prompthelix.agents.architect - ERROR - Agent 'PromptArchitect': Error calling LLM for parsing requirements: OpenAI API key not configured.
+Traceback (most recent call last):
+  File "/app/prompthelix/agents/architect.py", line 103, in _parse_requirements
+    response = call_llm_api(prompt, provider=self.llm_provider, model=self.llm_model)
+  File "/app/prompthelix/utils/llm_utils.py", line 56, in call_llm_api
+    return call_openai_api(prompt, model=model if model else "gpt-3.5-turbo")
+  File "/app/prompthelix/utils/llm_utils.py", line 16, in call_openai_api
+    raise ValueError("OpenAI API key not configured.")
+ValueError: OpenAI API key not configured.
+2025-06-16 00:54:44,906 - prompthelix.utils.llm_utils - ERROR - OpenAI API key not configured in environment variables (OPENAI_API_KEY).
+2025-06-16 00:54:44,906 - prompthelix.agents.architect - ERROR - Agent 'PromptArchitect': Error calling LLM for template selection: OpenAI API key not configured.
+Traceback (most recent call last):
+  File "/app/prompthelix/agents/architect.py", line 150, in _select_template
+    llm_response = call_llm_api(prompt, provider=self.llm_provider, model=self.llm_model)
+  File "/app/prompthelix/utils/llm_utils.py", line 56, in call_llm_api
+    return call_openai_api(prompt, model=model if model else "gpt-3.5-turbo")
+  File "/app/prompthelix/utils/llm_utils.py", line 16, in call_openai_api
+    raise ValueError("OpenAI API key not configured.")
+ValueError: OpenAI API key not configured.
+2025-06-16 00:54:44,906 - prompthelix.agents.architect - INFO - Agent 'PromptArchitect' - Fallback selected template: generic_v1
+2025-06-16 00:54:44,906 - prompthelix.utils.llm_utils - ERROR - OpenAI API key not configured in environment variables (OPENAI_API_KEY).
+2025-06-16 00:54:44,907 - prompthelix.agents.architect - ERROR - Agent 'PromptArchitect': Error calling LLM for gene population: OpenAI API key not configured.. Falling back to basic population.
+Traceback (most recent call last):
+  File "/app/prompthelix/agents/architect.py", line 218, in _populate_genes
+    llm_response = call_llm_api(prompt, provider=self.llm_provider, model=self.llm_model)
+  File "/app/prompthelix/utils/llm_utils.py", line 56, in call_llm_api
+    return call_openai_api(prompt, model=model if model else "gpt-3.5-turbo")
+  File "/app/prompthelix/utils/llm_utils.py", line 16, in call_openai_api
+    raise ValueError("OpenAI API key not configured.")
+ValueError: OpenAI API key not configured.
+2025-06-16 00:54:44,907 - prompthelix.agents.architect - INFO - Agent 'PromptArchitect' - Fallback populated genes: ['Perform the following task:', 'Context: Generate a creative story about a space explorer. Focus on: space, adventure, discovery', 'Output Format: As requested.']
+2025-06-16 00:54:44,907 - prompthelix.agents.architect - INFO - Agent 'PromptArchitect' - Created PromptChromosome: Chromosome ID: 23a443d6-b4f3-43a4-8d94-66b859ac466c
+Fitness: 0.0000
+Genes:
+  - Perform the following task:
+  - Context: Generate a creative story about a space explorer. Focus on: space, adventure, discovery
+  - Output Format: As requested.
+2025-06-16 00:54:44,907 - prompthelix.agents.architect - INFO - Agent 'PromptArchitect' processing request: {'task_description': 'Generate a creative story about a space explorer.', 'keywords': ['space', 'adventure', 'discovery'], 'constraints': {}}
+2025-06-16 00:54:44,907 - prompthelix.utils.llm_utils - ERROR - OpenAI API key not configured in environment variables (OPENAI_API_KEY).
+2025-06-16 00:54:44,907 - prompthelix.agents.architect - ERROR - Agent 'PromptArchitect': Error calling LLM for parsing requirements: OpenAI API key not configured.
+Traceback (most recent call last):
+  File "/app/prompthelix/agents/architect.py", line 103, in _parse_requirements
+    response = call_llm_api(prompt, provider=self.llm_provider, model=self.llm_model)
+  File "/app/prompthelix/utils/llm_utils.py", line 56, in call_llm_api
+    return call_openai_api(prompt, model=model if model else "gpt-3.5-turbo")
+  File "/app/prompthelix/utils/llm_utils.py", line 16, in call_openai_api
+    raise ValueError("OpenAI API key not configured.")
+ValueError: OpenAI API key not configured.
+2025-06-16 00:54:44,907 - prompthelix.utils.llm_utils - ERROR - OpenAI API key not configured in environment variables (OPENAI_API_KEY).
+2025-06-16 00:54:44,907 - prompthelix.agents.architect - ERROR - Agent 'PromptArchitect': Error calling LLM for template selection: OpenAI API key not configured.
+Traceback (most recent call last):
+  File "/app/prompthelix/agents/architect.py", line 150, in _select_template
+    llm_response = call_llm_api(prompt, provider=self.llm_provider, model=self.llm_model)
+  File "/app/prompthelix/utils/llm_utils.py", line 56, in call_llm_api
+    return call_openai_api(prompt, model=model if model else "gpt-3.5-turbo")
+  File "/app/prompthelix/utils/llm_utils.py", line 16, in call_openai_api
+    raise ValueError("OpenAI API key not configured.")
+ValueError: OpenAI API key not configured.
+2025-06-16 00:54:44,907 - prompthelix.agents.architect - INFO - Agent 'PromptArchitect' - Fallback selected template: generic_v1
+2025-06-16 00:54:44,907 - prompthelix.utils.llm_utils - ERROR - OpenAI API key not configured in environment variables (OPENAI_API_KEY).
+2025-06-16 00:54:44,907 - prompthelix.agents.architect - ERROR - Agent 'PromptArchitect': Error calling LLM for gene population: OpenAI API key not configured.. Falling back to basic population.
+Traceback (most recent call last):
+  File "/app/prompthelix/agents/architect.py", line 218, in _populate_genes
+    llm_response = call_llm_api(prompt, provider=self.llm_provider, model=self.llm_model)
+  File "/app/prompthelix/utils/llm_utils.py", line 56, in call_llm_api
+    return call_openai_api(prompt, model=model if model else "gpt-3.5-turbo")
+  File "/app/prompthelix/utils/llm_utils.py", line 16, in call_openai_api
+    raise ValueError("OpenAI API key not configured.")
+ValueError: OpenAI API key not configured.
+2025-06-16 00:54:44,907 - prompthelix.agents.architect - INFO - Agent 'PromptArchitect' - Fallback populated genes: ['Perform the following task:', 'Context: Generate a creative story about a space explorer. Focus on: space, adventure, discovery', 'Output Format: As requested.']
+2025-06-16 00:54:44,907 - prompthelix.agents.architect - INFO - Agent 'PromptArchitect' - Created PromptChromosome: Chromosome ID: eb3cee32-cd16-4edd-8523-542871e37787
+Fitness: 0.0000
+Genes:
+  - Perform the following task:
+  - Context: Generate a creative story about a space explorer. Focus on: space, adventure, discovery
+  - Output Format: As requested.
+2025-06-16 00:54:44,907 - prompthelix.agents.architect - INFO - Agent 'PromptArchitect' processing request: {'task_description': 'Generate a creative story about a space explorer.', 'keywords': ['space', 'adventure', 'discovery'], 'constraints': {}}
+2025-06-16 00:54:44,907 - prompthelix.utils.llm_utils - ERROR - OpenAI API key not configured in environment variables (OPENAI_API_KEY).
+2025-06-16 00:54:44,907 - prompthelix.agents.architect - ERROR - Agent 'PromptArchitect': Error calling LLM for parsing requirements: OpenAI API key not configured.
+Traceback (most recent call last):
+  File "/app/prompthelix/agents/architect.py", line 103, in _parse_requirements
+    response = call_llm_api(prompt, provider=self.llm_provider, model=self.llm_model)
+  File "/app/prompthelix/utils/llm_utils.py", line 56, in call_llm_api
+    return call_openai_api(prompt, model=model if model else "gpt-3.5-turbo")
+  File "/app/prompthelix/utils/llm_utils.py", line 16, in call_openai_api
+    raise ValueError("OpenAI API key not configured.")
+ValueError: OpenAI API key not configured.
+2025-06-16 00:54:44,908 - prompthelix.utils.llm_utils - ERROR - OpenAI API key not configured in environment variables (OPENAI_API_KEY).
+2025-06-16 00:54:44,908 - prompthelix.agents.architect - ERROR - Agent 'PromptArchitect': Error calling LLM for template selection: OpenAI API key not configured.
+Traceback (most recent call last):
+  File "/app/prompthelix/agents/architect.py", line 150, in _select_template
+    llm_response = call_llm_api(prompt, provider=self.llm_provider, model=self.llm_model)
+  File "/app/prompthelix/utils/llm_utils.py", line 56, in call_llm_api
+    return call_openai_api(prompt, model=model if model else "gpt-3.5-turbo")
+  File "/app/prompthelix/utils/llm_utils.py", line 16, in call_openai_api
+    raise ValueError("OpenAI API key not configured.")
+ValueError: OpenAI API key not configured.
+2025-06-16 00:54:44,908 - prompthelix.agents.architect - INFO - Agent 'PromptArchitect' - Fallback selected template: generic_v1
+2025-06-16 00:54:44,908 - prompthelix.utils.llm_utils - ERROR - OpenAI API key not configured in environment variables (OPENAI_API_KEY).
+2025-06-16 00:54:44,908 - prompthelix.agents.architect - ERROR - Agent 'PromptArchitect': Error calling LLM for gene population: OpenAI API key not configured.. Falling back to basic population.
+Traceback (most recent call last):
+  File "/app/prompthelix/agents/architect.py", line 218, in _populate_genes
+    llm_response = call_llm_api(prompt, provider=self.llm_provider, model=self.llm_model)
+  File "/app/prompthelix/utils/llm_utils.py", line 56, in call_llm_api
+    return call_openai_api(prompt, model=model if model else "gpt-3.5-turbo")
+  File "/app/prompthelix/utils/llm_utils.py", line 16, in call_openai_api
+    raise ValueError("OpenAI API key not configured.")
+ValueError: OpenAI API key not configured.
+2025-06-16 00:54:44,908 - prompthelix.agents.architect - INFO - Agent 'PromptArchitect' - Fallback populated genes: ['Perform the following task:', 'Context: Generate a creative story about a space explorer. Focus on: space, adventure, discovery', 'Output Format: As requested.']
+2025-06-16 00:54:44,908 - prompthelix.agents.architect - INFO - Agent 'PromptArchitect' - Created PromptChromosome: Chromosome ID: a492d6f0-abe5-49f8-a58e-58321710d5b1
+Fitness: 0.0000
+Genes:
+  - Perform the following task:
+  - Context: Generate a creative story about a space explorer. Focus on: space, adventure, discovery
+  - Output Format: As requested.
+2025-06-16 00:54:44,908 - prompthelix.agents.architect - INFO - Agent 'PromptArchitect' processing request: {'task_description': 'Generate a creative story about a space explorer.', 'keywords': ['space', 'adventure', 'discovery'], 'constraints': {}}
+2025-06-16 00:54:44,908 - prompthelix.utils.llm_utils - ERROR - OpenAI API key not configured in environment variables (OPENAI_API_KEY).
+2025-06-16 00:54:44,908 - prompthelix.agents.architect - ERROR - Agent 'PromptArchitect': Error calling LLM for parsing requirements: OpenAI API key not configured.
+Traceback (most recent call last):
+  File "/app/prompthelix/agents/architect.py", line 103, in _parse_requirements
+    response = call_llm_api(prompt, provider=self.llm_provider, model=self.llm_model)
+  File "/app/prompthelix/utils/llm_utils.py", line 56, in call_llm_api
+    return call_openai_api(prompt, model=model if model else "gpt-3.5-turbo")
+  File "/app/prompthelix/utils/llm_utils.py", line 16, in call_openai_api
+    raise ValueError("OpenAI API key not configured.")
+ValueError: OpenAI API key not configured.
+2025-06-16 00:54:44,908 - prompthelix.utils.llm_utils - ERROR - OpenAI API key not configured in environment variables (OPENAI_API_KEY).
+2025-06-16 00:54:44,908 - prompthelix.agents.architect - ERROR - Agent 'PromptArchitect': Error calling LLM for template selection: OpenAI API key not configured.
+Traceback (most recent call last):
+  File "/app/prompthelix/agents/architect.py", line 150, in _select_template
+    llm_response = call_llm_api(prompt, provider=self.llm_provider, model=self.llm_model)
+  File "/app/prompthelix/utils/llm_utils.py", line 56, in call_llm_api
+    return call_openai_api(prompt, model=model if model else "gpt-3.5-turbo")
+  File "/app/prompthelix/utils/llm_utils.py", line 16, in call_openai_api
+    raise ValueError("OpenAI API key not configured.")
+ValueError: OpenAI API key not configured.
+2025-06-16 00:54:44,908 - prompthelix.agents.architect - INFO - Agent 'PromptArchitect' - Fallback selected template: generic_v1
+2025-06-16 00:54:44,908 - prompthelix.utils.llm_utils - ERROR - OpenAI API key not configured in environment variables (OPENAI_API_KEY).
+2025-06-16 00:54:44,908 - prompthelix.agents.architect - ERROR - Agent 'PromptArchitect': Error calling LLM for gene population: OpenAI API key not configured.. Falling back to basic population.
+Traceback (most recent call last):
+  File "/app/prompthelix/agents/architect.py", line 218, in _populate_genes
+    llm_response = call_llm_api(prompt, provider=self.llm_provider, model=self.llm_model)
+  File "/app/prompthelix/utils/llm_utils.py", line 56, in call_llm_api
+    return call_openai_api(prompt, model=model if model else "gpt-3.5-turbo")
+  File "/app/prompthelix/utils/llm_utils.py", line 16, in call_openai_api
+    raise ValueError("OpenAI API key not configured.")
+ValueError: OpenAI API key not configured.
+2025-06-16 00:54:44,909 - prompthelix.agents.architect - INFO - Agent 'PromptArchitect' - Fallback populated genes: ['Perform the following task:', 'Context: Generate a creative story about a space explorer. Focus on: space, adventure, discovery', 'Output Format: As requested.']
+2025-06-16 00:54:44,909 - prompthelix.agents.architect - INFO - Agent 'PromptArchitect' - Created PromptChromosome: Chromosome ID: b53dd9a8-8193-4ebe-827d-d9c3f05bbbc8
+Fitness: 0.0000
+Genes:
+  - Perform the following task:
+  - Context: Generate a creative story about a space explorer. Focus on: space, adventure, discovery
+  - Output Format: As requested.
+2025-06-16 00:54:44,909 - prompthelix.genetics.engine - INFO - Executing in TEST mode. Returning dummy LLM output for prompt: Perform the following task:
+Context: Generate a creative story about a space explorer. Focus on: spa...
+2025-06-16 00:54:44,909 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Evaluating output for prompt: Chromosome ID: da26143b-10cf-4563-afcc-8a0a258aac43
+Fitness: 0.0000
+Genes:
+  - Perform the following...
+LLM Output to Evaluate: This is a test output from dummy LLM in TEST mode....
+2025-06-16 00:54:44,909 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Calculating standard metrics for output (len: 50), task: 'Generate a creative story about a space explorer....'
+2025-06-16 00:54:44,909 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Basic non-LLM metrics calculated: {'output_length': 50, 'output_word_count': 11, 'llm_assessed_relevance': 0.0, 'llm_assessed_coherence': 0.0, 'llm_assessed_completeness': 0.0, 'llm_accuracy_assessment': 'N/A', 'llm_safety_score': 0.0, 'llm_assessed_quality': 0.0, 'llm_assessment_feedback': 'N/A', 'relevance_placeholder': 0.53, 'coherence_placeholder': 0.65}
+2025-06-16 00:54:44,909 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Checking constraints: {'must_include_keywords': ['space', 'adventure'], 'max_length': 500}
+2025-06-16 00:54:44,909 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Constraint check result - Metrics={'constraint_adherence_placeholder': 0.33}, Errors#=1
+2025-06-16 00:54:44,909 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': LLM Analyzing content for task: 'Generate a creative story about a space explorer....' using model gpt-4
+2025-06-16 00:54:44,909 - prompthelix.utils.llm_utils - ERROR - OpenAI API key not configured in environment variables (OPENAI_API_KEY).
+2025-06-16 00:54:44,909 - prompthelix.agents.results_evaluator - ERROR - Agent 'ResultsEvaluator': Exception during LLM content analysis: OpenAI API key not configured.
+Traceback (most recent call last):
+  File "/app/prompthelix/agents/results_evaluator.py", line 225, in _analyze_content
+    response_str = call_llm_api(prompt_str_for_llm, provider=self.llm_provider, model=self.evaluation_llm_model)
+  File "/app/prompthelix/utils/llm_utils.py", line 56, in call_llm_api
+    return call_openai_api(prompt, model=model if model else "gpt-3.5-turbo")
+  File "/app/prompthelix/utils/llm_utils.py", line 16, in call_openai_api
+    raise ValueError("OpenAI API key not configured.")
+ValueError: OpenAI API key not configured.
+2025-06-16 00:54:44,909 - prompthelix.agents.results_evaluator - WARNING - Agent 'ResultsEvaluator': LLM quality assessment failed or was unreliable. Adjusting fitness calculation if necessary or relying on placeholders via llm_quality_assessment.
+2025-06-16 00:54:44,909 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Evaluation complete. Fitness: 0.1150, Metrics: {'output_length': 50, 'output_word_count': 11, 'llm_assessed_relevance': 0.0, 'llm_assessed_coherence': 0.0, 'llm_assessed_completeness': 0.0, 'llm_accuracy_assessment': 'N/A', 'llm_safety_score': 0.0, 'llm_assessed_quality': 0.0, 'llm_assessment_feedback': 'Exception during LLM analysis: OpenAI API key not configured.', 'relevance_placeholder': 0.53, 'coherence_placeholder': 0.65, 'constraint_adherence_placeholder': 0.33}, Evaluation Process Errors: 1, Constraint Violations: 1
+2025-06-16 00:54:44,909 - prompthelix.genetics.engine - INFO - Executing in TEST mode. Returning dummy LLM output for prompt: Perform the following task:
+Context: Generate a creative story about a space explorer. Focus on: spa...
+2025-06-16 00:54:44,909 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Evaluating output for prompt: Chromosome ID: 23a443d6-b4f3-43a4-8d94-66b859ac466c
+Fitness: 0.0000
+Genes:
+  - Perform the following...
+LLM Output to Evaluate: This is a test output from dummy LLM in TEST mode....
+2025-06-16 00:54:44,909 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Calculating standard metrics for output (len: 50), task: 'Generate a creative story about a space explorer....'
+2025-06-16 00:54:44,909 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Basic non-LLM metrics calculated: {'output_length': 50, 'output_word_count': 11, 'llm_assessed_relevance': 0.0, 'llm_assessed_coherence': 0.0, 'llm_assessed_completeness': 0.0, 'llm_accuracy_assessment': 'N/A', 'llm_safety_score': 0.0, 'llm_assessed_quality': 0.0, 'llm_assessment_feedback': 'N/A', 'relevance_placeholder': 0.94, 'coherence_placeholder': 0.55}
+2025-06-16 00:54:44,909 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Checking constraints: {'must_include_keywords': ['space', 'adventure'], 'max_length': 500}
+2025-06-16 00:54:44,909 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Constraint check result - Metrics={'constraint_adherence_placeholder': 0.33}, Errors#=1
+2025-06-16 00:54:44,909 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': LLM Analyzing content for task: 'Generate a creative story about a space explorer....' using model gpt-4
+2025-06-16 00:54:44,910 - prompthelix.utils.llm_utils - ERROR - OpenAI API key not configured in environment variables (OPENAI_API_KEY).
+2025-06-16 00:54:44,910 - prompthelix.agents.results_evaluator - ERROR - Agent 'ResultsEvaluator': Exception during LLM content analysis: OpenAI API key not configured.
+Traceback (most recent call last):
+  File "/app/prompthelix/agents/results_evaluator.py", line 225, in _analyze_content
+    response_str = call_llm_api(prompt_str_for_llm, provider=self.llm_provider, model=self.evaluation_llm_model)
+  File "/app/prompthelix/utils/llm_utils.py", line 56, in call_llm_api
+    return call_openai_api(prompt, model=model if model else "gpt-3.5-turbo")
+  File "/app/prompthelix/utils/llm_utils.py", line 16, in call_openai_api
+    raise ValueError("OpenAI API key not configured.")
+ValueError: OpenAI API key not configured.
+2025-06-16 00:54:44,910 - prompthelix.agents.results_evaluator - WARNING - Agent 'ResultsEvaluator': LLM quality assessment failed or was unreliable. Adjusting fitness calculation if necessary or relying on placeholders via llm_quality_assessment.
+2025-06-16 00:54:44,910 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Evaluation complete. Fitness: 0.1150, Metrics: {'output_length': 50, 'output_word_count': 11, 'llm_assessed_relevance': 0.0, 'llm_assessed_coherence': 0.0, 'llm_assessed_completeness': 0.0, 'llm_accuracy_assessment': 'N/A', 'llm_safety_score': 0.0, 'llm_assessed_quality': 0.0, 'llm_assessment_feedback': 'Exception during LLM analysis: OpenAI API key not configured.', 'relevance_placeholder': 0.94, 'coherence_placeholder': 0.55, 'constraint_adherence_placeholder': 0.33}, Evaluation Process Errors: 1, Constraint Violations: 1
+2025-06-16 00:54:44,910 - prompthelix.genetics.engine - INFO - Executing in TEST mode. Returning dummy LLM output for prompt: Perform the following task:
+Context: Generate a creative story about a space explorer. Focus on: spa...
+2025-06-16 00:54:44,910 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Evaluating output for prompt: Chromosome ID: eb3cee32-cd16-4edd-8523-542871e37787
+Fitness: 0.0000
+Genes:
+  - Perform the following...
+LLM Output to Evaluate: This is a test output from dummy LLM in TEST mode....
+2025-06-16 00:54:44,910 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Calculating standard metrics for output (len: 50), task: 'Generate a creative story about a space explorer....'
+2025-06-16 00:54:44,910 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Basic non-LLM metrics calculated: {'output_length': 50, 'output_word_count': 11, 'llm_assessed_relevance': 0.0, 'llm_assessed_coherence': 0.0, 'llm_assessed_completeness': 0.0, 'llm_accuracy_assessment': 'N/A', 'llm_safety_score': 0.0, 'llm_assessed_quality': 0.0, 'llm_assessment_feedback': 'N/A', 'relevance_placeholder': 0.87, 'coherence_placeholder': 0.82}
+2025-06-16 00:54:44,910 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Checking constraints: {'must_include_keywords': ['space', 'adventure'], 'max_length': 500}
+2025-06-16 00:54:44,910 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Constraint check result - Metrics={'constraint_adherence_placeholder': 0.33}, Errors#=1
+2025-06-16 00:54:44,910 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': LLM Analyzing content for task: 'Generate a creative story about a space explorer....' using model gpt-4
+2025-06-16 00:54:44,910 - prompthelix.utils.llm_utils - ERROR - OpenAI API key not configured in environment variables (OPENAI_API_KEY).
+2025-06-16 00:54:44,910 - prompthelix.agents.results_evaluator - ERROR - Agent 'ResultsEvaluator': Exception during LLM content analysis: OpenAI API key not configured.
+Traceback (most recent call last):
+  File "/app/prompthelix/agents/results_evaluator.py", line 225, in _analyze_content
+    response_str = call_llm_api(prompt_str_for_llm, provider=self.llm_provider, model=self.evaluation_llm_model)
+  File "/app/prompthelix/utils/llm_utils.py", line 56, in call_llm_api
+    return call_openai_api(prompt, model=model if model else "gpt-3.5-turbo")
+  File "/app/prompthelix/utils/llm_utils.py", line 16, in call_openai_api
+    raise ValueError("OpenAI API key not configured.")
+ValueError: OpenAI API key not configured.
+2025-06-16 00:54:44,910 - prompthelix.agents.results_evaluator - WARNING - Agent 'ResultsEvaluator': LLM quality assessment failed or was unreliable. Adjusting fitness calculation if necessary or relying on placeholders via llm_quality_assessment.
+2025-06-16 00:54:44,910 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Evaluation complete. Fitness: 0.1150, Metrics: {'output_length': 50, 'output_word_count': 11, 'llm_assessed_relevance': 0.0, 'llm_assessed_coherence': 0.0, 'llm_assessed_completeness': 0.0, 'llm_accuracy_assessment': 'N/A', 'llm_safety_score': 0.0, 'llm_assessed_quality': 0.0, 'llm_assessment_feedback': 'Exception during LLM analysis: OpenAI API key not configured.', 'relevance_placeholder': 0.87, 'coherence_placeholder': 0.82, 'constraint_adherence_placeholder': 0.33}, Evaluation Process Errors: 1, Constraint Violations: 1
+2025-06-16 00:54:44,910 - prompthelix.genetics.engine - INFO - Executing in TEST mode. Returning dummy LLM output for prompt: Perform the following task:
+Context: Generate a creative story about a space explorer. Focus on: spa...
+2025-06-16 00:54:44,910 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Evaluating output for prompt: Chromosome ID: a492d6f0-abe5-49f8-a58e-58321710d5b1
+Fitness: 0.0000
+Genes:
+  - Perform the following...
+LLM Output to Evaluate: This is a test output from dummy LLM in TEST mode....
+2025-06-16 00:54:44,910 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Calculating standard metrics for output (len: 50), task: 'Generate a creative story about a space explorer....'
+2025-06-16 00:54:44,910 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Basic non-LLM metrics calculated: {'output_length': 50, 'output_word_count': 11, 'llm_assessed_relevance': 0.0, 'llm_assessed_coherence': 0.0, 'llm_assessed_completeness': 0.0, 'llm_accuracy_assessment': 'N/A', 'llm_safety_score': 0.0, 'llm_assessed_quality': 0.0, 'llm_assessment_feedback': 'N/A', 'relevance_placeholder': 0.94, 'coherence_placeholder': 0.48}
+2025-06-16 00:54:44,910 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Checking constraints: {'must_include_keywords': ['space', 'adventure'], 'max_length': 500}
+2025-06-16 00:54:44,910 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Constraint check result - Metrics={'constraint_adherence_placeholder': 0.33}, Errors#=1
+2025-06-16 00:54:44,910 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': LLM Analyzing content for task: 'Generate a creative story about a space explorer....' using model gpt-4
+2025-06-16 00:54:44,910 - prompthelix.utils.llm_utils - ERROR - OpenAI API key not configured in environment variables (OPENAI_API_KEY).
+2025-06-16 00:54:44,910 - prompthelix.agents.results_evaluator - ERROR - Agent 'ResultsEvaluator': Exception during LLM content analysis: OpenAI API key not configured.
+Traceback (most recent call last):
+  File "/app/prompthelix/agents/results_evaluator.py", line 225, in _analyze_content
+    response_str = call_llm_api(prompt_str_for_llm, provider=self.llm_provider, model=self.evaluation_llm_model)
+  File "/app/prompthelix/utils/llm_utils.py", line 56, in call_llm_api
+    return call_openai_api(prompt, model=model if model else "gpt-3.5-turbo")
+  File "/app/prompthelix/utils/llm_utils.py", line 16, in call_openai_api
+    raise ValueError("OpenAI API key not configured.")
+ValueError: OpenAI API key not configured.
+2025-06-16 00:54:44,911 - prompthelix.agents.results_evaluator - WARNING - Agent 'ResultsEvaluator': LLM quality assessment failed or was unreliable. Adjusting fitness calculation if necessary or relying on placeholders via llm_quality_assessment.
+2025-06-16 00:54:44,911 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Evaluation complete. Fitness: 0.1150, Metrics: {'output_length': 50, 'output_word_count': 11, 'llm_assessed_relevance': 0.0, 'llm_assessed_coherence': 0.0, 'llm_assessed_completeness': 0.0, 'llm_accuracy_assessment': 'N/A', 'llm_safety_score': 0.0, 'llm_assessed_quality': 0.0, 'llm_assessment_feedback': 'Exception during LLM analysis: OpenAI API key not configured.', 'relevance_placeholder': 0.94, 'coherence_placeholder': 0.48, 'constraint_adherence_placeholder': 0.33}, Evaluation Process Errors: 1, Constraint Violations: 1
+2025-06-16 00:54:44,911 - prompthelix.genetics.engine - INFO - Executing in TEST mode. Returning dummy LLM output for prompt: Perform the following task:
+Context: Generate a creative story about a space explorer. Focus on: spa...
+2025-06-16 00:54:44,911 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Evaluating output for prompt: Chromosome ID: b53dd9a8-8193-4ebe-827d-d9c3f05bbbc8
+Fitness: 0.0000
+Genes:
+  - Perform the following...
+LLM Output to Evaluate: This is a test output from dummy LLM in TEST mode....
+2025-06-16 00:54:44,911 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Calculating standard metrics for output (len: 50), task: 'Generate a creative story about a space explorer....'
+2025-06-16 00:54:44,911 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Basic non-LLM metrics calculated: {'output_length': 50, 'output_word_count': 11, 'llm_assessed_relevance': 0.0, 'llm_assessed_coherence': 0.0, 'llm_assessed_completeness': 0.0, 'llm_accuracy_assessment': 'N/A', 'llm_safety_score': 0.0, 'llm_assessed_quality': 0.0, 'llm_assessment_feedback': 'N/A', 'relevance_placeholder': 0.59, 'coherence_placeholder': 0.52}
+2025-06-16 00:54:44,911 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Checking constraints: {'must_include_keywords': ['space', 'adventure'], 'max_length': 500}
+2025-06-16 00:54:44,911 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Constraint check result - Metrics={'constraint_adherence_placeholder': 0.33}, Errors#=1
+2025-06-16 00:54:44,911 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': LLM Analyzing content for task: 'Generate a creative story about a space explorer....' using model gpt-4
+2025-06-16 00:54:44,911 - prompthelix.utils.llm_utils - ERROR - OpenAI API key not configured in environment variables (OPENAI_API_KEY).
+2025-06-16 00:54:44,911 - prompthelix.agents.results_evaluator - ERROR - Agent 'ResultsEvaluator': Exception during LLM content analysis: OpenAI API key not configured.
+Traceback (most recent call last):
+  File "/app/prompthelix/agents/results_evaluator.py", line 225, in _analyze_content
+    response_str = call_llm_api(prompt_str_for_llm, provider=self.llm_provider, model=self.evaluation_llm_model)
+  File "/app/prompthelix/utils/llm_utils.py", line 56, in call_llm_api
+    return call_openai_api(prompt, model=model if model else "gpt-3.5-turbo")
+  File "/app/prompthelix/utils/llm_utils.py", line 16, in call_openai_api
+    raise ValueError("OpenAI API key not configured.")
+ValueError: OpenAI API key not configured.
+2025-06-16 00:54:44,911 - prompthelix.agents.results_evaluator - WARNING - Agent 'ResultsEvaluator': LLM quality assessment failed or was unreliable. Adjusting fitness calculation if necessary or relying on placeholders via llm_quality_assessment.
+2025-06-16 00:54:44,911 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Evaluation complete. Fitness: 0.1150, Metrics: {'output_length': 50, 'output_word_count': 11, 'llm_assessed_relevance': 0.0, 'llm_assessed_coherence': 0.0, 'llm_assessed_completeness': 0.0, 'llm_accuracy_assessment': 'N/A', 'llm_safety_score': 0.0, 'llm_assessed_quality': 0.0, 'llm_assessment_feedback': 'Exception during LLM analysis: OpenAI API key not configured.', 'relevance_placeholder': 0.59, 'coherence_placeholder': 0.52, 'constraint_adherence_placeholder': 0.33}, Evaluation Process Errors: 1, Constraint Violations: 1
+CLI: Running Genetic Algorithm...
+PromptHelix Config: AGENT_SETTINGS and other global settings loaded.
+Using default parameters for GA: task='Generate a creative story about a space explorer.', generations=2, population=5
+Initializing Message Bus...
+Message Bus initialized.
+Initializing agents with message bus...
+Agents initialized and registered.
+Initializing GA components...
+GA components initialized.
+Using GA parameters from input...
+Parameters: Generations=2, Population Size=5, Elitism Count=1, Task='Generate a creative story about a space explorer.'
+
+--- Initializing Population ---
+PopulationManager: Initializing population of size 5 for task: 'Generate a creative story about a space explorer.'
+PromptArchitect - Parsing requirements using LLM: Task='Generate a creative story about a space explorer.', Keywords='['space', 'adventure', 'discovery']', Constraints='{}'
+PromptArchitect - Parsing requirements using LLM: Task='Generate a creative story about a space explorer.', Keywords='['space', 'adventure', 'discovery']', Constraints='{}'
+PromptArchitect - Parsing requirements using LLM: Task='Generate a creative story about a space explorer.', Keywords='['space', 'adventure', 'discovery']', Constraints='{}'
+PromptArchitect - Parsing requirements using LLM: Task='Generate a creative story about a space explorer.', Keywords='['space', 'adventure', 'discovery']', Constraints='{}'
+PromptArchitect - Parsing requirements using LLM: Task='Generate a creative story about a space explorer.', Keywords='['space', 'adventure', 'discovery']', Constraints='{}'
+PopulationManager: Population initialized. Generation: 0
+Population initialized with 5 individuals.
+Evaluating initial population...
+FitnessEvaluator: Evaluated chromosome da26143b-10cf-4563-afcc-8a0a258aac43, Fitness: 0.1150
+FitnessEvaluator: Evaluated chromosome 23a443d6-b4f3-43a4-8d94-66b859ac466c, Fitness: 0.1150
+FitnessEvaluator: Evaluated chromosome eb3cee32-cd16-4edd-8523-542871e37787, Fitness: 0.1150
+FitnessEvaluator: Evaluated chromosome a492d6f0-abe5-49f8-a58e-58321710d5b1, Fitness: 0.1150
+FitnessEvaluator: Evaluated chromosome b53dd9a8-8193-4ebe-827d-d9c3f05bbbc8, Fitness: 0.1150
+
+--- Best in Initial Population ---
+Fitness: 0.1150
+Prompt ID: da26143b-10cf-4563-afcc-8a0a258aac43
+Prompt String Snippet: Perform the following task:
+Context: Generate a creative story about a space explorer. Focus on: space, adventure, discovery
+Output Format: As requested....
+
+--- Starting Evolution Loop ---
+
+--- Generation 1 of 2 ---
+PopulationManager: Evolving population for generation 1. Evaluating current population...
+2025-06-16 00:54:44,947 - prompthelix.genetics.engine - INFO - Executing in TEST mode. Returning dummy LLM output for prompt: Perform the following task:
+Context: Generate a creative story about a space explorer. Focus on: spa...
+2025-06-16 00:54:44,947 - prompthelix.genetics.engine - INFO - Executing in TEST mode. Returning dummy LLM output for prompt: Perform the following task:
+Context: Generate a creative story about a space explorer. Focus on: spa...
+2025-06-16 00:54:44,947 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Evaluating output for prompt: Chromosome ID: da26143b-10cf-4563-afcc-8a0a258aac43
+Fitness: 0.1150
+Genes:
+  - Perform the following...
+LLM Output to Evaluate: This is a test output from dummy LLM in TEST mode....
+2025-06-16 00:54:44,947 - prompthelix.genetics.engine - INFO - Executing in TEST mode. Returning dummy LLM output for prompt: Perform the following task:
+Context: Generate a creative story about a space explorer. Focus on: spa...
+2025-06-16 00:54:44,947 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Calculating standard metrics for output (len: 50), task: 'Generate a creative story about a space explorer....'
+2025-06-16 00:54:44,947 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Evaluating output for prompt: Chromosome ID: 23a443d6-b4f3-43a4-8d94-66b859ac466c
+Fitness: 0.1150
+Genes:
+  - Perform the following...
+LLM Output to Evaluate: This is a test output from dummy LLM in TEST mode....
+2025-06-16 00:54:44,948 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Calculating standard metrics for output (len: 50), task: 'Generate a creative story about a space explorer....'
+2025-06-16 00:54:44,948 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Basic non-LLM metrics calculated: {'output_length': 50, 'output_word_count': 11, 'llm_assessed_relevance': 0.0, 'llm_assessed_coherence': 0.0, 'llm_assessed_completeness': 0.0, 'llm_accuracy_assessment': 'N/A', 'llm_safety_score': 0.0, 'llm_assessed_quality': 0.0, 'llm_assessment_feedback': 'N/A', 'relevance_placeholder': 0.77, 'coherence_placeholder': 0.87}
+2025-06-16 00:54:44,948 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Evaluating output for prompt: Chromosome ID: eb3cee32-cd16-4edd-8523-542871e37787
+Fitness: 0.1150
+Genes:
+  - Perform the following...
+LLM Output to Evaluate: This is a test output from dummy LLM in TEST mode....
+2025-06-16 00:54:44,948 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Checking constraints: {'must_include_keywords': ['space', 'adventure'], 'max_length': 500}
+2025-06-16 00:54:44,948 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Calculating standard metrics for output (len: 50), task: 'Generate a creative story about a space explorer....'
+2025-06-16 00:54:44,948 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Constraint check result - Metrics={'constraint_adherence_placeholder': 0.33}, Errors#=1
+2025-06-16 00:54:44,948 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Basic non-LLM metrics calculated: {'output_length': 50, 'output_word_count': 11, 'llm_assessed_relevance': 0.0, 'llm_assessed_coherence': 0.0, 'llm_assessed_completeness': 0.0, 'llm_accuracy_assessment': 'N/A', 'llm_safety_score': 0.0, 'llm_assessed_quality': 0.0, 'llm_assessment_feedback': 'N/A', 'relevance_placeholder': 0.86, 'coherence_placeholder': 0.73}
+2025-06-16 00:54:44,948 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': LLM Analyzing content for task: 'Generate a creative story about a space explorer....' using model gpt-4
+2025-06-16 00:54:44,948 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Checking constraints: {'must_include_keywords': ['space', 'adventure'], 'max_length': 500}
+2025-06-16 00:54:44,948 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Basic non-LLM metrics calculated: {'output_length': 50, 'output_word_count': 11, 'llm_assessed_relevance': 0.0, 'llm_assessed_coherence': 0.0, 'llm_assessed_completeness': 0.0, 'llm_accuracy_assessment': 'N/A', 'llm_safety_score': 0.0, 'llm_assessed_quality': 0.0, 'llm_assessment_feedback': 'N/A', 'relevance_placeholder': 0.89, 'coherence_placeholder': 0.61}
+2025-06-16 00:54:44,948 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Constraint check result - Metrics={'constraint_adherence_placeholder': 0.33}, Errors#=1
+2025-06-16 00:54:44,948 - prompthelix.utils.llm_utils - ERROR - OpenAI API key not configured in environment variables (OPENAI_API_KEY).
+2025-06-16 00:54:44,948 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': LLM Analyzing content for task: 'Generate a creative story about a space explorer....' using model gpt-4
+2025-06-16 00:54:44,948 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Checking constraints: {'must_include_keywords': ['space', 'adventure'], 'max_length': 500}
+2025-06-16 00:54:44,948 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Constraint check result - Metrics={'constraint_adherence_placeholder': 0.33}, Errors#=1
+2025-06-16 00:54:44,948 - prompthelix.utils.llm_utils - ERROR - OpenAI API key not configured in environment variables (OPENAI_API_KEY).
+2025-06-16 00:54:44,948 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': LLM Analyzing content for task: 'Generate a creative story about a space explorer....' using model gpt-4
+2025-06-16 00:54:44,948 - prompthelix.utils.llm_utils - ERROR - OpenAI API key not configured in environment variables (OPENAI_API_KEY).
+2025-06-16 00:54:44,948 - prompthelix.agents.results_evaluator - ERROR - Agent 'ResultsEvaluator': Exception during LLM content analysis: OpenAI API key not configured.
+Traceback (most recent call last):
+  File "/app/prompthelix/agents/results_evaluator.py", line 225, in _analyze_content
+    response_str = call_llm_api(prompt_str_for_llm, provider=self.llm_provider, model=self.evaluation_llm_model)
+  File "/app/prompthelix/utils/llm_utils.py", line 56, in call_llm_api
+    return call_openai_api(prompt, model=model if model else "gpt-3.5-turbo")
+  File "/app/prompthelix/utils/llm_utils.py", line 16, in call_openai_api
+    raise ValueError("OpenAI API key not configured.")
+ValueError: OpenAI API key not configured.
+2025-06-16 00:54:44,949 - prompthelix.agents.results_evaluator - WARNING - Agent 'ResultsEvaluator': LLM quality assessment failed or was unreliable. Adjusting fitness calculation if necessary or relying on placeholders via llm_quality_assessment.
+2025-06-16 00:54:44,948 - prompthelix.agents.results_evaluator - ERROR - Agent 'ResultsEvaluator': Exception during LLM content analysis: OpenAI API key not configured.
+Traceback (most recent call last):
+  File "/app/prompthelix/agents/results_evaluator.py", line 225, in _analyze_content
+    response_str = call_llm_api(prompt_str_for_llm, provider=self.llm_provider, model=self.evaluation_llm_model)
+  File "/app/prompthelix/utils/llm_utils.py", line 56, in call_llm_api
+    return call_openai_api(prompt, model=model if model else "gpt-3.5-turbo")
+  File "/app/prompthelix/utils/llm_utils.py", line 16, in call_openai_api
+    raise ValueError("OpenAI API key not configured.")
+ValueError: OpenAI API key not configured.
+2025-06-16 00:54:44,949 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Evaluation complete. Fitness: 0.1150, Metrics: {'output_length': 50, 'output_word_count': 11, 'llm_assessed_relevance': 0.0, 'llm_assessed_coherence': 0.0, 'llm_assessed_completeness': 0.0, 'llm_accuracy_assessment': 'N/A', 'llm_safety_score': 0.0, 'llm_assessed_quality': 0.0, 'llm_assessment_feedback': 'Exception during LLM analysis: OpenAI API key not configured.', 'relevance_placeholder': 0.77, 'coherence_placeholder': 0.87, 'constraint_adherence_placeholder': 0.33}, Evaluation Process Errors: 1, Constraint Violations: 1
+2025-06-16 00:54:44,948 - prompthelix.agents.results_evaluator - ERROR - Agent 'ResultsEvaluator': Exception during LLM content analysis: OpenAI API key not configured.
+Traceback (most recent call last):
+  File "/app/prompthelix/agents/results_evaluator.py", line 225, in _analyze_content
+    response_str = call_llm_api(prompt_str_for_llm, provider=self.llm_provider, model=self.evaluation_llm_model)
+  File "/app/prompthelix/utils/llm_utils.py", line 56, in call_llm_api
+    return call_openai_api(prompt, model=model if model else "gpt-3.5-turbo")
+  File "/app/prompthelix/utils/llm_utils.py", line 16, in call_openai_api
+    raise ValueError("OpenAI API key not configured.")
+ValueError: OpenAI API key not configured.
+2025-06-16 00:54:44,949 - prompthelix.agents.results_evaluator - WARNING - Agent 'ResultsEvaluator': LLM quality assessment failed or was unreliable. Adjusting fitness calculation if necessary or relying on placeholders via llm_quality_assessment.
+2025-06-16 00:54:44,949 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Evaluation complete. Fitness: 0.1150, Metrics: {'output_length': 50, 'output_word_count': 11, 'llm_assessed_relevance': 0.0, 'llm_assessed_coherence': 0.0, 'llm_assessed_completeness': 0.0, 'llm_accuracy_assessment': 'N/A', 'llm_safety_score': 0.0, 'llm_assessed_quality': 0.0, 'llm_assessment_feedback': 'Exception during LLM analysis: OpenAI API key not configured.', 'relevance_placeholder': 0.86, 'coherence_placeholder': 0.73, 'constraint_adherence_placeholder': 0.33}, Evaluation Process Errors: 1, Constraint Violations: 1
+2025-06-16 00:54:44,949 - prompthelix.agents.results_evaluator - WARNING - Agent 'ResultsEvaluator': LLM quality assessment failed or was unreliable. Adjusting fitness calculation if necessary or relying on placeholders via llm_quality_assessment.
+2025-06-16 00:54:44,949 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Evaluation complete. Fitness: 0.1150, Metrics: {'output_length': 50, 'output_word_count': 11, 'llm_assessed_relevance': 0.0, 'llm_assessed_coherence': 0.0, 'llm_assessed_completeness': 0.0, 'llm_accuracy_assessment': 'N/A', 'llm_safety_score': 0.0, 'llm_assessed_quality': 0.0, 'llm_assessment_feedback': 'Exception during LLM analysis: OpenAI API key not configured.', 'relevance_placeholder': 0.89, 'coherence_placeholder': 0.61, 'constraint_adherence_placeholder': 0.33}, Evaluation Process Errors: 1, Constraint Violations: 1
+2025-06-16 00:54:44,949 - prompthelix.genetics.engine - INFO - Executing in TEST mode. Returning dummy LLM output for prompt: Perform the following task:
+Context: Generate a creative story about a space explorer. Focus on: spa...
+2025-06-16 00:54:44,949 - prompthelix.genetics.engine - INFO - Executing in TEST mode. Returning dummy LLM output for prompt: Perform the following task:
+Context: Generate a creative story about a space explorer. Focus on: spa...
+2025-06-16 00:54:44,949 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Evaluating output for prompt: Chromosome ID: b53dd9a8-8193-4ebe-827d-d9c3f05bbbc8
+Fitness: 0.1150
+Genes:
+  - Perform the following...
+LLM Output to Evaluate: This is a test output from dummy LLM in TEST mode....
+2025-06-16 00:54:44,949 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Evaluating output for prompt: Chromosome ID: a492d6f0-abe5-49f8-a58e-58321710d5b1
+Fitness: 0.1150
+Genes:
+  - Perform the following...
+LLM Output to Evaluate: This is a test output from dummy LLM in TEST mode....
+2025-06-16 00:54:44,949 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Calculating standard metrics for output (len: 50), task: 'Generate a creative story about a space explorer....'
+2025-06-16 00:54:44,949 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Calculating standard metrics for output (len: 50), task: 'Generate a creative story about a space explorer....'
+2025-06-16 00:54:44,949 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Basic non-LLM metrics calculated: {'output_length': 50, 'output_word_count': 11, 'llm_assessed_relevance': 0.0, 'llm_assessed_coherence': 0.0, 'llm_assessed_completeness': 0.0, 'llm_accuracy_assessment': 'N/A', 'llm_safety_score': 0.0, 'llm_assessed_quality': 0.0, 'llm_assessment_feedback': 'N/A', 'relevance_placeholder': 0.87, 'coherence_placeholder': 0.58}
+2025-06-16 00:54:44,949 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Basic non-LLM metrics calculated: {'output_length': 50, 'output_word_count': 11, 'llm_assessed_relevance': 0.0, 'llm_assessed_coherence': 0.0, 'llm_assessed_completeness': 0.0, 'llm_accuracy_assessment': 'N/A', 'llm_safety_score': 0.0, 'llm_assessed_quality': 0.0, 'llm_assessment_feedback': 'N/A', 'relevance_placeholder': 0.72, 'coherence_placeholder': 0.54}
+2025-06-16 00:54:44,949 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Checking constraints: {'must_include_keywords': ['space', 'adventure'], 'max_length': 500}
+2025-06-16 00:54:44,949 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Checking constraints: {'must_include_keywords': ['space', 'adventure'], 'max_length': 500}
+2025-06-16 00:54:44,949 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Constraint check result - Metrics={'constraint_adherence_placeholder': 0.33}, Errors#=1
+2025-06-16 00:54:44,949 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Constraint check result - Metrics={'constraint_adherence_placeholder': 0.33}, Errors#=1
+2025-06-16 00:54:44,949 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': LLM Analyzing content for task: 'Generate a creative story about a space explorer....' using model gpt-4
+2025-06-16 00:54:44,949 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': LLM Analyzing content for task: 'Generate a creative story about a space explorer....' using model gpt-4
+2025-06-16 00:54:44,949 - prompthelix.utils.llm_utils - ERROR - OpenAI API key not configured in environment variables (OPENAI_API_KEY).
+2025-06-16 00:54:44,949 - prompthelix.utils.llm_utils - ERROR - OpenAI API key not configured in environment variables (OPENAI_API_KEY).
+2025-06-16 00:54:44,949 - prompthelix.agents.results_evaluator - ERROR - Agent 'ResultsEvaluator': Exception during LLM content analysis: OpenAI API key not configured.
+Traceback (most recent call last):
+  File "/app/prompthelix/agents/results_evaluator.py", line 225, in _analyze_content
+    response_str = call_llm_api(prompt_str_for_llm, provider=self.llm_provider, model=self.evaluation_llm_model)
+  File "/app/prompthelix/utils/llm_utils.py", line 56, in call_llm_api
+    return call_openai_api(prompt, model=model if model else "gpt-3.5-turbo")
+  File "/app/prompthelix/utils/llm_utils.py", line 16, in call_openai_api
+    raise ValueError("OpenAI API key not configured.")
+ValueError: OpenAI API key not configured.
+2025-06-16 00:54:44,949 - prompthelix.agents.results_evaluator - ERROR - Agent 'ResultsEvaluator': Exception during LLM content analysis: OpenAI API key not configured.
+Traceback (most recent call last):
+  File "/app/prompthelix/agents/results_evaluator.py", line 225, in _analyze_content
+    response_str = call_llm_api(prompt_str_for_llm, provider=self.llm_provider, model=self.evaluation_llm_model)
+  File "/app/prompthelix/utils/llm_utils.py", line 56, in call_llm_api
+    return call_openai_api(prompt, model=model if model else "gpt-3.5-turbo")
+  File "/app/prompthelix/utils/llm_utils.py", line 16, in call_openai_api
+    raise ValueError("OpenAI API key not configured.")
+ValueError: OpenAI API key not configured.
+2025-06-16 00:54:44,950 - prompthelix.agents.results_evaluator - WARNING - Agent 'ResultsEvaluator': LLM quality assessment failed or was unreliable. Adjusting fitness calculation if necessary or relying on placeholders via llm_quality_assessment.
+2025-06-16 00:54:44,950 - prompthelix.agents.results_evaluator - WARNING - Agent 'ResultsEvaluator': LLM quality assessment failed or was unreliable. Adjusting fitness calculation if necessary or relying on placeholders via llm_quality_assessment.
+2025-06-16 00:54:44,950 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Evaluation complete. Fitness: 0.1150, Metrics: {'output_length': 50, 'output_word_count': 11, 'llm_assessed_relevance': 0.0, 'llm_assessed_coherence': 0.0, 'llm_assessed_completeness': 0.0, 'llm_accuracy_assessment': 'N/A', 'llm_safety_score': 0.0, 'llm_assessed_quality': 0.0, 'llm_assessment_feedback': 'Exception during LLM analysis: OpenAI API key not configured.', 'relevance_placeholder': 0.72, 'coherence_placeholder': 0.54, 'constraint_adherence_placeholder': 0.33}, Evaluation Process Errors: 1, Constraint Violations: 1
+2025-06-16 00:54:44,950 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Evaluation complete. Fitness: 0.1150, Metrics: {'output_length': 50, 'output_word_count': 11, 'llm_assessed_relevance': 0.0, 'llm_assessed_coherence': 0.0, 'llm_assessed_completeness': 0.0, 'llm_accuracy_assessment': 'N/A', 'llm_safety_score': 0.0, 'llm_assessed_quality': 0.0, 'llm_assessment_feedback': 'Exception during LLM analysis: OpenAI API key not configured.', 'relevance_placeholder': 0.87, 'coherence_placeholder': 0.58, 'constraint_adherence_placeholder': 0.33}, Evaluation Process Errors: 1, Constraint Violations: 1
+FitnessEvaluator: Evaluated chromosome eb3cee32-cd16-4edd-8523-542871e37787, Fitness: 0.1150
+FitnessEvaluator: Evaluated chromosome 23a443d6-b4f3-43a4-8d94-66b859ac466c, Fitness: 0.1150
+FitnessEvaluator: Evaluated chromosome b53dd9a8-8193-4ebe-827d-d9c3f05bbbc8, Fitness: 0.1150
+FitnessEvaluator: Evaluated chromosome da26143b-10cf-4563-afcc-8a0a258aac43, Fitness: 0.1150
+FitnessEvaluator: Evaluated chromosome a492d6f0-abe5-49f8-a58e-58321710d5b1, Fitness: 0.1150
+PopulationManager: Fittest individual in current generation (0): da26143b-10cf-4563-afcc-8a0a258aac43 with fitness 0.115
+PopulationManager: Applying elitism for top 1 individuals.
+PopulationManager: Generating offspring through selection, crossover, and mutation.
+PopulationManager: Evolution complete. New generation: 1. Population size: 5
+Fittest in Generation 1: Fitness=0.1150
+Prompt (ID: da26143b-10cf-4563-afcc-8a0a258aac43): Perform the following task:
+Context: Generate a creative story about a space explorer. Focus on: space, adventure, discovery
+Output Format: As requested....
+
+--- Generation 2 of 2 ---
+PopulationManager: Evolving population for generation 2. Evaluating current population...
+2025-06-16 00:54:44,965 - prompthelix.genetics.engine - INFO - Executing in TEST mode. Returning dummy LLM output for prompt: Perform the following task:
+Context: Generate a creative story about a space explorer. Focus on: spa...
+2025-06-16 00:54:44,965 - prompthelix.genetics.engine - INFO - Executing in TEST mode. Returning dummy LLM output for prompt: Perform the following task:
+Context: Generate a creative story about a space explorer. Focus on: spa...
+2025-06-16 00:54:44,965 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Evaluating output for prompt: Chromosome ID: da26143b-10cf-4563-afcc-8a0a258aac43
+Fitness: 0.1150
+Genes:
+  - Perform the following...
+LLM Output to Evaluate: This is a test output from dummy LLM in TEST mode....
+2025-06-16 00:54:44,966 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Calculating standard metrics for output (len: 50), task: 'Generate a creative story about a space explorer....'
+2025-06-16 00:54:44,966 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Evaluating output for prompt: Chromosome ID: db92ef65-6bb3-4f88-a5b2-84a131ee4007
+Fitness: 0.0000
+Genes:
+  - Perform the following...
+LLM Output to Evaluate: This is a test output from dummy LLM in TEST mode....
+2025-06-16 00:54:44,966 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Basic non-LLM metrics calculated: {'output_length': 50, 'output_word_count': 11, 'llm_assessed_relevance': 0.0, 'llm_assessed_coherence': 0.0, 'llm_assessed_completeness': 0.0, 'llm_accuracy_assessment': 'N/A', 'llm_safety_score': 0.0, 'llm_assessed_quality': 0.0, 'llm_assessment_feedback': 'N/A', 'relevance_placeholder': 0.6, 'coherence_placeholder': 0.55}
+2025-06-16 00:54:44,966 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Calculating standard metrics for output (len: 50), task: 'Generate a creative story about a space explorer....'
+2025-06-16 00:54:44,966 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Checking constraints: {'must_include_keywords': ['space', 'adventure'], 'max_length': 500}
+2025-06-16 00:54:44,966 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Constraint check result - Metrics={'constraint_adherence_placeholder': 0.33}, Errors#=1
+2025-06-16 00:54:44,966 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': LLM Analyzing content for task: 'Generate a creative story about a space explorer....' using model gpt-4
+2025-06-16 00:54:44,966 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Basic non-LLM metrics calculated: {'output_length': 50, 'output_word_count': 11, 'llm_assessed_relevance': 0.0, 'llm_assessed_coherence': 0.0, 'llm_assessed_completeness': 0.0, 'llm_accuracy_assessment': 'N/A', 'llm_safety_score': 0.0, 'llm_assessed_quality': 0.0, 'llm_assessment_feedback': 'N/A', 'relevance_placeholder': 0.85, 'coherence_placeholder': 0.79}
+2025-06-16 00:54:44,966 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Checking constraints: {'must_include_keywords': ['space', 'adventure'], 'max_length': 500}
+2025-06-16 00:54:44,966 - prompthelix.utils.llm_utils - ERROR - OpenAI API key not configured in environment variables (OPENAI_API_KEY).
+2025-06-16 00:54:44,966 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Constraint check result - Metrics={'constraint_adherence_placeholder': 0.33}, Errors#=1
+2025-06-16 00:54:44,966 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': LLM Analyzing content for task: 'Generate a creative story about a space explorer....' using model gpt-4
+2025-06-16 00:54:44,966 - prompthelix.utils.llm_utils - ERROR - OpenAI API key not configured in environment variables (OPENAI_API_KEY).
+2025-06-16 00:54:44,966 - prompthelix.genetics.engine - INFO - Executing in TEST mode. Returning dummy LLM output for prompt: Perform the following task:
+Context: Generate a creative story about a space explorer. Focus on: spa...
+2025-06-16 00:54:44,966 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Evaluating output for prompt: Chromosome ID: 4101e4c3-d1b6-478a-b7de-e72ebcf35242
+Fitness: 0.0000
+Genes:
+  - Perform the following...
+LLM Output to Evaluate: This is a test output from dummy LLM in TEST mode....
+2025-06-16 00:54:44,966 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Calculating standard metrics for output (len: 50), task: 'Generate a creative story about a space explorer....'
+2025-06-16 00:54:44,966 - prompthelix.agents.results_evaluator - ERROR - Agent 'ResultsEvaluator': Exception during LLM content analysis: OpenAI API key not configured.
+Traceback (most recent call last):
+  File "/app/prompthelix/agents/results_evaluator.py", line 225, in _analyze_content
+    response_str = call_llm_api(prompt_str_for_llm, provider=self.llm_provider, model=self.evaluation_llm_model)
+  File "/app/prompthelix/utils/llm_utils.py", line 56, in call_llm_api
+    return call_openai_api(prompt, model=model if model else "gpt-3.5-turbo")
+  File "/app/prompthelix/utils/llm_utils.py", line 16, in call_openai_api
+    raise ValueError("OpenAI API key not configured.")
+ValueError: OpenAI API key not configured.
+2025-06-16 00:54:44,967 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Basic non-LLM metrics calculated: {'output_length': 50, 'output_word_count': 11, 'llm_assessed_relevance': 0.0, 'llm_assessed_coherence': 0.0, 'llm_assessed_completeness': 0.0, 'llm_accuracy_assessment': 'N/A', 'llm_safety_score': 0.0, 'llm_assessed_quality': 0.0, 'llm_assessment_feedback': 'N/A', 'relevance_placeholder': 0.8, 'coherence_placeholder': 0.83}
+2025-06-16 00:54:44,967 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Checking constraints: {'must_include_keywords': ['space', 'adventure'], 'max_length': 500}
+2025-06-16 00:54:44,967 - prompthelix.agents.results_evaluator - WARNING - Agent 'ResultsEvaluator': LLM quality assessment failed or was unreliable. Adjusting fitness calculation if necessary or relying on placeholders via llm_quality_assessment.
+2025-06-16 00:54:44,967 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Constraint check result - Metrics={'constraint_adherence_placeholder': 0.33}, Errors#=1
+2025-06-16 00:54:44,967 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Evaluation complete. Fitness: 0.1150, Metrics: {'output_length': 50, 'output_word_count': 11, 'llm_assessed_relevance': 0.0, 'llm_assessed_coherence': 0.0, 'llm_assessed_completeness': 0.0, 'llm_accuracy_assessment': 'N/A', 'llm_safety_score': 0.0, 'llm_assessed_quality': 0.0, 'llm_assessment_feedback': 'Exception during LLM analysis: OpenAI API key not configured.', 'relevance_placeholder': 0.6, 'coherence_placeholder': 0.55, 'constraint_adherence_placeholder': 0.33}, Evaluation Process Errors: 1, Constraint Violations: 1
+2025-06-16 00:54:44,967 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': LLM Analyzing content for task: 'Generate a creative story about a space explorer....' using model gpt-4
+2025-06-16 00:54:44,967 - prompthelix.utils.llm_utils - ERROR - OpenAI API key not configured in environment variables (OPENAI_API_KEY).
+2025-06-16 00:54:44,966 - prompthelix.agents.results_evaluator - ERROR - Agent 'ResultsEvaluator': Exception during LLM content analysis: OpenAI API key not configured.
+Traceback (most recent call last):
+  File "/app/prompthelix/agents/results_evaluator.py", line 225, in _analyze_content
+    response_str = call_llm_api(prompt_str_for_llm, provider=self.llm_provider, model=self.evaluation_llm_model)
+  File "/app/prompthelix/utils/llm_utils.py", line 56, in call_llm_api
+    return call_openai_api(prompt, model=model if model else "gpt-3.5-turbo")
+  File "/app/prompthelix/utils/llm_utils.py", line 16, in call_openai_api
+    raise ValueError("OpenAI API key not configured.")
+ValueError: OpenAI API key not configured.
+2025-06-16 00:54:44,967 - prompthelix.agents.results_evaluator - WARNING - Agent 'ResultsEvaluator': LLM quality assessment failed or was unreliable. Adjusting fitness calculation if necessary or relying on placeholders via llm_quality_assessment.
+2025-06-16 00:54:44,967 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Evaluation complete. Fitness: 0.1150, Metrics: {'output_length': 50, 'output_word_count': 11, 'llm_assessed_relevance': 0.0, 'llm_assessed_coherence': 0.0, 'llm_assessed_completeness': 0.0, 'llm_accuracy_assessment': 'N/A', 'llm_safety_score': 0.0, 'llm_assessed_quality': 0.0, 'llm_assessment_feedback': 'Exception during LLM analysis: OpenAI API key not configured.', 'relevance_placeholder': 0.85, 'coherence_placeholder': 0.79, 'constraint_adherence_placeholder': 0.33}, Evaluation Process Errors: 1, Constraint Violations: 1
+2025-06-16 00:54:44,967 - prompthelix.genetics.engine - INFO - Executing in TEST mode. Returning dummy LLM output for prompt: Perform the following task:
+Context: Generate a creative story about a space explorer. Focus on: spa...
+2025-06-16 00:54:44,967 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Evaluating output for prompt: Chromosome ID: 8c37753e-13d2-4b8b-9931-5304a05f0c77
+Fitness: 0.0000
+Genes:
+  - Perform the following...
+LLM Output to Evaluate: This is a test output from dummy LLM in TEST mode....
+2025-06-16 00:54:44,967 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Calculating standard metrics for output (len: 50), task: 'Generate a creative story about a space explorer....'
+2025-06-16 00:54:44,967 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Basic non-LLM metrics calculated: {'output_length': 50, 'output_word_count': 11, 'llm_assessed_relevance': 0.0, 'llm_assessed_coherence': 0.0, 'llm_assessed_completeness': 0.0, 'llm_accuracy_assessment': 'N/A', 'llm_safety_score': 0.0, 'llm_assessed_quality': 0.0, 'llm_assessment_feedback': 'N/A', 'relevance_placeholder': 0.73, 'coherence_placeholder': 0.66}
+2025-06-16 00:54:44,967 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Checking constraints: {'must_include_keywords': ['space', 'adventure'], 'max_length': 500}
+2025-06-16 00:54:44,967 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Constraint check result - Metrics={'constraint_adherence_placeholder': 0.33}, Errors#=1
+2025-06-16 00:54:44,967 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': LLM Analyzing content for task: 'Generate a creative story about a space explorer....' using model gpt-4
+2025-06-16 00:54:44,967 - prompthelix.utils.llm_utils - ERROR - OpenAI API key not configured in environment variables (OPENAI_API_KEY).
+2025-06-16 00:54:44,967 - prompthelix.agents.results_evaluator - ERROR - Agent 'ResultsEvaluator': Exception during LLM content analysis: OpenAI API key not configured.
+Traceback (most recent call last):
+  File "/app/prompthelix/agents/results_evaluator.py", line 225, in _analyze_content
+    response_str = call_llm_api(prompt_str_for_llm, provider=self.llm_provider, model=self.evaluation_llm_model)
+  File "/app/prompthelix/utils/llm_utils.py", line 56, in call_llm_api
+    return call_openai_api(prompt, model=model if model else "gpt-3.5-turbo")
+  File "/app/prompthelix/utils/llm_utils.py", line 16, in call_openai_api
+    raise ValueError("OpenAI API key not configured.")
+ValueError: OpenAI API key not configured.
+2025-06-16 00:54:44,968 - prompthelix.agents.results_evaluator - WARNING - Agent 'ResultsEvaluator': LLM quality assessment failed or was unreliable. Adjusting fitness calculation if necessary or relying on placeholders via llm_quality_assessment.
+2025-06-16 00:54:44,968 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Evaluation complete. Fitness: 0.1150, Metrics: {'output_length': 50, 'output_word_count': 11, 'llm_assessed_relevance': 0.0, 'llm_assessed_coherence': 0.0, 'llm_assessed_completeness': 0.0, 'llm_accuracy_assessment': 'N/A', 'llm_safety_score': 0.0, 'llm_assessed_quality': 0.0, 'llm_assessment_feedback': 'Exception during LLM analysis: OpenAI API key not configured.', 'relevance_placeholder': 0.8, 'coherence_placeholder': 0.83, 'constraint_adherence_placeholder': 0.33}, Evaluation Process Errors: 1, Constraint Violations: 1
+2025-06-16 00:54:44,967 - prompthelix.agents.results_evaluator - ERROR - Agent 'ResultsEvaluator': Exception during LLM content analysis: OpenAI API key not configured.
+Traceback (most recent call last):
+  File "/app/prompthelix/agents/results_evaluator.py", line 225, in _analyze_content
+    response_str = call_llm_api(prompt_str_for_llm, provider=self.llm_provider, model=self.evaluation_llm_model)
+  File "/app/prompthelix/utils/llm_utils.py", line 56, in call_llm_api
+    return call_openai_api(prompt, model=model if model else "gpt-3.5-turbo")
+  File "/app/prompthelix/utils/llm_utils.py", line 16, in call_openai_api
+    raise ValueError("OpenAI API key not configured.")
+ValueError: OpenAI API key not configured.
+2025-06-16 00:54:44,968 - prompthelix.agents.results_evaluator - WARNING - Agent 'ResultsEvaluator': LLM quality assessment failed or was unreliable. Adjusting fitness calculation if necessary or relying on placeholders via llm_quality_assessment.
+2025-06-16 00:54:44,968 - prompthelix.genetics.engine - INFO - Executing in TEST mode. Returning dummy LLM output for prompt: Perform the following task:
+Context: Generate a creative story about a space explorer. Focus on: spa...
+2025-06-16 00:54:44,968 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Evaluation complete. Fitness: 0.1150, Metrics: {'output_length': 50, 'output_word_count': 11, 'llm_assessed_relevance': 0.0, 'llm_assessed_coherence': 0.0, 'llm_assessed_completeness': 0.0, 'llm_accuracy_assessment': 'N/A', 'llm_safety_score': 0.0, 'llm_assessed_quality': 0.0, 'llm_assessment_feedback': 'Exception during LLM analysis: OpenAI API key not configured.', 'relevance_placeholder': 0.73, 'coherence_placeholder': 0.66, 'constraint_adherence_placeholder': 0.33}, Evaluation Process Errors: 1, Constraint Violations: 1
+2025-06-16 00:54:44,968 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Evaluating output for prompt: Chromosome ID: c7d3e8b4-40d1-475b-86c0-733767191851
+Fitness: 0.0000
+Genes:
+  - Perform the following...
+LLM Output to Evaluate: This is a test output from dummy LLM in TEST mode....
+2025-06-16 00:54:44,968 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Calculating standard metrics for output (len: 50), task: 'Generate a creative story about a space explorer....'
+2025-06-16 00:54:44,968 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Basic non-LLM metrics calculated: {'output_length': 50, 'output_word_count': 11, 'llm_assessed_relevance': 0.0, 'llm_assessed_coherence': 0.0, 'llm_assessed_completeness': 0.0, 'llm_accuracy_assessment': 'N/A', 'llm_safety_score': 0.0, 'llm_assessed_quality': 0.0, 'llm_assessment_feedback': 'N/A', 'relevance_placeholder': 0.93, 'coherence_placeholder': 0.45}
+2025-06-16 00:54:44,968 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Checking constraints: {'must_include_keywords': ['space', 'adventure'], 'max_length': 500}
+2025-06-16 00:54:44,968 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Constraint check result - Metrics={'constraint_adherence_placeholder': 0.33}, Errors#=1
+2025-06-16 00:54:44,968 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': LLM Analyzing content for task: 'Generate a creative story about a space explorer....' using model gpt-4
+2025-06-16 00:54:44,968 - prompthelix.utils.llm_utils - ERROR - OpenAI API key not configured in environment variables (OPENAI_API_KEY).
+2025-06-16 00:54:44,968 - prompthelix.agents.results_evaluator - ERROR - Agent 'ResultsEvaluator': Exception during LLM content analysis: OpenAI API key not configured.
+Traceback (most recent call last):
+  File "/app/prompthelix/agents/results_evaluator.py", line 225, in _analyze_content
+    response_str = call_llm_api(prompt_str_for_llm, provider=self.llm_provider, model=self.evaluation_llm_model)
+  File "/app/prompthelix/utils/llm_utils.py", line 56, in call_llm_api
+    return call_openai_api(prompt, model=model if model else "gpt-3.5-turbo")
+  File "/app/prompthelix/utils/llm_utils.py", line 16, in call_openai_api
+    raise ValueError("OpenAI API key not configured.")
+ValueError: OpenAI API key not configured.
+2025-06-16 00:54:44,968 - prompthelix.agents.results_evaluator - WARNING - Agent 'ResultsEvaluator': LLM quality assessment failed or was unreliable. Adjusting fitness calculation if necessary or relying on placeholders via llm_quality_assessment.
+2025-06-16 00:54:44,968 - prompthelix.agents.results_evaluator - INFO - Agent 'ResultsEvaluator': Evaluation complete. Fitness: 0.1150, Metrics: {'output_length': 50, 'output_word_count': 11, 'llm_assessed_relevance': 0.0, 'llm_assessed_coherence': 0.0, 'llm_assessed_completeness': 0.0, 'llm_accuracy_assessment': 'N/A', 'llm_safety_score': 0.0, 'llm_assessed_quality': 0.0, 'llm_assessment_feedback': 'Exception during LLM analysis: OpenAI API key not configured.', 'relevance_placeholder': 0.93, 'coherence_placeholder': 0.45, 'constraint_adherence_placeholder': 0.33}, Evaluation Process Errors: 1, Constraint Violations: 1
+FitnessEvaluator: Evaluated chromosome da26143b-10cf-4563-afcc-8a0a258aac43, Fitness: 0.1150
+FitnessEvaluator: Evaluated chromosome 8c37753e-13d2-4b8b-9931-5304a05f0c77, Fitness: 0.1150
+FitnessEvaluator: Evaluated chromosome 4101e4c3-d1b6-478a-b7de-e72ebcf35242, Fitness: 0.1150
+FitnessEvaluator: Evaluated chromosome db92ef65-6bb3-4f88-a5b2-84a131ee4007, Fitness: 0.1150
+FitnessEvaluator: Evaluated chromosome c7d3e8b4-40d1-475b-86c0-733767191851, Fitness: 0.1150
+PopulationManager: Fittest individual in current generation (1): da26143b-10cf-4563-afcc-8a0a258aac43 with fitness 0.115
+PopulationManager: Applying elitism for top 1 individuals.
+PopulationManager: Generating offspring through selection, crossover, and mutation.
+PopulationManager: Evolution complete. New generation: 2. Population size: 5
+Fittest in Generation 2: Fitness=0.1150
+Prompt (ID: da26143b-10cf-4563-afcc-8a0a258aac43): Perform the following task:
+Context: Generate a creative story about a space explorer. Focus on: space, adventure, discovery
+Output Format: As requested....
+
+--- Overall Best Prompt Found ---
+Chromosome ID: da26143b-10cf-4563-afcc-8a0a258aac43
+Fitness: 0.1150
+Genes:
+  - Perform the following task:
+  - Context: Generate a creative story about a space explorer. Focus on: space, adventure, discovery
+  - Output Format: As requested.
+
+CLI: Genetic Algorithm completed.
+Best prompt fitness: 0.115
