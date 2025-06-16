@@ -1,6 +1,9 @@
 import logging
 import asyncio
 import inspect
+import json
+from sqlalchemy.orm import Session as DbSession
+from prompthelix.models import ConversationLog
 
 # Configure basic logging for the message bus
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -10,13 +13,39 @@ class MessageBus:
     """
     A simple message bus for inter-agent communication.
     """
-    def __init__(self):
+    def __init__(self, db_session_factory=None):
         self._registry = {}
         self._subscriptions = {}
         self._queue = asyncio.Queue()
         self._task = None
         self._running = False
+        self.db_session_factory = db_session_factory
         logger.info("MessageBus initialized.")
+
+    def _log_message_to_db(self, session_id: str, sender_id: str, recipient_id: str, message_type: str, content_payload: dict):
+        if not self.db_session_factory:
+            return
+
+        db: DbSession = None
+        try:
+            db = self.db_session_factory()
+            log_entry = ConversationLog(
+                session_id=session_id,
+                sender_id=sender_id,
+                recipient_id=recipient_id,
+                message_type=message_type,
+                content=json.dumps(content_payload)
+            )
+            db.add(log_entry)
+            db.commit()
+            logger.debug(f"Message from {sender_id} to {recipient_id} logged to DB. Session: {session_id}, Type: {message_type}")
+        except Exception as e:
+            logger.error(f"Failed to log message to DB: {e}", exc_info=True)
+            if db:
+                db.rollback()
+        finally:
+            if db:
+                db.close()
 
     def register(self, agent_id: str, agent_instance):
         """
@@ -124,33 +153,74 @@ class MessageBus:
         logger.info(f"Attempting to dispatch message of type '{message_type}' from '{sender_id}' to '{recipient_id}'.")
 
         recipient_agent = self._registry.get(recipient_id)
+        response = None
 
-        if recipient_agent:
-            try:
+        try:
+            if recipient_agent:
                 if hasattr(recipient_agent, 'receive_message') and callable(recipient_agent.receive_message):
                     response = recipient_agent.receive_message(message)
                     logger.info(f"Message dispatched and received by '{recipient_id}'. Agent response: {response}")
-                    return response
                 else:
-                    logger.error(f"Recipient agent '{recipient_id}' does not have a callable 'receive_message' method.")
-                    return {"status": "error", "error": f"Recipient agent '{recipient_id}' does not have a callable 'receive_message' method."}
-            except Exception as e:
-                logger.error(f"Error delivering message to agent '{recipient_id}': {e}", exc_info=True)
-                return {"status": "error", "error": f"Error delivering message to agent '{recipient_id}': {str(e)}"}
-        else:
-            logger.warning(f"Recipient agent '{recipient_id}' not found in registry. Message from '{sender_id}' of type '{message_type}' could not be delivered.")
-            return {"status": "error", "error": f"Recipient agent '{recipient_id}' not found."}
+                    error_msg = f"Recipient agent '{recipient_id}' does not have a callable 'receive_message' method."
+                    logger.error(error_msg)
+                    response = {"status": "error", "error": error_msg}
+            else:
+                error_msg = f"Recipient agent '{recipient_id}' not found."
+                logger.warning(f"Recipient agent '{recipient_id}' not found in registry. Message from '{sender_id}' of type '{message_type}' could not be delivered.")
+                response = {"status": "error", "error": error_msg}
+        except Exception as e:
+            error_msg = f"Error delivering message to agent '{recipient_id}': {str(e)}"
+            logger.error(f"Error delivering message to agent '{recipient_id}': {e}", exc_info=True)
+            response = {"status": "error", "error": error_msg}
+        finally:
+            # Log the message interaction
+            payload_data = message.get('payload', {})
+            session_id_val = payload_data.get('session_id')
+
+            if isinstance(session_id_val, (str, int, float)):
+                session_id_str = str(session_id_val)
+            elif session_id_val is None:
+                session_id_str = 'unknown_session_dispatch_none' # Specific placeholder
+            else: # For complex types like dicts or lists
+                session_id_str = 'unknown_session_dispatch_complex_type'
+
+
+            self._log_message_to_db(
+                session_id=session_id_str,
+                sender_id=sender_id,
+                recipient_id=recipient_id,
+                message_type=message_type,
+                content_payload=payload_data # Log the original payload
+            )
+        return response
 
     async def broadcast_message(self, message_type: str, payload: dict, sender_id: str = "system"):
-        """Places a broadcast message onto the internal queue."""
+        """Places a broadcast message onto the internal queue and logs it."""
         message = {
             "sender_id": sender_id,
-            "recipient_id": None,
+            "recipient_id": None, # Broadcasts don't have a single recipient at this stage
             "message_type": message_type,
             "payload": payload,
         }
         await self._queue.put(message)
-        self.start()
+        self.start() # Ensure the queue processor is running
+
+        # Log the broadcast attempt
+        session_id_val = payload.get('session_id')
+        if isinstance(session_id_val, (str, int, float)):
+            session_id_str = str(session_id_val)
+        elif session_id_val is None:
+            session_id_str = 'unknown_broadcast_session_none' # Specific placeholder
+        else: # For complex types
+            session_id_str = 'unknown_broadcast_session_complex_type'
+
+        self._log_message_to_db(
+            session_id=session_id_str,
+            sender_id=sender_id,
+            recipient_id=None, # Or a special value like "BROADCAST"
+            message_type=message_type,
+            content_payload=payload # Log the original payload
+        )
 
 if __name__ == '__main__':
     # Example Usage (simple test within the file)

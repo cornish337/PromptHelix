@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+
+{% block title %}Conversation Logs{% endblock %}
+
+{% block content %}
+<div class="container mx-auto p-4">
+    <h1 class="text-2xl font-bold mb-4">Conversation Logs</h1>
+
+    <div class="flex flex-col md:flex-row gap-4">
+        <!-- Sessions List -->
+        <div class="md:w-1/3 bg-white p-4 rounded shadow">
+            <h2 class="text-xl font-semibold mb-3">Sessions</h2>
+            <ul id="sessionsList" class="divide-y divide-gray-200">
+                <!-- Session items will be populated by JavaScript -->
+                <li class="py-2 px-1 hover:bg-gray-50 cursor-pointer">Loading sessions...</li>
+            </ul>
+        </div>
+
+        <!-- Messages View -->
+        <div class="md:w-2/3 bg-white p-4 rounded shadow">
+            <h2 class="text-xl font-semibold mb-1">Messages</h2>
+            <p id="currentSessionId" class="text-sm text-gray-600 mb-3">Select a session to view messages.</p>
+            <div id="messagesContainer" class="max-h-96 overflow-y-auto space-y-3 pr-2">
+                <!-- Messages will be populated by JavaScript -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const sessionsList = document.getElementById('sessionsList');
+        const messagesContainer = document.getElementById('messagesContainer');
+        const currentSessionIdDisplay = document.getElementById('currentSessionId');
+
+        async function fetchSessions() {
+            try {
+                const response = await fetch('/api/v1/conversations/sessions/'); // Adjust API prefix if needed
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const sessions = await response.json();
+
+                sessionsList.innerHTML = ''; // Clear loading/previous
+                if (sessions.length === 0) {
+                    sessionsList.innerHTML = '<li class="py-2 px-1">No sessions found.</li>';
+                    return;
+                }
+
+                sessions.forEach(session => {
+                    const li = document.createElement('li');
+                    li.className = 'py-3 px-2 hover:bg-gray-100 cursor-pointer border-b border-gray-200 last:border-b-0';
+                    li.textContent = `${session.session_id} (${session.message_count} msgs)`;
+                    li.setAttribute('data-session-id', session.session_id);
+
+                    const firstMsgDate = new Date(session.first_message_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+                    const lastMsgTime = new Date(session.last_message_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+
+                    const detailSpan = document.createElement('span');
+                    detailSpan.className = 'block text-xs text-gray-500';
+                    detailSpan.textContent = `Range: ${firstMsgDate} - ${lastMsgTime}`;
+                    li.appendChild(detailSpan);
+
+                    li.addEventListener('click', () => {
+                        fetchMessages(session.session_id);
+                        // Highlight selected session
+                        document.querySelectorAll('#sessionsList li').forEach(item => item.classList.remove('bg-blue-100', 'font-semibold'));
+                        li.classList.add('bg-blue-100', 'font-semibold');
+                    });
+                    sessionsList.appendChild(li);
+                });
+            } catch (error) {
+                sessionsList.innerHTML = '<li class="py-2 px-1 text-red-500">Failed to load sessions.</li>';
+                console.error('Error fetching sessions:', error);
+            }
+        }
+
+        async function fetchMessages(sessionId) {
+            currentSessionIdDisplay.textContent = `Session ID: ${sessionId}`;
+            messagesContainer.innerHTML = '<div class="p-3 text-center">Loading messages...</div>';
+            try {
+                const response = await fetch(`/api/v1/conversations/sessions/${sessionId}/messages/`); // Adjust API prefix
+                if (!response.ok) {
+                     if (response.status === 404) {
+                        messagesContainer.innerHTML = '<div class="p-3 text-center text-gray-500">Session not found or no messages.</div>';
+                     } else {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                     }
+                     return;
+                }
+                const messages = await response.json();
+
+                messagesContainer.innerHTML = ''; // Clear loading/previous
+                if (messages.length === 0) {
+                    messagesContainer.innerHTML = '<div class="p-3 text-center text-gray-500">No messages in this session.</div>';
+                    return;
+                }
+
+                messages.forEach(msg => {
+                    const msgDiv = document.createElement('div');
+                    msgDiv.className = 'p-2 rounded';
+
+                    let contentParsed = msg.content;
+                    try {
+                        // Attempt to parse and pretty-print if content is JSON string
+                        const parsedJson = JSON.parse(msg.content);
+                        contentParsed = JSON.stringify(parsedJson, null, 2);
+                        contentParsed = `<pre class="whitespace-pre-wrap text-xs bg-gray-50 p-2 rounded">${contentParsed.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</pre>`;
+                    } catch (e) {
+                        // If not JSON or error parsing, display as plain text
+                        contentParsed = `<p class="text-sm whitespace-pre-wrap">${msg.content.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>`;
+                    }
+
+                    const senderRecipientStyle = msg.sender_id.toLowerCase().includes('llm') || (msg.recipient_id && msg.recipient_id.toLowerCase().includes('llm'))
+                        ? 'bg-purple-100 border-l-4 border-purple-500'
+                        : (msg.sender_id === 'SYSTEM' ? 'bg-yellow-100 border-l-4 border-yellow-500' : 'bg-blue-100 border-l-4 border-blue-500');
+
+                    msgDiv.innerHTML = `
+                        <div class="${senderRecipientStyle} p-3 rounded-md shadow-sm">
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="font-semibold text-sm">${msg.sender_id} &rarr; ${msg.recipient_id || 'BROADCAST'}</span>
+                                <span class="text-xs text-gray-500">${new Date(msg.timestamp).toLocaleString()}</span>
+                            </div>
+                            <div class="text-xs text-gray-600 mb-1">Type: ${msg.message_type || 'N/A'}</div>
+                            <div class="message-content text-sm">${contentParsed}</div>
+                        </div>
+                    `;
+                    messagesContainer.appendChild(msgDiv);
+                });
+                messagesContainer.scrollTop = messagesContainer.scrollHeight; // Scroll to bottom
+            } catch (error) {
+                messagesContainer.innerHTML = '<div class="p-3 text-center text-red-500">Failed to load messages.</div>';
+                console.error('Error fetching messages for session ' + sessionId + ':', error);
+            }
+        }
+
+        fetchSessions(); // Initial fetch
+    });
+</script>
+{% endblock %}

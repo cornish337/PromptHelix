@@ -5,11 +5,19 @@ A Python framework for AI prompt generation and optimization using a Prompt DNA 
 This project aims to provide a comprehensive toolkit for developing, evolving, and managing
 AI prompts through innovative techniques inspired by genetic algorithms and multi-agent systems.
 
-## Features (Planned)
+## Features
 
 *   Genetic Algorithm for prompt optimization
 *   Multi-agent system for collaborative prompt engineering
 *   Integration with various LLMs (OpenAI, Anthropic, Google)
+*   **Conversation Log UI**:
+    *   **Purpose**: Allows viewing of logged interactions and messages between agents, the system, and LLMs. This is crucial for debugging, monitoring agent behavior, and understanding communication flows.
+    *   **Access**: Available at the `/ui/conversations` route in the web interface.
+    *   **Functionality**:
+        *   Lists all distinct conversation sessions, showing message counts and time ranges.
+        *   Displays messages for a selected session, ordered by timestamp.
+        *   Shows sender ID, recipient ID (or "BROADCAST"), message type, full timestamp, and the message content.
+        *   Attempts to pretty-print JSON content within messages for readability.
 *   Performance tracking and evaluation of prompts
 *   API for programmatic access and integration
 *   User interface for managing and experimenting with prompts (basic HTML interface available)
