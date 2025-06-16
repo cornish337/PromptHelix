@@ -471,3 +471,48 @@ class TestCli:
         mock_exit.assert_called_once_with(0)
         stdout_val = sys.stdout.getvalue()
         assert "prompthelix 0.1.0" in stdout_val
+
+    def test_run_command_help_message_includes_new_options(self, mock_stdout, mock_stderr):
+        # Test that `prompthelix run --help` shows the new GA options
+        with patch.object(sys, 'argv', ['prompthelix', 'run', '--help']), \
+             patch.object(sys, 'exit') as mock_exit: # argparse help usually exits
+            main_cli()
+
+        mock_exit.assert_called_once_with(0) # Successful help display should exit with 0
+
+        help_text = sys.stdout.getvalue()
+
+        # Check for a representative set of the new arguments' help strings
+        assert "--prompt PROMPT" in help_text
+        assert "Custom prompt string for the GA." in help_text
+
+        assert "--task-description TASK_DESCRIPTION" in help_text
+        assert "Detailed task description for the GA." in help_text
+
+        assert "--keywords KEYWORDS [KEYWORDS ...]" in help_text
+        assert "Keywords for the GA." in help_text
+
+        assert "--num-generations NUM_GENERATIONS" in help_text
+        assert "Number of generations for the GA." in help_text
+
+        assert "--population-size POPULATION_SIZE" in help_text
+        assert "Population size for the GA." in help_text
+
+        assert "--elitism-count ELITISM_COUNT" in help_text
+        assert "Elitism count for the GA." in help_text
+
+        assert "--output-file OUTPUT_FILE" in help_text
+        assert "File path to save the best prompt." in help_text
+
+        assert "--agent-settings AGENT_SETTINGS" in help_text
+        assert "JSON string or file path to override agent configurations." in help_text
+
+        assert "--llm-settings LLM_SETTINGS" in help_text
+        assert "JSON string or file path to override LLM utility settings." in help_text
+
+        assert "--execution-mode {TEST,REAL}" in help_text # Argparse choices format
+        assert "Set the execution mode for the GA (TEST or REAL)." in help_text
+
+        # Also check for the existing 'module' argument
+        assert "module" in help_text # The positional argument itself
+        assert "Module to run (e.g., 'ga')" in help_text

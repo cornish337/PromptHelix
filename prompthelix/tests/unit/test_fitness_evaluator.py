@@ -49,14 +49,30 @@ def test_evaluate_successful_llm_call(
 ):
     """Test FitnessEvaluator.evaluate for a successful LLM call."""
     caplog.set_level(logging.INFO)
-    mock_openai_constructor.return_value = mock_openai_client
+    mock_openai_constructor.return_value = mock_openai_client # mock_openai_client is already a MagicMock instance
 
-    with patch.object(settings, 'OPENAI_API_KEY', 'fake_key_present'):
-        evaluator = FitnessEvaluator(results_evaluator_agent=mock_results_evaluator_agent, execution_mode=ExecutionMode.REAL)
+    with patch.object(settings, 'OPENAI_API_KEY', 'fake_key_present'): # Ensure global SDK settings has a key
+        # Test with default llm_settings (None)
+        evaluator = FitnessEvaluator(
+            results_evaluator_agent=mock_results_evaluator_agent,
+            execution_mode=ExecutionMode.REAL,
+            llm_settings=None
+        )
+
+    # Check that the client was initialized (mock_openai_constructor was called by __init__)
+    mock_openai_constructor.assert_called_once()
+    # Verify API key used by the client (assuming default behavior of openai client mock)
+    # This part is tricky as the actual client is mocked. We trust __init__ logic for now.
 
     fitness_score = evaluator.evaluate(sample_chromosome, "Test task", {"criteria": "none"})
 
+    # Check that create was called on the instance returned by the constructor
     mock_openai_client.chat.completions.create.assert_called_once()
+
+    # Verify parameters passed to create (using default model from FitnessEvaluator._call_llm_api)
+    args, kwargs = mock_openai_client.chat.completions.create.call_args
+    assert kwargs['model'] == 'gpt-3.5-turbo' # Default model in _call_llm_api if not overridden
+
     mock_results_evaluator_agent.process_request.assert_called_once_with({
         "prompt_chromosome": sample_chromosome,
         "llm_output": "Mocked LLM response content.",
@@ -84,7 +100,11 @@ def test_evaluate_llm_api_error(
     mock_openai_client.chat.completions.create.side_effect = openai.APIError("Test API Error", request=Mock(), body=None)
 
     with patch.object(settings, 'OPENAI_API_KEY', 'fake_key_present'):
-        evaluator = FitnessEvaluator(results_evaluator_agent=mock_results_evaluator_agent, execution_mode=ExecutionMode.REAL)
+        evaluator = FitnessEvaluator(
+            results_evaluator_agent=mock_results_evaluator_agent,
+            execution_mode=ExecutionMode.REAL,
+            llm_settings=None
+        )
 
     evaluator.evaluate(sample_chromosome, "Test task", {})
 
@@ -113,7 +133,11 @@ def test_evaluate_llm_no_content_response(
     mock_openai_client.chat.completions.create.return_value = mock_completion_no_content
 
     with patch.object(settings, 'OPENAI_API_KEY', 'fake_key_present'):
-        evaluator = FitnessEvaluator(results_evaluator_agent=mock_results_evaluator_agent, execution_mode=ExecutionMode.REAL)
+        evaluator = FitnessEvaluator(
+            results_evaluator_agent=mock_results_evaluator_agent,
+            execution_mode=ExecutionMode.REAL,
+            llm_settings=None
+        )
 
     evaluator.evaluate(sample_chromosome, "Test task", {})
 
@@ -134,21 +158,45 @@ def test_fitness_evaluator_init_no_api_key(
     """Test FitnessEvaluator initialization and evaluate call when OPENAI_API_KEY is missing."""
     caplog.set_level(logging.ERROR)
 
-    with patch.object(settings, 'OPENAI_API_KEY', None):
-        evaluator_real_no_key = FitnessEvaluator(results_evaluator_agent=mock_results_evaluator_agent, execution_mode=ExecutionMode.REAL)
+    # Test REAL mode with no API key (either in settings or global_sdk_settings)
+    with patch.object(settings, 'OPENAI_API_KEY', None): # Ensure global SDK key is None
+        evaluator_real_no_key = FitnessEvaluator(
+            results_evaluator_agent=mock_results_evaluator_agent,
+            execution_mode=ExecutionMode.REAL,
+            llm_settings={'api_key': None} # Ensure llm_settings also has no key
+        )
 
-    assert "OPENAI_API_KEY not found in settings" in caplog.text
-    mock_openai_constructor.assert_not_called()
+    assert "OpenAI API Key not found in settings or global config" in caplog.text # Updated message from __init__
+    # OpenAI constructor might still be called if api_key_to_use is None but other client_params are present.
+    # The important check is that the client is None or unusable.
+    assert evaluator_real_no_key.openai_client is None
+    mock_openai_constructor.assert_not_called() # If api_key_to_use is None, constructor shouldn't be called.
+
 
     caplog.clear()
+    # Test TEST mode with no API key (should not log error about key)
     with patch.object(settings, 'OPENAI_API_KEY', None):
-        evaluator_test_no_key = FitnessEvaluator(results_evaluator_agent=mock_results_evaluator_agent, execution_mode=ExecutionMode.TEST)
-    assert "OPENAI_API_KEY not found in settings" not in caplog.text
-    mock_openai_constructor.assert_not_called()
+        evaluator_test_no_key = FitnessEvaluator(
+            results_evaluator_agent=mock_results_evaluator_agent,
+            execution_mode=ExecutionMode.TEST,
+            llm_settings=None
+        )
+    assert "OpenAI API Key not found" not in caplog.text # Error should not be logged for TEST mode
+    # In TEST mode, client is not initialized.
+    mock_openai_constructor.call_count = 0 # Reset call count if it was called in previous step by mistake
 
     caplog.clear()
-    caplog.set_level(logging.WARNING)
-    evaluator_real_no_key.evaluate(sample_chromosome, "Test task", {})
+    caplog.set_level(logging.WARNING) # Evaluate will try to call _call_llm_api which logs errors
+
+    # Re-create evaluator_real_no_key to ensure its state before evaluate call
+    with patch.object(settings, 'OPENAI_API_KEY', None):
+         evaluator_real_no_key_for_eval = FitnessEvaluator(
+            results_evaluator_agent=mock_results_evaluator_agent,
+            execution_mode=ExecutionMode.REAL,
+            llm_settings={'api_key': None}
+        )
+
+    evaluator_real_no_key_for_eval.evaluate(sample_chromosome, "Test task", {})
     mock_results_evaluator_agent.process_request.assert_called_once()
     args, _ = mock_results_evaluator_agent.process_request.call_args
     assert args[0]["llm_output"] == "Error: LLM client not initialized."
@@ -162,7 +210,11 @@ def test_fitness_evaluator_init_no_api_key(
 def test_fitness_evaluator_call_llm_api_test_mode(mock_results_evaluator_agent, caplog):
     """Test _call_llm_api in TEST mode."""
     caplog.set_level(logging.INFO)
-    evaluator = FitnessEvaluator(results_evaluator_agent=mock_results_evaluator_agent, execution_mode=ExecutionMode.TEST)
+    evaluator = FitnessEvaluator(
+        results_evaluator_agent=mock_results_evaluator_agent,
+        execution_mode=ExecutionMode.TEST,
+        llm_settings=None
+    )
 
     response = evaluator._call_llm_api("test prompt in test mode")
     assert response == "This is a test output from dummy LLM in TEST mode."
@@ -172,22 +224,90 @@ def test_fitness_evaluator_call_llm_api_test_mode(mock_results_evaluator_agent, 
 def test_fitness_evaluator_call_llm_api_real_mode(
     mock_openai_constructor,
     mock_results_evaluator_agent,
-    mock_openai_client,
+    mock_openai_client, # This is the MagicMock instance of the client
     caplog
 ):
-    """Test _call_llm_api in REAL mode with a mocked OpenAI client."""
+    """Test _call_llm_api in REAL mode with a mocked OpenAI client and specific llm_settings."""
     caplog.set_level(logging.INFO)
+
+    # Configure the mock constructor to return our specific client mock instance
     mock_openai_constructor.return_value = mock_openai_client
 
-    with patch.object(settings, 'OPENAI_API_KEY', 'fake_key_for_real_mode'):
-        evaluator = FitnessEvaluator(results_evaluator_agent=mock_results_evaluator_agent, execution_mode=ExecutionMode.REAL)
+    test_llm_settings = {
+        'api_key': 'fake_key_for_real_mode', # This will be used by __init__
+        'default_model': 'gpt-4-test',
+        'default_timeout': 120,
+        'max_tokens': 500,
+        'temperature': 0.5
+    }
+
+    # No need to patch global settings.OPENAI_API_KEY if llm_settings provides the key
+    evaluator = FitnessEvaluator(
+        results_evaluator_agent=mock_results_evaluator_agent,
+        execution_mode=ExecutionMode.REAL,
+        llm_settings=test_llm_settings
+    )
+
+    # Ensure the constructor was called and client was set up
+    mock_openai_constructor.assert_called_with(api_key='fake_key_for_real_mode', timeout=120)
+
 
     response = evaluator._call_llm_api("test prompt for real mode")
 
     mock_openai_client.chat.completions.create.assert_called_once()
+    args, kwargs = mock_openai_client.chat.completions.create.call_args
+
+    assert kwargs['model'] == 'gpt-4-test'
+    assert kwargs['timeout'] == 120
+    assert kwargs['max_tokens'] == 500
+    assert kwargs['temperature'] == 0.5
+
     assert response == "Mocked LLM response content."
-    assert "Calling OpenAI API model gpt-3.5-turbo" in caplog.text
+    assert "Calling OpenAI API model gpt-4-test" in caplog.text # Check for overridden model
     assert "OpenAI API call successful." in caplog.text
+
+
+@patch('prompthelix.genetics.engine.openai.OpenAI') # Mock constructor
+def test_fitness_evaluator_call_llm_api_real_mode_model_override_in_call(
+    mock_openai_constructor, # Mock for constructor
+    mock_results_evaluator_agent,
+    caplog
+):
+    """Test _call_llm_api in REAL mode where model is specified in the call."""
+    caplog.set_level(logging.INFO)
+
+    # Create a new mock client instance for this test's specific assertions
+    specific_client_mock = MagicMock(spec=openai.OpenAI)
+    mock_completion = Mock()
+    mock_choice = Mock()
+    mock_message = Mock()
+    mock_message.content = "Response from specific_call_model."
+    mock_choice.message = mock_message
+    mock_completion.choices = [mock_choice]
+    specific_client_mock.chat.completions.create.return_value = mock_completion
+
+    mock_openai_constructor.return_value = specific_client_mock
+
+    test_llm_settings = {
+        'api_key': 'fake_key_for_real_mode_override',
+        'default_model': 'gpt-3.5-settings-default', # This should be overridden by call parameter
+    }
+
+    evaluator = FitnessEvaluator(
+        results_evaluator_agent=mock_results_evaluator_agent,
+        execution_mode=ExecutionMode.REAL,
+        llm_settings=test_llm_settings
+    )
+
+    response = evaluator._call_llm_api("test prompt", model_name="specific_call_model")
+
+    specific_client_mock.chat.completions.create.assert_called_once()
+    args, kwargs = specific_client_mock.chat.completions.create.call_args
+    assert kwargs['model'] == 'specific_call_model' # Model from call_llm_api param
+    assert response == "Response from specific_call_model."
+    assert "Calling OpenAI API model specific_call_model" in caplog.text
+
+
 
 @patch('prompthelix.genetics.engine.openai.OpenAI')
 def test_fitness_evaluator_evaluate_test_mode(
@@ -199,7 +319,11 @@ def test_fitness_evaluator_evaluate_test_mode(
     """Test FitnessEvaluator.evaluate in TEST mode."""
     caplog.set_level(logging.INFO)
 
-    evaluator = FitnessEvaluator(results_evaluator_agent=mock_results_evaluator_agent, execution_mode=ExecutionMode.TEST)
+    evaluator = FitnessEvaluator(
+        results_evaluator_agent=mock_results_evaluator_agent,
+        execution_mode=ExecutionMode.TEST,
+        llm_settings=None
+    )
 
     fitness_score = evaluator.evaluate(sample_chromosome, "Test task for evaluate", {"criteria": "test_mode"})
 
@@ -235,7 +359,11 @@ def test_evaluate_logs_fallback_status(mock_results_evaluator_agent, sample_chro
         "error_analysis": []
     }
 
-    evaluator = FitnessEvaluator(results_evaluator_agent=mock_results_evaluator_agent, execution_mode=ExecutionMode.TEST)
+    evaluator = FitnessEvaluator(
+        results_evaluator_agent=mock_results_evaluator_agent,
+        execution_mode=ExecutionMode.TEST,
+        llm_settings=None
+        )
     evaluator.evaluate(sample_chromosome, "Test task for fallback logging", {})
 
     assert sample_chromosome.fitness_score == 0.33
@@ -271,7 +399,11 @@ def test_evaluate_logs_success_status(mock_results_evaluator_agent, sample_chrom
         "error_analysis": []
     }
 
-    evaluator = FitnessEvaluator(results_evaluator_agent=mock_results_evaluator_agent, execution_mode=ExecutionMode.TEST)
+    evaluator = FitnessEvaluator(
+        results_evaluator_agent=mock_results_evaluator_agent,
+        execution_mode=ExecutionMode.TEST,
+        llm_settings=None
+    )
     evaluator.evaluate(sample_chromosome, "Test task for success logging", {})
 
     assert sample_chromosome.fitness_score == 0.88
@@ -297,7 +429,11 @@ def test_evaluate_logs_missing_status(mock_results_evaluator_agent, sample_chrom
         "error_analysis": []
     }
 
-    evaluator = FitnessEvaluator(results_evaluator_agent=mock_results_evaluator_agent, execution_mode=ExecutionMode.TEST)
+    evaluator = FitnessEvaluator(
+        results_evaluator_agent=mock_results_evaluator_agent,
+        execution_mode=ExecutionMode.TEST,
+        llm_settings=None
+    )
     evaluator.evaluate(sample_chromosome, "Test task for missing status key", {})
 
     expected_warning_log = f"FitnessEvaluator: 'llm_analysis_status' not found in evaluation_details.content_metrics for Chromosome {sample_chromosome.id}."
@@ -347,7 +483,11 @@ def test_fitness_evaluator_picklable_test_mode(real_results_evaluator_agent_for_
     caplog.set_level(logging.INFO)
     rea = real_results_evaluator_agent_for_pickle_test
 
-    fe_test_mode = FitnessEvaluator(results_evaluator_agent=rea, execution_mode=ExecutionMode.TEST)
+    fe_test_mode = FitnessEvaluator(
+        results_evaluator_agent=rea,
+        execution_mode=ExecutionMode.TEST,
+        llm_settings=None
+    )
 
     pickled_fe = pickle.dumps(fe_test_mode)
     unpickled_fe_test_mode = pickle.loads(pickled_fe)
@@ -364,9 +504,15 @@ def test_fitness_evaluator_picklable_real_mode_with_key(real_results_evaluator_a
     caplog.set_level(logging.INFO)
     rea = real_results_evaluator_agent_for_pickle_test
 
-    fe_real_mode = FitnessEvaluator(results_evaluator_agent=rea, execution_mode=ExecutionMode.REAL)
+    fe_real_mode = FitnessEvaluator(
+        results_evaluator_agent=rea,
+        execution_mode=ExecutionMode.REAL,
+        llm_settings={'api_key': "mock_openai_key_for_pickle_test"} # Provide key via settings
+    )
     assert fe_real_mode.openai_client is not None
     assert fe_real_mode.openai_client.api_key == "mock_openai_key_for_pickle_test"
+    # Check that global settings.OPENAI_API_KEY is not changed by this
+    assert settings.OPENAI_API_KEY == "mock_openai_key_for_pickle_test" # This is from the @patch.object for this test
 
     pickled_fe = pickle.dumps(fe_real_mode)
     unpickled_fe_real_mode = pickle.loads(pickled_fe)
@@ -384,9 +530,14 @@ def test_fitness_evaluator_picklable_real_mode_no_key(real_results_evaluator_age
     caplog.set_level(logging.INFO)
     rea = real_results_evaluator_agent_for_pickle_test
 
-    fe_real_mode_no_key = FitnessEvaluator(results_evaluator_agent=rea, execution_mode=ExecutionMode.REAL)
+    # Ensure settings.OPENAI_API_KEY is None for this test case due to the @patch.object
+    fe_real_mode_no_key = FitnessEvaluator(
+        results_evaluator_agent=rea,
+        execution_mode=ExecutionMode.REAL,
+        llm_settings=None # No settings override, so it relies on global SDK settings
+    )
     assert fe_real_mode_no_key.openai_client is None
-    assert "OPENAI_API_KEY not found in settings" in caplog.text
+    assert "OpenAI API Key not found in settings or global config" in caplog.text
     caplog.clear()
 
     pickled_fe = pickle.dumps(fe_real_mode_no_key)

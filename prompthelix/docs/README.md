@@ -10,7 +10,7 @@ The core components of PromptHelix are organized as follows:
 
 -   `prompthelix/agents/`: Contains different types of AI agents (Architect, Critic, etc.).
 -   `prompthelix/api/`: Defines the FastAPI endpoints and routing.
--   `prompthelix/cli.py`: Command-line interface entry point and commands.
+-   `prompthelix/cli.py`: Command-line interface entry point and commands. See detailed CLI usage below.
 -   `prompthelix/config.py`: Application configuration settings. See the main `README.md` for how to configure API keys and database URLs via environment variables.
 -   `prompthelix/core/`: Core functionalities like the Prompt DNA system.
 -   `prompthelix/database/`: Database models (SQLAlchemy), session management, and initialization.
@@ -67,6 +67,63 @@ To run the tests, navigate to the root directory of the project and use a test r
 python -m unittest discover -s prompthelix/tests/unit
 ```
 (Further details on test execution and integration tests will be added as the project matures.)
+
+## Command-Line Interface (CLI)
+
+The CLI is available via `python -m prompthelix.cli`. It provides several commands for interacting with the PromptHelix system.
+
+### `run` command
+
+The `run` command is used to execute modules within PromptHelix. Currently, its primary use is to run the Genetic Algorithm (GA) for prompt optimization.
+
+**Usage:** `python -m prompthelix.cli run [module_name] [options]`
+
+If `module_name` is omitted, it defaults to `ga`.
+
+**`run ga` Options:**
+
+The following options are available when running the Genetic Algorithm (`python -m prompthelix.cli run ga`):
+
+*   `module`: (Optional) The name of the module to run. Defaults to `ga`.
+*   `--prompt "<string>`: (Optional) Provide an initial custom prompt string to seed the first generation of the GA.
+*   `--task-description "<string>"`: (Optional) A detailed description of the task the generated prompts should accomplish. This helps guide the GA.
+*   `--keywords <word1> <word2> ...`: (Optional) A list of keywords relevant to the task. These can be used by agents to focus prompt generation.
+*   `--num-generations <integer>`: (Optional) The number of generations the GA should run for.
+*   `--population-size <integer>`: (Optional) The number of prompts (chromosomes) in each generation.
+*   `--elitism-count <integer>`: (Optional) The number of the best prompts from one generation to carry over directly to the next.
+*   `--output-file <filepath>`: (Optional) Specify a file path to save the best prompt found by the GA at the end of the run.
+*   `--agent-settings <json_string_or_filepath>`: (Optional) Override default agent configurations. This can be a direct JSON string or a path to a JSON file.
+    *   *JSON Format*: The JSON should be a dictionary where keys are agent class names (e.g., "PromptArchitectAgent") and values are dictionaries of settings for that agent. Example: `'{"PromptArchitectAgent": {"default_llm_model": "gpt-4o-mini"}}'`
+*   `--llm-settings <json_string_or_filepath>`: (Optional) Override default LLM utility settings (e.g., timeouts, API keys if applicable). This can be a direct JSON string or a path to a JSON file.
+    *   *JSON Format*: The JSON should be a dictionary of LLM parameters. Example: `'{"default_timeout": 120, "temperature": 0.8}'`
+*   `--execution-mode <TEST|REAL>`: (Optional) Set the execution mode. `TEST` mode uses mock LLM calls and is faster. `REAL` mode makes actual calls to configured LLM providers. Defaults to `TEST`.
+
+**Examples for `run ga`:**
+
+*   Run GA with a specific seed prompt:
+    ```bash
+    python -m prompthelix.cli run ga --prompt "Generate a short poem about a robot learning to dream."
+    ```
+
+*   Run GA with detailed task and GA parameters, saving the best prompt:
+    ```bash
+    python -m prompthelix.cli run ga --task-description "Create an engaging marketing slogan for a new eco-friendly coffee brand." --keywords "sustainable" "organic" "fresh" --num-generations 20 --population-size 50 --output-file ./marketing_slogan_prompt.txt
+    ```
+
+*   Override settings for `PromptArchitectAgent` using a JSON string:
+    ```bash
+    python -m prompthelix.cli run ga --agent-settings '{"PromptArchitectAgent": {"default_llm_model": "gpt-4o-mini", "knowledge_file_path": "custom_architect_rules.json"}}'
+    ```
+
+*   Override general LLM utility settings from a file:
+    ```bash
+    python -m prompthelix.cli run ga --llm-settings ./configs/custom_llm_params.json
+    ```
+
+*   Run GA in `REAL` mode (ensure API keys are set):
+    ```bash
+    python -m prompthelix.cli run ga --execution-mode REAL --prompt "A real test with an LLM."
+    ```
 
 ### LLM Connectivity Test
 

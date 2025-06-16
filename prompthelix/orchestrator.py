@@ -94,22 +94,19 @@ def main_ga_loop(
     prompt_architect_config = get_agent_config("PromptArchitectAgent")
     prompt_architect = PromptArchitectAgent(
         message_bus=message_bus,
-        knowledge_file_path=prompt_architect_config.get("knowledge_file_path", "architect_ga_knowledge.json"),
-        settings=prompt_architect_config # Pass the full merged settings
+        knowledge_file_path=prompt_architect_config.get("knowledge_file_path", "architect_ga_knowledge.json")
     )
 
     results_evaluator_config = get_agent_config("ResultsEvaluatorAgent")
     results_evaluator = ResultsEvaluatorAgent(
         message_bus=message_bus,
-        knowledge_file_path=results_evaluator_config.get("knowledge_file_path", "results_evaluator_ga_config.json"),
-        settings=results_evaluator_config
+        knowledge_file_path=results_evaluator_config.get("knowledge_file_path", "results_evaluator_ga_config.json")
     )
 
     style_optimizer_config = get_agent_config("StyleOptimizerAgent")
     style_optimizer = StyleOptimizerAgent(
         message_bus=message_bus,
-        knowledge_file_path=style_optimizer_config.get("knowledge_file_path"), # May be None
-        settings=style_optimizer_config
+        knowledge_file_path=style_optimizer_config.get("knowledge_file_path") # May be None
     )
     # TODO: Agents need to be updated to accept and use the 'settings' dict.
     # For now, they might only use knowledge_file_path from it or ignore it if not updated.
@@ -126,8 +123,7 @@ def main_ga_loop(
 
     fitness_eval = FitnessEvaluator(
         results_evaluator_agent=results_evaluator,
-        execution_mode=execution_mode,
-        llm_settings=current_llm_settings # Pass the potentially overridden LLM settings
+        execution_mode=execution_mode
     )
     # TODO: FitnessEvaluator needs to be updated to accept and use llm_settings.
 
@@ -137,8 +133,7 @@ def main_ga_loop(
         prompt_architect_agent=prompt_architect, # Architect is used for initial prompt generation
         population_size=population_size,
         elitism_count=elitism_count,
-        population_path=population_path,
-        initial_prompt_str=initial_prompt_str # Pass initial prompt string
+        population_path=population_path
         # TODO: Pass agent_settings_override or specific agent configs if PopulationManager
         # is responsible for creating/configuring more agents during its operations.
         # For now, agents are configured above.

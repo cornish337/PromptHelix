@@ -10,19 +10,28 @@ class BaseAgent(abc.ABC):
     Includes basic inter-agent communication capabilities.
     """
 
-    def __init__(self, agent_id: str, message_bus=None):
+from typing import Optional, Dict
+
+class BaseAgent(abc.ABC):
+    """
+    Abstract base class for all agents in the PromptHelix system.
+    Includes basic inter-agent communication capabilities.
+    """
+
+    def __init__(self, agent_id: str, message_bus=None, settings: Optional[Dict] = None):
         """
         Initializes the BaseAgent.
 
         Args:
             agent_id (str): A unique identifier for the agent.
-            message_bus (object, optional): An optional message bus instance 
-                                            for inter-agent communication. 
-                                            If provided, it should have a 
-                                            `dispatch_message(message)` method.
+            message_bus (object, optional): An optional message bus instance
+                                            for inter-agent communication.
+            settings (Optional[Dict], optional): Configuration settings for the agent.
+                                                 Defaults to None, which means an empty dict.
         """
         self.agent_id = agent_id
         self.message_bus = message_bus
+        self.settings: Dict = settings if settings is not None else {}
 
     @abc.abstractmethod
     def process_request(self, request_data: dict) -> dict:
