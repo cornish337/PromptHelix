@@ -8,9 +8,11 @@ import random
 from typing import TYPE_CHECKING
 import openai
 from openai import OpenAIError
-from prompthelix.config import settings
+from prompthelix.config import settings as global_sdk_settings # Renamed to avoid conflict
+from prompthelix import config as global_ph_config # For LLM_UTILS_SETTINGS
 import logging
 from prompthelix.enums import ExecutionMode # Added import
+from typing import Optional, Dict # Added for type hinting
 
 logger = logging.getLogger(__name__)
 
@@ -278,7 +280,10 @@ class FitnessEvaluator:
     This class simulates interaction with an LLM and uses a ResultsEvaluatorAgent
     to determine the fitness score based on the LLM's output.
     """
-    def __init__(self, results_evaluator_agent: 'ResultsEvaluatorAgent', execution_mode: ExecutionMode):
+    def __init__(self,
+                 results_evaluator_agent: 'ResultsEvaluatorAgent',
+                 execution_mode: ExecutionMode,
+                 llm_settings: Optional[Dict] = None): # New parameter
         """
         Initializes the FitnessEvaluator.
         Args:
@@ -286,6 +291,7 @@ class FitnessEvaluator:
                 ResultsEvaluatorAgent that will be used to assess the quality
                 of LLM outputs.
             execution_mode (ExecutionMode): The mode of execution (TEST or REAL).
+            llm_settings (Optional[Dict]): Overridden LLM settings.
         """
         from prompthelix.agents.results_evaluator import ResultsEvaluatorAgent
         if not isinstance(results_evaluator_agent, ResultsEvaluatorAgent):
@@ -294,27 +300,56 @@ class FitnessEvaluator:
         self.results_evaluator_agent = results_evaluator_agent # Stored for main process
         self.execution_mode = execution_mode
 
+        # Merge provided llm_settings with global defaults
+        base_llm_settings = copy.deepcopy(global_ph_config.LLM_UTILS_SETTINGS.get('openai', {})) # Assuming 'openai' is the provider here
+        if llm_settings:
+            # Using a simple update; for deep merge, import and use update_settings utility
+            # from prompthelix.utils.config_utils import update_settings
+            # self.llm_settings = update_settings(base_llm_settings, llm_settings)
+            # For now, simple update for direct keys like api_key, timeout from the passed llm_settings.
+            # A more robust solution would involve the update_settings utility for deep merge.
+            temp_settings = base_llm_settings.copy()
+            temp_settings.update(llm_settings) # Shallow update, override top-level keys
+            self.llm_settings = temp_settings
+        else:
+            self.llm_settings = base_llm_settings
+
+        logger.debug(f"FitnessEvaluator effective LLM settings: {self.llm_settings}")
+
         # Store info for re-instantiation in subprocesses
         self.results_evaluator_agent_class = results_evaluator_agent.__class__
-        self.results_evaluator_agent_knowledge_file = getattr(results_evaluator_agent, 'knowledge_file_path', None)
-        # No longer storing provider/model here, agent's __init__ handles it.
+        self.results_evaluator_agent_knowledge_file = getattr(results_evaluator_agent, 'settings', {}).get('knowledge_file_path')
+
 
         self.openai_client = None
         if self.execution_mode == ExecutionMode.REAL:
-            if settings.OPENAI_API_KEY:
+            # Prioritize API key from llm_settings, then global_sdk_settings
+            api_key_to_use = self.llm_settings.get('api_key', global_sdk_settings.OPENAI_API_KEY)
+
+            if api_key_to_use:
                 try:
-                    self.openai_client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
+                    # Pass other params from self.llm_settings if OpenAI client accepts them
+                    client_params = {
+                        'api_key': api_key_to_use,
+                        'timeout': self.llm_settings.get('default_timeout', openai.DefaultHttpxClient.DEFAULT_TIMEOUT), # openai library default
+                        # Add other relevant params like 'max_retries', 'organization' if in settings
+                    }
+                    if 'max_retries' in self.llm_settings:
+                        client_params['max_retries'] = self.llm_settings['max_retries']
+
+                    self.openai_client = openai.OpenAI(**client_params)
                     logger.info("FitnessEvaluator: OpenAI client initialized successfully for REAL mode in main process.")
                 except Exception as e:
                     logger.error(f"FitnessEvaluator: Error initializing OpenAI client in main process: {e}", exc_info=True)
-                    self.openai_client = None # Ensure it's None if init fails
+                    self.openai_client = None
             else:
-                logger.error("FitnessEvaluator: OPENAI_API_KEY not found in settings. LLM calls in REAL mode will fail.")
+                logger.error("FitnessEvaluator: OpenAI API Key not found in settings or global config. LLM calls in REAL mode will fail.")
         else: # TEST mode
             logger.info("FitnessEvaluator: Initialized in TEST mode. LLM calls will be skipped by _call_llm_api.")
 
     def __getstate__(self):
         state = self.__dict__.copy()
+        # llm_settings is serializable, so it can stay
         # Remove attributes that cannot or should not be pickled
         if 'results_evaluator_agent' in state:
             del state['results_evaluator_agent']
@@ -329,42 +364,49 @@ class FitnessEvaluator:
         # Logger should be available as it's a module-level global
         if hasattr(self, 'results_evaluator_agent_class') and self.results_evaluator_agent_class:
             try:
+                # Pass agent settings if they were part of the original agent's setup
+                agent_settings = getattr(self.results_evaluator_agent, 'settings', None)
                 self.results_evaluator_agent = self.results_evaluator_agent_class(
-                    message_bus=None, # Message bus not strictly needed for evaluation logic
-                    knowledge_file_path=self.results_evaluator_agent_knowledge_file
+                    message_bus=None,
+                    settings=agent_settings, # Pass original settings
+                    knowledge_file_path=self.results_evaluator_agent_knowledge_file # Still needed if not in settings
                 )
                 self.results_evaluator_agent.db = None # Ensure db is None in subprocess
                 logger.info("FitnessEvaluator (subprocess): ResultsEvaluatorAgent re-initialized.")
             except Exception as e:
                 logger.error(f"FitnessEvaluator (subprocess): Failed to re-initialize ResultsEvaluatorAgent: {e}", exc_info=True)
-                # Consider how to handle this; perhaps a dummy agent or raise error
-                self.results_evaluator_agent = None # Ensure it's None if re-init fails
+                self.results_evaluator_agent = None
         else:
             logger.error("FitnessEvaluator (subprocess): results_evaluator_agent_class not found in state. Cannot re-initialize agent.")
             self.results_evaluator_agent = None
 
-
-        # Re-initialize openai_client
+        # Re-initialize openai_client using self.llm_settings
         self.openai_client = None
         if self.execution_mode == ExecutionMode.REAL:
-            if settings.OPENAI_API_KEY:
+            api_key_to_use = self.llm_settings.get('api_key', global_sdk_settings.OPENAI_API_KEY)
+            if api_key_to_use:
                 try:
-                    self.openai_client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
+                    client_params = {
+                        'api_key': api_key_to_use,
+                        'timeout': self.llm_settings.get('default_timeout', openai.DefaultHttpxClient.DEFAULT_TIMEOUT),
+                    }
+                    if 'max_retries' in self.llm_settings:
+                        client_params['max_retries'] = self.llm_settings['max_retries']
+                    self.openai_client = openai.OpenAI(**client_params)
                     logger.info("FitnessEvaluator (subprocess): OpenAI client re-initialized for REAL mode.")
                 except Exception as e:
                     logger.error(f"FitnessEvaluator (subprocess): Error re-initializing OpenAI client for REAL mode: {e}", exc_info=True)
-                    self.openai_client = None # Client remains None, _call_llm_api will handle it.
             else:
-                logger.warning("FitnessEvaluator (subprocess): OpenAI API key not found in settings. Cannot re-initialize client for REAL mode.")
+                logger.warning("FitnessEvaluator (subprocess): OpenAI API key not found. Cannot re-initialize client for REAL mode.")
         else:
             logger.info("FitnessEvaluator (subprocess): In TEST mode, LLM client not re-initialized.")
 
-    def _call_llm_api(self, prompt_string: str, model_name: str = "gpt-3.5-turbo") -> str:
+    def _call_llm_api(self, prompt_string: str, model_name: Optional[str] = None) -> str:
         """
-        Calls the LLM API with the given prompt string.
+        Calls the LLM API with the given prompt string using settings from self.llm_settings.
         Args:
             prompt_string (str): The prompt to send to the LLM.
-            model_name (str, optional): The model to use. Defaults to "gpt-3.5-turbo".
+            model_name (str, optional): Specific model to use, overrides default from settings.
         Returns:
             str: The LLM's response content, or an error message string if the call fails.
         """
@@ -372,17 +414,28 @@ class FitnessEvaluator:
             logger.info(f"Executing in TEST mode. Returning dummy LLM output for prompt: {prompt_string[:100]}...")
             return "This is a test output from dummy LLM in TEST mode."
 
-        if not self.openai_client: # Check if client was initialized (relevant for REAL mode)
+        if not self.openai_client:
             logger.error("OpenAI client is not initialized. Cannot call LLM API in REAL mode.")
             return "Error: LLM client not initialized for REAL mode."
 
-        logger.info(f"Calling OpenAI API model {model_name} for prompt (first 100 chars): {prompt_string[:100]}...")
+        # Determine model: use provided, then from self.llm_settings, then fallback
+        current_model_name = model_name or self.llm_settings.get('default_model') or "gpt-3.5-turbo"
+
+        # Get other call parameters from self.llm_settings
+        timeout = self.llm_settings.get('default_timeout', 60) # Default timeout if not in settings
+        max_tokens = self.llm_settings.get('max_tokens', 150) # Example, adjust as needed
+        temperature = self.llm_settings.get('temperature', 0.7) # Example
+
+        logger.info(f"Calling OpenAI API model {current_model_name} for prompt (first 100 chars): {prompt_string[:100]}...")
+        logger.debug(f"LLM call params: timeout={timeout}, max_tokens={max_tokens}, temperature={temperature}")
         try:
             response = self.openai_client.chat.completions.create(
-                model=model_name,
-                messages=[
-                    {"role": "user", "content": prompt_string}
-                ]
+                model=current_model_name,
+                messages=[{"role": "user", "content": prompt_string}],
+                timeout=timeout,
+                max_tokens=max_tokens,
+                temperature=temperature
+                # Add other parameters like top_p, frequency_penalty, presence_penalty if in self.llm_settings
             )
             if response.choices and response.choices[0].message and response.choices[0].message.content:
                 content = response.choices[0].message.content.strip()
@@ -438,37 +491,35 @@ class FitnessEvaluator:
         eval_result = self.results_evaluator_agent.process_request(request_data)
 
         chromosome.fitness_score = eval_result.get('fitness_score', 0.0)
-        chromosome.evaluation_details = eval_result.get('evaluation_details', {})
+        chromosome.evaluation_details = eval_result.get('detailed_metrics', {}) # Corrected key
 
-        # Check for LLM analysis status from ResultsEvaluatorAgent
+        # Debugging: Check for LLM analysis status from ResultsEvaluatorAgent
+        logger.info(f"FIT_EVAL: Chromosome ID {chromosome.id} -- evaluation_details before status check: {str(chromosome.evaluation_details)}")
         llm_analysis_status = None
-        content_metrics = None # Initialize to avoid UnboundLocalError if evaluation_details is empty
+        feedback_message = "N/A"
 
-        if chromosome.evaluation_details:
-            # The key 'content_metrics' should hold the output from _analyze_content
-            content_metrics = chromosome.evaluation_details.get('content_metrics')
-            if content_metrics and isinstance(content_metrics, dict):
-                llm_analysis_status = content_metrics.get('llm_analysis_status')
+        if chromosome.evaluation_details and isinstance(chromosome.evaluation_details, dict):
+            llm_analysis_status = chromosome.evaluation_details.get('llm_analysis_status')
+            feedback_message = chromosome.evaluation_details.get('llm_assessment_feedback', 'N/A')
+            logger.info(f"FIT_EVAL: Chromosome ID {chromosome.id} -- Found evaluation_details. llm_analysis_status: {llm_analysis_status}, feedback: {feedback_message}")
+        else:
+            logger.warning(f"FIT_EVAL: Chromosome ID {chromosome.id} -- chromosome.evaluation_details is None, not a dict, or empty. Value: {str(chromosome.evaluation_details)}")
 
+        # Original logging logic based on the possibly updated llm_analysis_status
         if llm_analysis_status and llm_analysis_status != 'success':
-            # Ensure content_metrics is not None before trying to access llm_assessment_feedback
-            feedback_message = "N/A"
-            if content_metrics: # content_metrics should exist if llm_analysis_status was found within it
-                feedback_message = content_metrics.get('llm_assessment_feedback', 'N/A')
-
             logger.info(
-                f"FitnessEvaluator: Chromosome {chromosome.id} evaluated using fallback LLM metrics. "
+                f"FitnessEvaluator: Chromosome {chromosome.id} evaluated using fallback LLM metrics. " # Standard log message
                 f"Status: '{llm_analysis_status}'. Assigned fitness: {chromosome.fitness_score:.4f}. "
                 f"Feedback: {feedback_message}"
             )
-        elif not llm_analysis_status:
+        elif not llm_analysis_status: # This case implies evaluation_details might be missing or status key itself is absent
             logger.warning(
-                f"FitnessEvaluator: 'llm_analysis_status' not found in evaluation_details.content_metrics for Chromosome {chromosome.id}. "
-                f"Cannot determine if fallback LLM metrics were used. Details: {str(chromosome.evaluation_details)[:200]}..." # Log snippet
+                f"FitnessEvaluator: 'llm_analysis_status' key was not found or was None in evaluation_details for Chromosome {chromosome.id}. " # Standard log message
+                f"Cannot determine if fallback LLM metrics were used. evaluation_details content: {str(chromosome.evaluation_details)[:200]}..."
             )
 
-        # The print statement can be changed to logger.info or kept for verbose console output during runs
-        logger.info(f"FitnessEvaluator: Evaluated chromosome {chromosome.id}, Assigned Fitness: {chromosome.fitness_score:.4f}, LLM Analysis Status: {llm_analysis_status if llm_analysis_status else 'Unknown'}")
+        # Final log line for summary
+        logger.info(f"FitnessEvaluator: Evaluated chromosome {chromosome.id}, Assigned Fitness: {chromosome.fitness_score:.4f}, LLM Analysis Status Logged: {llm_analysis_status if llm_analysis_status else 'Status Unknown (Final Log)'}")
 
         return chromosome.fitness_score
 
@@ -484,7 +535,8 @@ class PopulationManager:
                  prompt_architect_agent: 'PromptArchitectAgent',
                  population_size: int = 50,
                  elitism_count: int = 2,
-                 population_path: str | None = None):
+                 population_path: str | None = None,
+                 initial_prompt_str: str | None = None): # New parameter
         """
         Initializes the PopulationManager.
 
@@ -498,6 +550,8 @@ class PopulationManager:
             population_path (str | None, optional): Path to load/save population JSON.
                 If provided and the file exists, the population will be loaded
                 from this file on initialization.
+            initial_prompt_str (str | None, optional): An initial prompt string to seed
+                one chromosome in the population. Defaults to None.
         """
         if not isinstance(genetic_operators, GeneticOperators):
             raise TypeError("genetic_operators must be an instance of GeneticOperators.")
@@ -517,6 +571,7 @@ class PopulationManager:
         self.population_size = population_size
         self.elitism_count = elitism_count
         self.population_path = population_path
+        self.initial_prompt_str = initial_prompt_str # Store the new parameter
 
 
         self.population: list[PromptChromosome] = []
@@ -529,40 +584,73 @@ class PopulationManager:
                               initial_keywords: list | None = None, 
                               initial_constraints: dict | None = None):
         """
-        Initializes the population with new prompts created by the PromptArchitectAgent.
+        Initializes the population with new prompts. If `self.initial_prompt_str`
+        is provided, one chromosome will be seeded from it. The rest are
+        created by the PromptArchitectAgent.
 
         Args:
             initial_task_description (str): The task description for the initial prompts.
             initial_keywords (list | None, optional): Keywords for initial prompts. Defaults to None.
             initial_constraints (dict | None, optional): Constraints for initial prompts. Defaults to None.
         """
-        print(f"PopulationManager: Initializing population of size {self.population_size} for task: '{initial_task_description}'")
+        logger.info(f"PopulationManager: Initializing population of size {self.population_size} for task: '{initial_task_description}'")
         self.population = []
         
+        num_to_generate_randomly = self.population_size
+
+        if self.initial_prompt_str and self.population_size > 0:
+            logger.info(f"PopulationManager: Seeding one chromosome from provided initial_prompt_str: '{self.initial_prompt_str[:100]}...'")
+            # Treat the entire string as a single gene for simplicity
+            seeded_chromosome = PromptChromosome(genes=[self.initial_prompt_str])
+            self.population.append(seeded_chromosome)
+            num_to_generate_randomly -= 1
+            if num_to_generate_randomly < 0: # Should not happen if population_size > 0
+                num_to_generate_randomly = 0
+
         actual_initial_keywords = initial_keywords if initial_keywords is not None else []
         actual_initial_constraints = initial_constraints if initial_constraints is not None else {}
 
-        for i in range(self.population_size):
+        for i in range(num_to_generate_randomly):
             request_data = {
                 "task_description": initial_task_description,
-                "keywords": copy.deepcopy(actual_initial_keywords), # Use copy to avoid modification issues if architect changes them
+                "keywords": copy.deepcopy(actual_initial_keywords),
                 "constraints": copy.deepcopy(actual_initial_constraints)
             }
-            # Add some variability for the architect if needed, or assume it handles diversity
-            # request_data["keywords"].append(f"variant_{i}") 
             
             chromosome = self.prompt_architect_agent.process_request(request_data)
             if not isinstance(chromosome, PromptChromosome):
-                print(f"PopulationManager: Warning - PromptArchitectAgent did not return a PromptChromosome. Got: {type(chromosome)}. Skipping.")
-                continue
+                logger.warning(f"PopulationManager: PromptArchitectAgent did not return a PromptChromosome. Got: {type(chromosome)}. Skipping this one.")
+                continue # Consider how to handle this to ensure population size is met
 
             self.population.append(chromosome)
         
-        if len(self.population) != self.population_size:
-            print(f"PopulationManager: Warning - Initialized population size {len(self.population)} does not match target {self.population_size}.")
+        # Ensure population size is exactly self.population_size, potentially by adding more if architect failed
+        # or truncating if somehow too many were added (though current logic prevents over-addition)
+        while len(self.population) < self.population_size and self.population_size > 0 :
+            logger.warning(f"PopulationManager: Population size {len(self.population)} is less than target {self.population_size} after initial generation. Attempting to add more.")
+            # This might happen if PromptArchitectAgent fails to return chromosomes for some iterations
+            # and initial_prompt_str was also used.
+            request_data = {
+                "task_description": initial_task_description,
+                "keywords": copy.deepcopy(actual_initial_keywords),
+                "constraints": copy.deepcopy(actual_initial_constraints)
+            }
+            chromosome = self.prompt_architect_agent.process_request(request_data)
+            if isinstance(chromosome, PromptChromosome):
+                self.population.append(chromosome)
+            else:
+                logger.error("PopulationManager: PromptArchitectAgent failed again during fill. Population may be undersized.")
+                break # Avoid infinite loop if architect keeps failing
+
+        if len(self.population) > self.population_size:
+             self.population = self.population[:self.population_size]
+
+
+        if len(self.population) != self.population_size and self.population_size > 0:
+            logger.warning(f"PopulationManager: Final initialized population size {len(self.population)} does not match target {self.population_size}.")
 
         self.generation_number = 0
-        print(f"PopulationManager: Population initialized. Generation: {self.generation_number}")
+        logger.info(f"PopulationManager: Population initialized. Generation: {self.generation_number}, Size: {len(self.population)}")
 
     def evolve_population(self, task_description: str, success_criteria: dict | None = None,
                           target_style: str | None = None):
