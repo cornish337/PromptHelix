@@ -345,6 +345,55 @@ async def ui_login_form(request: Request):
     return templates.TemplateResponse("login.html", {"request": request})
 
 
+@router.post("/ui/login", name="ui_login_submit")
+async def ui_login_submit(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+):
+    """Process login credentials and set auth cookie."""
+    form_data = {"username": username, "password": password}
+    async with httpx.AsyncClient(base_url=str(request.base_url)) as client:
+        response = await client.post("/auth/token", data=form_data)
+
+    if response.status_code == 200:
+        token = response.json().get("access_token")
+        redirect = RedirectResponse(
+            url=str(request.url_for("list_prompts_ui")),
+            status_code=HTTP_303_SEE_OTHER,
+        )
+        if token:
+            redirect.set_cookie(
+                key="prompthelix_access_token",
+                value=token,
+                httponly=True,
+                path="/",
+            )
+        return redirect
+
+    error = response.json().get("detail", "Login failed. Please check your credentials.")
+    return templates.TemplateResponse(
+        "login.html",
+        {"request": request, "error": error},
+        status_code=response.status_code,
+    )
+
+
+@router.get("/ui/logout", name="ui_logout")
+async def ui_logout(request: Request):
+    """Logs out the current user and clears the auth cookie."""
+    token = request.cookies.get("prompthelix_access_token")
+    if token:
+        async with httpx.AsyncClient(base_url=str(request.base_url)) as client:
+            await client.post(
+                "/auth/logout",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+    redirect = RedirectResponse(url=str(request.url_for("ui_login")), status_code=HTTP_303_SEE_OTHER)
+    redirect.delete_cookie("prompthelix_access_token", path="/")
+    return redirect
+
+
 @router.get("/ui/dashboard", response_class=HTMLResponse, name="ui_dashboard")
 async def get_dashboard_ui(request: Request):
     """Serves the UI page for the real-time monitoring dashboard."""
