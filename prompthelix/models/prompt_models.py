@@ -23,3 +23,4 @@ class PromptVersion(Base):
     fitness_score = Column(Float, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     prompt = relationship("Prompt", back_populates="versions")
+    performance_metrics = relationship("PerformanceMetric", back_populates="prompt_version", cascade="all, delete-orphan")
