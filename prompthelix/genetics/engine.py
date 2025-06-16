@@ -364,10 +364,41 @@ class FitnessEvaluator:
             "success_criteria": success_criteria if success_criteria else {}
         }
         eval_result = self.results_evaluator_agent.process_request(request_data)
-        fitness_score = eval_result.get("fitness_score", 0.0)
-        chromosome.fitness_score = fitness_score
-        print(f"FitnessEvaluator: Evaluated chromosome {chromosome.id}, Fitness: {fitness_score:.4f}")
-        return fitness_score
+
+        chromosome.fitness_score = eval_result.get('fitness_score', 0.0)
+        chromosome.evaluation_details = eval_result.get('evaluation_details', {})
+
+        # Check for LLM analysis status from ResultsEvaluatorAgent
+        llm_analysis_status = None
+        content_metrics = None # Initialize to avoid UnboundLocalError if evaluation_details is empty
+
+        if chromosome.evaluation_details:
+            # The key 'content_metrics' should hold the output from _analyze_content
+            content_metrics = chromosome.evaluation_details.get('content_metrics')
+            if content_metrics and isinstance(content_metrics, dict):
+                llm_analysis_status = content_metrics.get('llm_analysis_status')
+
+        if llm_analysis_status and llm_analysis_status != 'success':
+            # Ensure content_metrics is not None before trying to access llm_assessment_feedback
+            feedback_message = "N/A"
+            if content_metrics: # content_metrics should exist if llm_analysis_status was found within it
+                feedback_message = content_metrics.get('llm_assessment_feedback', 'N/A')
+
+            logger.info(
+                f"FitnessEvaluator: Chromosome {chromosome.id} evaluated using fallback LLM metrics. "
+                f"Status: '{llm_analysis_status}'. Assigned fitness: {chromosome.fitness_score:.4f}. "
+                f"Feedback: {feedback_message}"
+            )
+        elif not llm_analysis_status:
+            logger.warning(
+                f"FitnessEvaluator: 'llm_analysis_status' not found in evaluation_details.content_metrics for Chromosome {chromosome.id}. "
+                f"Cannot determine if fallback LLM metrics were used. Details: {str(chromosome.evaluation_details)[:200]}..." # Log snippet
+            )
+
+        # The print statement can be changed to logger.info or kept for verbose console output during runs
+        logger.info(f"FitnessEvaluator: Evaluated chromosome {chromosome.id}, Assigned Fitness: {chromosome.fitness_score:.4f}, LLM Analysis Status: {llm_analysis_status if llm_analysis_status else 'Unknown'}")
+
+        return chromosome.fitness_score
 
 # Updated PopulationManager class
 class PopulationManager:
