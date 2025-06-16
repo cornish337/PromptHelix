@@ -41,7 +41,7 @@ The application requires certain environment variables to be set, especially for
 You can set these variables in a few ways:
 
 1.  **Using a `.env` file:**
-    Create a file named `.env` in the root directory of the project. Add your environment variables to this file in the following format:
+    Copy the provided `.env.example` to `.env` and fill in your values. The file should look like this:
     ```
     OPENAI_API_KEY="your_openai_api_key"
     ANTHROPIC_API_KEY="your_anthropic_api_key"
@@ -212,14 +212,17 @@ This command runs the `run_ga.py` script via the CLI, which prints the progress 
 PromptHelix also provides an API endpoint to trigger the genetic algorithm.
 
 1.  **Start the FastAPI server**:
-    Ensure the FastAPI server is running as described in the "Setup and Run the Web UI" section.
+    Run the Uvicorn server to serve the API:
+    ```bash
+    uvicorn prompthelix.main:app
+    ```
 
 2.  **Access the GA endpoint**:
-    Once the server is running, you can trigger the genetic algorithm by sending a GET request to the `/api/run-ga` endpoint. For example, using `curl`:
+    Once the server is running, you can trigger the genetic algorithm by sending a GET request to the `/api/experiments/run-ga` endpoint. For example, using `curl`:
     ```bash
-    curl http://127.0.0.1:8000/api/run-ga
+    curl http://127.0.0.1:8000/api/experiments/run-ga
     ```
-    Or you can open `http://127.0.0.1:8000/api/run-ga` in your web browser.
+    Or you can open `http://127.0.0.1:8000/api/experiments/run-ga` in your web browser.
 
 3.  **Try the Prompt Manager UI**:
     The Prompt Manager UI, for adding and viewing prompts, can be accessed as described in the "Setup and Run the Web UI" section.
