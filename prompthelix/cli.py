@@ -44,6 +44,11 @@ def main_cli():
     run_parser = subparsers.add_parser("run", help="Run the PromptHelix application or a specific module")
     run_parser.add_argument("module", nargs="?", default="ga", help="Module to run (e.g., 'ga')")
 
+    # "check-llm" command for quick connectivity testing
+    check_parser = subparsers.add_parser("check-llm", help="Test LLM provider connectivity")
+    check_parser.add_argument("--provider", default="openai", help="LLM provider name")
+    check_parser.add_argument("--model", help="Model name for the provider")
+
 
     args = parser.parse_args()
 
@@ -165,6 +170,22 @@ def main_cli():
                 sys.exit(1)
         else:
             print(f"Error: Unknown module '{args.module}'. Currently, only 'ga' module is supported for the run command.", file=sys.stderr)
+            sys.exit(1)
+
+    elif args.command == "check-llm":
+        logging.debug(
+            f"CLI: Checking LLM connectivity for provider {args.provider}, model {args.model}"
+        )
+        try:
+            from prompthelix.utils import llm_utils
+
+            response = llm_utils.call_llm_api(
+                prompt="Hello from PromptHelix", provider=args.provider, model=args.model
+            )
+            print(f"LLM response from {args.provider}: {response}")
+        except Exception as e:
+            logging.exception("CLI: LLM connectivity check failed")
+            print(f"CLI: Failed to contact {args.provider}: {e}", file=sys.stderr)
             sys.exit(1)
 
     # No specific action needed for --version as argparse handles it

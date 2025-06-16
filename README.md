@@ -217,6 +217,16 @@ python -m prompthelix.cli run
 
 This command runs the `run_ga.py` script via the CLI, which prints the progress of the genetic algorithm and the best prompt at the end of the process.
 
+### Checking LLM Connectivity
+
+Use the CLI to verify that your API keys are configured correctly and that the selected provider is reachable:
+
+```bash
+python -m prompthelix.cli check-llm --provider openai --model gpt-3.5-turbo
+```
+
+The command sends a short test prompt and prints the returned text or any error message. Debug logging output is shown to help diagnose connectivity issues.
+
 ### API
 
 PromptHelix also provides an API endpoint to trigger the genetic algorithm.

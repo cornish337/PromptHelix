@@ -102,6 +102,14 @@ python -m prompthelix.tests.test_llm_connectivity --provider openai --model gpt-
 python -m prompthelix.tests.test_llm_connectivity --provider anthropic --model claude-2
 ```
 
+You can also run the connectivity check via the CLI:
+
+```bash
+python -m prompthelix.cli check-llm --provider openai --model gpt-3.5-turbo
+```
+
+Debug logs are printed to the console to aid troubleshooting.
+
 ## Genetic Algorithm Engine
 
 PromptHelix employs a Genetic Algorithm (GA) to iteratively evolve and optimize prompts. This engine uses concepts like selection, crossover, and mutation to refine a population of prompts over generations, aiming to enhance their effectiveness based on defined fitness criteria. The GA is designed to interact with various specialized agents for tasks like initial prompt creation, fitness evaluation (based on LLM output simulation), and potentially for more advanced "smart" mutations.
