@@ -33,17 +33,14 @@
             formData.append('password', password);
 
             try {
-                const response = await fetch('/auth/token', {
+                const response = await fetch('/ui/login', {
                     method: 'POST',
                     body: formData,
                 });
 
-                if (response.ok) {
-                    const data = await response.json();
-                    const token = data.access_token;
-                    // Set cookie
-                    document.cookie = \`prompthelix_access_token=\${token}; Path=/; SameSite=Lax\`;
-                    // Redirect to prompts page
+                if (response.redirected) {
+                    window.location.href = response.url;
+                } else if (response.ok) {
                     window.location.href = '/ui/prompts';
                 } else {
                     const errorData = await response.json();

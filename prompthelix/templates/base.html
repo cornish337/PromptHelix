@@ -17,18 +17,10 @@
             <li><a href="{{ url_for('ui_dashboard') }}">Dashboard</a></li>
             <li><a href="{{ url_for('view_settings_ui') }}">Settings</a></li>
             <li><a href="{{ url_for('ui_login') }}">Login</a></li>
-            <li><a href="#" onclick="logoutUser()">Logout</a></li>
+            <li><a href="{{ url_for('ui_logout') }}">Logout</a></li>
             <!-- Add other navigation links here -->
         </ul>
     </nav>
-    <script>
-        function logoutUser() {
-            // Clear the access token cookie
-            document.cookie = 'prompthelix_access_token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
-            // Redirect to login page
-            window.location.href = "{{ url_for('ui_login') }}";
-        }
-    </script>
     <main>
         {% block content %}{% endblock %}
     </main>
