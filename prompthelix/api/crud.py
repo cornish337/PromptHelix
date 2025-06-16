@@ -58,6 +58,7 @@ def create_prompt_version(db: Session, version: PromptVersionCreate, prompt_id: 
     db.refresh(db_version)
     return db_version
 
+
 # Functions for APIKey
 
 def get_api_key(db: Session, service_name: str) -> Optional[APIKey]:
@@ -74,3 +75,4 @@ def create_or_update_api_key(db: Session, service_name: str, api_key_value: str)
     db.commit()
     db.refresh(db_api_key)
     return db_api_key
+
