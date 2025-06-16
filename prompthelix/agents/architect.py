@@ -1,16 +1,20 @@
 from prompthelix.agents.base import BaseAgent
 from prompthelix.genetics.engine import PromptChromosome
 from prompthelix.utils.llm_utils import call_llm_api
-from prompthelix.config import AGENT_SETTINGS, KNOWLEDGE_DIR
+from prompthelix.config import AGENT_SETTINGS, KNOWLEDGE_DIR # Keep KNOWLEDGE_DIR for default path construction
 import os
 import json
 import logging
+from typing import Optional, Dict # Added for type hinting
 
 logger = logging.getLogger(__name__)
 
 # Default provider from config if specific agent setting is not found
-FALLBACK_LLM_PROVIDER = AGENT_SETTINGS.get("PromptArchitectAgent", {}).get("default_llm_provider", "openai")
-FALLBACK_LLM_MODEL = AGENT_SETTINGS.get("PromptArchitectAgent", {}).get("default_llm_model", "gpt-3.5-turbo")
+# These fallbacks can be used if settings dict doesn't provide them.
+DEFAULT_ARCHITECT_SETTINGS = AGENT_SETTINGS.get("PromptArchitectAgent", {})
+FALLBACK_LLM_PROVIDER = DEFAULT_ARCHITECT_SETTINGS.get("default_llm_provider", "openai")
+FALLBACK_LLM_MODEL = DEFAULT_ARCHITECT_SETTINGS.get("default_llm_model", "gpt-3.5-turbo")
+FALLBACK_KNOWLEDGE_FILE = "architect_knowledge.json"
 
 
 class PromptArchitectAgent(BaseAgent):
@@ -20,20 +24,36 @@ class PromptArchitectAgent(BaseAgent):
     Designs initial prompt structures based on user requirements, 
     system goals, or existing successful prompt patterns.
     """
-    def __init__(self, message_bus=None, knowledge_file_path=None):
+    def __init__(self, message_bus=None, settings: Optional[Dict] = None, knowledge_file_path: Optional[str] = None): # Modified signature
         """
         Initializes the PromptArchitectAgent.
         Loads prompt templates and configuration.
 
         Args:
             message_bus (object, optional): The message bus for inter-agent communication.
+            settings (Optional[Dict], optional): Configuration settings for the agent.
+            knowledge_file_path (Optional[str], optional): Path to the knowledge file.
+                This is kept for backward compatibility or direct specification,
+                but `settings` dictionary can also provide it via 'knowledge_file_path'.
         """
-        super().__init__(agent_id=self.agent_id, message_bus=message_bus)
+        super().__init__(agent_id=self.agent_id, message_bus=message_bus, settings=settings)
 
-        agent_config = AGENT_SETTINGS.get(self.agent_id, {})
-        self.llm_provider = agent_config.get("default_llm_provider", FALLBACK_LLM_PROVIDER)
-        self.llm_model = agent_config.get("default_llm_model", FALLBACK_LLM_MODEL)
-        logger.info(f"Agent '{self.agent_id}' initialized with LLM provider: {self.llm_provider} and model: {self.llm_model}")
+        # Configuration values will now be sourced from self.settings, with fallbacks
+        self.llm_provider = self.settings.get("default_llm_provider", FALLBACK_LLM_PROVIDER)
+        self.llm_model = self.settings.get("default_llm_model", FALLBACK_LLM_MODEL)
+
+        # knowledge_file_path can be overridden by settings, then by direct param, then fallback
+        _knowledge_file = self.settings.get("knowledge_file_path", knowledge_file_path)
+        if _knowledge_file:
+            self.knowledge_file_path = (
+                _knowledge_file
+                if os.path.isabs(_knowledge_file)
+                else os.path.join(KNOWLEDGE_DIR, _knowledge_file)
+            )
+        else:
+            self.knowledge_file_path = os.path.join(KNOWLEDGE_DIR, FALLBACK_KNOWLEDGE_FILE)
+
+        logger.info(f"Agent '{self.agent_id}' initialized with LLM provider: {self.llm_provider}, model: {self.llm_model}, knowledge: {self.knowledge_file_path}")
 
         self.recommendations = [
             "Consider a ReAct-style prompt structure: Thought, Action, Observation.",
@@ -42,17 +62,7 @@ class PromptArchitectAgent(BaseAgent):
             "Use XML-like tags to delineate different parts of the prompt, like <context>, <question>, <output_format>.",
         ]
 
-        # Load initial templates
-        if knowledge_file_path:
-            self.knowledge_file_path = (
-                knowledge_file_path
-                if os.path.isabs(knowledge_file_path)
-                else os.path.join(KNOWLEDGE_DIR, knowledge_file_path)
-            )
-        else:
-            self.knowledge_file_path = os.path.join(KNOWLEDGE_DIR, "architect_knowledge.json")
         os.makedirs(os.path.dirname(self.knowledge_file_path), exist_ok=True)
-
         self.templates = {} # Initialize before loading
         self.load_knowledge()
 

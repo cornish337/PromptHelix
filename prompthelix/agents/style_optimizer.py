@@ -5,12 +5,15 @@ from prompthelix.config import AGENT_SETTINGS, KNOWLEDGE_DIR
 import json  # For parsing LLM response
 import logging
 import os
+from typing import Optional, Dict # Added for type hinting
 
 logger = logging.getLogger(__name__)
 
-# Default provider from config if specific agent setting is not found
-FALLBACK_LLM_PROVIDER = AGENT_SETTINGS.get("StyleOptimizerAgent", {}).get("default_llm_provider", "openai")
-FALLBACK_LLM_MODEL = AGENT_SETTINGS.get("StyleOptimizerAgent", {}).get("default_llm_model", "gpt-3.5-turbo")
+# Default values from global AGENT_SETTINGS or hardcoded fallbacks
+DEFAULT_OPTIMIZER_SETTINGS = AGENT_SETTINGS.get("StyleOptimizerAgent", {})
+FALLBACK_LLM_PROVIDER = DEFAULT_OPTIMIZER_SETTINGS.get("default_llm_provider", "openai")
+FALLBACK_LLM_MODEL = DEFAULT_OPTIMIZER_SETTINGS.get("default_llm_model", "gpt-3.5-turbo")
+FALLBACK_KNOWLEDGE_FILE = "style_optimizer_rules.json"
 
 
 class StyleOptimizerAgent(BaseAgent):
@@ -20,31 +23,35 @@ class StyleOptimizerAgent(BaseAgent):
     Refines prompts to enhance their style, tone, clarity, and persuasiveness,
     often based on specific target audience or desired communication effect.
     """
-    def __init__(self, message_bus=None, knowledge_file_path=None):
+    def __init__(self, message_bus=None, settings: Optional[Dict] = None, knowledge_file_path: Optional[str] = None): # Modified signature
         """
         Initializes the StyleOptimizerAgent.
         Loads style transformation rules or lexicons and agent configuration.
 
         Args:
             message_bus (object, optional): The message bus for inter-agent communication.
+            settings (Optional[Dict], optional): Configuration settings for the agent.
+            knowledge_file_path (Optional[str], optional): Path to the knowledge file.
+                Overrides 'knowledge_file_path' in settings if provided.
         """
-        super().__init__(agent_id="StyleOptimizer", message_bus=message_bus)
+        super().__init__(agent_id="StyleOptimizer", message_bus=message_bus, settings=settings)
 
-        agent_config = AGENT_SETTINGS.get(self.agent_id, {})
-        self.llm_provider = agent_config.get("default_llm_provider", FALLBACK_LLM_PROVIDER)
-        self.llm_model = agent_config.get("default_llm_model", FALLBACK_LLM_MODEL)
-        logger.info(f"Agent '{self.agent_id}' initialized with LLM provider: {self.llm_provider} and model: {self.llm_model}")
+        self.llm_provider = self.settings.get("default_llm_provider", FALLBACK_LLM_PROVIDER)
+        self.llm_model = self.settings.get("default_llm_model", FALLBACK_LLM_MODEL)
 
-        if knowledge_file_path:
+        _knowledge_file = self.settings.get("knowledge_file_path", knowledge_file_path)
+        if _knowledge_file:
             self.knowledge_file_path = (
-                knowledge_file_path
-                if os.path.isabs(knowledge_file_path)
-                else os.path.join(KNOWLEDGE_DIR, knowledge_file_path)
+                _knowledge_file
+                if os.path.isabs(_knowledge_file)
+                else os.path.join(KNOWLEDGE_DIR, _knowledge_file)
             )
         else:
-            self.knowledge_file_path = os.path.join(KNOWLEDGE_DIR, "style_optimizer_rules.json")
-        os.makedirs(os.path.dirname(self.knowledge_file_path), exist_ok=True)
+            self.knowledge_file_path = os.path.join(KNOWLEDGE_DIR, FALLBACK_KNOWLEDGE_FILE)
 
+        logger.info(f"Agent '{self.agent_id}' initialized with LLM provider: {self.llm_provider}, model: {self.llm_model}, knowledge: {self.knowledge_file_path}")
+
+        os.makedirs(os.path.dirname(self.knowledge_file_path), exist_ok=True)
         self.style_rules = {} # Initialize before loading
         self.load_knowledge()
 

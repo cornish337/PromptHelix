@@ -92,6 +92,82 @@ class TestPopulationManager(unittest.TestCase):
         for i, chromo in enumerate(manager.population):
             self.assertEqual(chromo.genes, [f"GeneSet{i}"])
 
+    def test_initialize_population_with_initial_prompt_str(self):
+        """Test population initialization when initial_prompt_str is provided."""
+        pop_size = 3
+        initial_prompt = "This is a seeded prompt."
+        manager = PopulationManager(
+            self.mock_genetic_ops, self.mock_fitness_eval, self.mock_architect_agent,
+            population_size=pop_size, elitism_count=1,
+            initial_prompt_str=initial_prompt
+        )
+
+        # Architect will be called for pop_size - 1 chromosomes
+        self.mock_architect_agent.process_request.side_effect = [
+            PromptChromosome(genes=[f"ArchitectGeneSet{i}"]) for i in range(pop_size - 1)
+        ]
+
+        task_desc = "Initial task with seed"
+        manager.initialize_population(task_desc)
+
+        self.assertEqual(len(manager.population), pop_size)
+        self.assertEqual(self.mock_architect_agent.process_request.call_count, pop_size - 1)
+
+        seeded_chromosome_found = False
+        architect_chromosomes_found = 0
+        for chromo in manager.population:
+            if chromo.genes == [initial_prompt]:
+                seeded_chromosome_found = True
+            elif chromo.genes[0].startswith("ArchitectGeneSet"):
+                architect_chromosomes_found +=1
+
+        self.assertTrue(seeded_chromosome_found, "Seeded chromosome not found in population.")
+        self.assertEqual(architect_chromosomes_found, pop_size - 1, "Incorrect number of architect-generated chromosomes.")
+        self.assertEqual(manager.generation_number, 0)
+
+    def test_initialize_population_with_initial_prompt_str_pop_size_1(self):
+        """Test population initialization with initial_prompt_str and population size of 1."""
+        pop_size = 1
+        initial_prompt = "Only seeded prompt."
+        manager = PopulationManager(
+            self.mock_genetic_ops, self.mock_fitness_eval, self.mock_architect_agent,
+            population_size=pop_size, elitism_count=0, # elitism can be 0 if pop_size is 1
+            initial_prompt_str=initial_prompt
+        )
+
+        task_desc = "Initial task with seed, pop 1"
+        manager.initialize_population(task_desc)
+
+        self.assertEqual(len(manager.population), pop_size)
+        self.mock_architect_agent.process_request.assert_not_called() # Architect should not be called
+
+        self.assertTrue(len(manager.population) == 1 and manager.population[0].genes == [initial_prompt])
+        self.assertEqual(manager.generation_number, 0)
+
+    def test_initialize_population_without_initial_prompt_str(self):
+        """Test population initialization when initial_prompt_str is NOT provided."""
+        pop_size = 3
+        manager = PopulationManager(
+            self.mock_genetic_ops, self.mock_fitness_eval, self.mock_architect_agent,
+            population_size=pop_size, elitism_count=1,
+            initial_prompt_str=None # Explicitly None
+        )
+
+        self.mock_architect_agent.process_request.side_effect = [
+            PromptChromosome(genes=[f"ArchitectGeneSet{i}"]) for i in range(pop_size)
+        ]
+
+        task_desc = "Initial task no seed"
+        manager.initialize_population(task_desc)
+
+        self.assertEqual(len(manager.population), pop_size)
+        self.assertEqual(self.mock_architect_agent.process_request.call_count, pop_size)
+
+        for i, chromo in enumerate(manager.population):
+            self.assertEqual(chromo.genes, [f"ArchitectGeneSet{i}"])
+        self.assertEqual(manager.generation_number, 0)
+
+
     # --- Test get_fittest_individual ---
     def test_get_fittest_individual_empty_population(self):
         """Test get_fittest_individual with an empty population."""

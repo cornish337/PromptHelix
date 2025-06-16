@@ -14,8 +14,10 @@ from prompthelix.genetics.engine import (
     PopulationManager,
     PromptChromosome,
 )
-from typing import List
-from prompthelix.enums import ExecutionMode # Added import
+from typing import List, Optional, Dict
+from prompthelix.enums import ExecutionMode
+from prompthelix.utils.config_utils import update_settings # Assuming a utility for deep merging configs
+from prompthelix import config as global_config # To access global default settings
 
 logger = logging.getLogger(__name__)
 
@@ -25,15 +27,15 @@ def main_ga_loop(
     num_generations: int,
     population_size: int,
     elitism_count: int,
-    execution_mode: ExecutionMode, # New parameter
+    execution_mode: ExecutionMode,
+    initial_prompt_str: Optional[str] = None,
+    agent_settings_override: Optional[Dict] = None,
+    llm_settings_override: Optional[Dict] = None,
     return_best: bool = True,
-    population_path: str | None = None
+    population_path: Optional[str] = None
 ):
     """
     Main orchestration loop for running the PromptHelix Genetic Algorithm.
-
-    This function initializes agents, GA components, and runs the
-    evolutionary process based on the provided parameters.
 
     Args:
         task_desc: Description of the task prompts should solve.
@@ -42,71 +44,126 @@ def main_ga_loop(
         population_size: Desired population size.
         elitism_count: Number of top individuals preserved each generation.
         execution_mode: Whether to run in REAL or TEST mode.
+        initial_prompt_str: Optional initial prompt string to seed population.
+        agent_settings_override: Optional dictionary to override agent settings.
+        llm_settings_override: Optional dictionary to override LLM utility settings.
         return_best: If True, return the best chromosome at the end.
         population_path: Optional path for loading/saving population JSON.
     """
+    logger.info("--- main_ga_loop started ---")
+    logger.info(f"Task Description: {task_desc}")
+    logger.info(f"Keywords: {keywords}")
+    logger.info(f"Num Generations: {num_generations}, Population Size: {population_size}, Elitism Count: {elitism_count}")
+    logger.info(f"Execution Mode: {execution_mode.name}")
+    if initial_prompt_str:
+        logger.info(f"Initial Prompt String provided: '{initial_prompt_str[:100]}...'")
+    if agent_settings_override:
+        logger.info(f"Agent Settings Override provided: {agent_settings_override}")
+    if llm_settings_override:
+        logger.info(f"LLM Settings Override provided: {llm_settings_override}")
+
     # 0. Instantiate Message Bus
-    print("Initializing Message Bus...")
+    logger.debug("Initializing Message Bus...")
     message_bus = MessageBus()
-    print("Message Bus initialized.")
+    logger.debug("Message Bus initialized.")
+
+    # Handle LLM settings override
+    # Create a local copy of LLM settings to use for this run
+    current_llm_settings = update_settings(global_config.LLM_UTILS_SETTINGS.copy(), llm_settings_override)
+    if llm_settings_override:
+        logger.info("LLM settings have been updated with overrides for this session.")
+        # logger.debug(f"Effective LLM Settings: {current_llm_settings}")
+
 
     # 1. Instantiate Agents, passing the message bus
-    print("Initializing agents with message bus...")
-    prompt_architect = PromptArchitectAgent(message_bus=message_bus, knowledge_file_path="architect_ga_knowledge.json")
-    results_evaluator = ResultsEvaluatorAgent(message_bus=message_bus, knowledge_file_path="results_evaluator_ga_config.json")
-    style_optimizer = StyleOptimizerAgent(message_bus=message_bus, knowledge_file_path=None)
-    # Note: PromptCriticAgent and StyleOptimizerAgent are typically used within FitnessEvaluator or other
-    # GA components. If they were instantiated directly here for the GA loop, they'd also get specific paths.
+    # Agent settings will be a combination of global defaults and overrides
+    logger.debug("Initializing agents with message bus and potentially overridden settings...")
 
-    # Register agents with the message bus
+    def get_agent_config(agent_name: str) -> Dict:
+        base_settings = global_config.AGENT_SETTINGS.get(agent_name, {}).copy()
+        if agent_settings_override and agent_name in agent_settings_override:
+            logger.info(f"Applying override settings for agent: {agent_name}")
+            # Ensure deep update if settings are nested
+            return update_settings(base_settings, agent_settings_override[agent_name])
+        return base_settings
+
+    # Pass relevant part of current_llm_settings if agents need direct LLM config
+    # Or, agents should use llm_utils which will now be configured by current_llm_settings (if llm_utils is adapted)
+    # For now, assuming agents get their specific config, and llm_utils will handle global llm_config
+
+    prompt_architect_config = get_agent_config("PromptArchitectAgent")
+    prompt_architect = PromptArchitectAgent(
+        message_bus=message_bus,
+        knowledge_file_path=prompt_architect_config.get("knowledge_file_path", "architect_ga_knowledge.json"),
+        settings=prompt_architect_config # Pass the full merged settings
+    )
+
+    results_evaluator_config = get_agent_config("ResultsEvaluatorAgent")
+    results_evaluator = ResultsEvaluatorAgent(
+        message_bus=message_bus,
+        knowledge_file_path=results_evaluator_config.get("knowledge_file_path", "results_evaluator_ga_config.json"),
+        settings=results_evaluator_config
+    )
+
+    style_optimizer_config = get_agent_config("StyleOptimizerAgent")
+    style_optimizer = StyleOptimizerAgent(
+        message_bus=message_bus,
+        knowledge_file_path=style_optimizer_config.get("knowledge_file_path"), # May be None
+        settings=style_optimizer_config
+    )
+    # TODO: Agents need to be updated to accept and use the 'settings' dict.
+    # For now, they might only use knowledge_file_path from it or ignore it if not updated.
+
     message_bus.register(prompt_architect.agent_id, prompt_architect)
     message_bus.register(results_evaluator.agent_id, results_evaluator)
     message_bus.register(style_optimizer.agent_id, style_optimizer)
-    print("Agents initialized and registered.")
+    logger.debug("Agents initialized and registered.")
 
     # 2. Instantiate GA Components
-    print("Initializing GA components...")
-    genetic_ops = GeneticOperators(style_optimizer_agent=style_optimizer)
+    logger.debug("Initializing GA components...")
+    # Pass style_optimizer_config to GeneticOperators if it needs settings
+    genetic_ops = GeneticOperators(style_optimizer_agent=style_optimizer) # Add settings if needed
 
-    # Ensure OPENAI_API_KEY (and other necessary keys for LLMs like ANTHROPIC_API_KEY, GOOGLE_API_KEY if used)
-    # are set in the environment for the FitnessEvaluator to function correctly with actual LLM calls.
-    # FitnessEvaluator handles its own OpenAI client initialization using settings from config.py.
     fitness_eval = FitnessEvaluator(
         results_evaluator_agent=results_evaluator,
-        execution_mode=execution_mode  # New argument
+        execution_mode=execution_mode,
+        llm_settings=current_llm_settings # Pass the potentially overridden LLM settings
     )
+    # TODO: FitnessEvaluator needs to be updated to accept and use llm_settings.
 
     pop_manager = PopulationManager(
         genetic_operators=genetic_ops,
         fitness_evaluator=fitness_eval,
-        prompt_architect_agent=prompt_architect,
+        prompt_architect_agent=prompt_architect, # Architect is used for initial prompt generation
         population_size=population_size,
         elitism_count=elitism_count,
-        population_path=population_path
+        population_path=population_path,
+        initial_prompt_str=initial_prompt_str # Pass initial prompt string
+        # TODO: Pass agent_settings_override or specific agent configs if PopulationManager
+        # is responsible for creating/configuring more agents during its operations.
+        # For now, agents are configured above.
     )
-    print("GA components initialized.")
+    # TODO: PopulationManager needs to be updated to accept and use initial_prompt_str.
+    logger.debug("GA components initialized.")
 
-    # 3. Use GA Parameters from function arguments
-    print("Using GA parameters from input...")
-    # For this basic run, evaluation criteria are derived from the primary task description and keywords
-    # A more sophisticated approach might have separate evaluation criteria or allow them to be passed in.
+    # 3. Use GA Parameters (already logged)
     evaluation_task_desc = task_desc
-    # Simple success criteria: ensure some of the provided keywords are present.
-    # This is a placeholder; real evaluation would be more complex.
     evaluation_success_criteria = {
-        "must_include_keywords": keywords[:2] if keywords else [], # e.g., use first two keywords
-        "max_length": 500 # Arbitrary max length, could also be a parameter
+        "must_include_keywords": keywords[:2] if keywords else [],
+        "max_length": 500 # This could also come from config or overrides
     }
-    print(f"Parameters: Generations={num_generations}, Population Size={population_size}, Elitism Count={elitism_count}, Task='{task_desc}'")
+    logger.info(f"Evaluation criteria (example): {evaluation_success_criteria}")
+
 
     # 4. Initialize Population
     if not pop_manager.population:
-        print("\n--- Initializing Population ---")
+        logger.info("--- Initializing Population ---")
+        # PopulationManager will now use initial_prompt_str if provided (once updated)
         pop_manager.initialize_population(
-            initial_task_description=task_desc,
+            initial_task_description=task_desc, # This might be redundant if initial_prompt_str is primary
             initial_keywords=keywords
         )
-        print(f"Population initialized with {len(pop_manager.population)} individuals.")
+        logger.info(f"Population initialized with {len(pop_manager.population)} individuals.")
     else:
         print(f"Loaded population with {len(pop_manager.population)} individuals.")
 

@@ -14,6 +14,55 @@ class TestStyleOptimizerAgent(unittest.TestCase):
         self.assertIsNotNone(self.optimizer)
         self.assertEqual(self.optimizer.agent_id, "StyleOptimizer")
         self.assertTrue(self.optimizer.style_rules, "Style rules should be loaded and not empty.")
+        # Check default LLM and knowledge path from fallbacks (as no settings/global AGENT_SETTINGS are mocked here)
+        from prompthelix.agents.style_optimizer import FALLBACK_LLM_PROVIDER, FALLBACK_LLM_MODEL, FALLBACK_KNOWLEDGE_FILE
+        from prompthelix.config import KNOWLEDGE_DIR
+        import os
+        self.assertEqual(self.optimizer.llm_provider, FALLBACK_LLM_PROVIDER)
+        self.assertEqual(self.optimizer.llm_model, FALLBACK_LLM_MODEL)
+        expected_kfp = os.path.join(KNOWLEDGE_DIR, FALLBACK_KNOWLEDGE_FILE)
+        self.assertEqual(self.optimizer.knowledge_file_path, expected_kfp)
+
+
+    def test_agent_creation_with_settings_override(self):
+        """Test agent creation with settings override."""
+        override_settings = {
+            "default_llm_provider": "override_style_provider",
+            "default_llm_model": "override_style_model",
+            "knowledge_file_path": "override_style_rules.json",
+            "custom_key": "custom_style_value"
+        }
+
+        optimizer_with_override = StyleOptimizerAgent(settings=override_settings)
+
+        self.assertEqual(optimizer_with_override.settings, override_settings)
+        self.assertEqual(optimizer_with_override.llm_provider, "override_style_provider")
+        self.assertEqual(optimizer_with_override.llm_model, "override_style_model")
+
+        from prompthelix.config import KNOWLEDGE_DIR
+        import os
+        expected_kfp_override = os.path.join(KNOWLEDGE_DIR, "override_style_rules.json")
+        self.assertEqual(optimizer_with_override.knowledge_file_path, expected_kfp_override)
+
+    def test_agent_creation_no_settings_uses_fallbacks(self):
+        """Test agent uses fallbacks if no settings dict is passed and global config is empty for it."""
+        # To truly test this, we'd need to ensure AGENT_SETTINGS['StyleOptimizerAgent'] is empty or not set.
+        # The current setUp already passes knowledge_file_path=None and settings=None.
+        # The agent's __init__ should then use its internal FALLBACK constants.
+        from prompthelix.agents.style_optimizer import FALLBACK_LLM_PROVIDER, FALLBACK_LLM_MODEL, FALLBACK_KNOWLEDGE_FILE
+        from prompthelix.config import KNOWLEDGE_DIR, AGENT_SETTINGS
+        import os
+
+        # Temporarily ensure GLOBAL AGENT_SETTINGS for this agent is empty for a stricter test
+        with patch.dict(AGENT_SETTINGS, {"StyleOptimizerAgent": {}}, clear=True):
+            optimizer_no_settings = StyleOptimizerAgent(settings=None, knowledge_file_path="specific_style_kfp.json")
+
+            self.assertEqual(optimizer_no_settings.llm_provider, FALLBACK_LLM_PROVIDER)
+            self.assertEqual(optimizer_no_settings.llm_model, FALLBACK_LLM_MODEL)
+
+            # kfp param should be used if settings doesn't provide it
+            expected_kfp = os.path.join(KNOWLEDGE_DIR, "specific_style_kfp.json")
+            self.assertEqual(optimizer_no_settings.knowledge_file_path, expected_kfp)
 
     def test_load_style_rules(self):
         """Test if style rules are loaded correctly."""
