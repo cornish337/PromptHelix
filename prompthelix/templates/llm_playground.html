@@ -92,11 +92,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
         try {
             // Determine the base URL for the API call
-            // const apiBaseUrl = '{{ request.url_for("api_base") }}'; // If you have a base API route
+            // const apiBaseUrl = ''; // If you have a base API route
             // For now, constructing relative path, assuming API is served from same domain/port.
             // The API route for testing prompts is assumed to be '/api/llm/test_prompt'
             // If the API route has a name like 'test_llm_prompt_api', use:
-            // const apiUrl = "{{ request.url_for('test_llm_prompt_api') }}";
+            // const apiUrl = ""; // Formerly: "{{ request.url_for('test_llm_prompt_api') }}"
             // For this subtask, using the literal path as specified.
             const apiUrl = '/api/llm/test_prompt';
 
@@ -139,7 +139,12 @@ document.addEventListener('DOMContentLoaded', function () {
                 responseStatusDiv.textContent = errorMessage;
                 responseStatusDiv.className = 'text-sm text-red-500 mb-2'; // Error styling
                 // Displaying the full error object might be useful for debugging
-                responseContentPre.textContent = JSON.stringify(responseData, null, 2);
+                let fullErrorText = JSON.stringify(responseData, null, 2);
+                if (responseData.traceback) {
+                    // Prepend traceback if available
+                    fullErrorText = "Server Traceback:\n" + responseData.traceback + "\n\nFull JSON Response:\n" + fullErrorText;
+                }
+                responseContentPre.textContent = fullErrorText;
             }
         } catch (error) {
             console.error('Playground Fetch Error:', error);
