@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch # Added import
 from prompthelix.agents.style_optimizer import StyleOptimizerAgent
 from prompthelix.genetics.engine import PromptChromosome
 

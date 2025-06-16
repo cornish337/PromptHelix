@@ -45,7 +45,7 @@ def test_run_experiment_ui_submit_success(MockedAsyncClient, client: TestClient)
         form_data = {
             "task_description": "Test experiment for UI fix",
             "keywords": "ui,fix,test", # Will be split into a list by the route
-            "execution_mode": ExecutionMode.SIMULATION.value,
+            "execution_mode": ExecutionMode.TEST.value,
             "num_generations": "5", # Form data are strings
             "population_size": "10",# Form data are strings
             "elitism_count": "2",  # Form data are strings
@@ -94,7 +94,7 @@ def test_run_experiment_ui_submit_success(MockedAsyncClient, client: TestClient)
         expected_ga_params_payload = schemas.GAExperimentParams(
             task_description="Test experiment for UI fix",
             keywords=["ui", "fix", "test"], # Processed from form_data string
-            execution_mode=ExecutionMode.SIMULATION,
+            execution_mode=ExecutionMode.TEST,
             num_generations=5, # Converted to int by Pydantic
             population_size=10, # Converted to int by Pydantic
             elitism_count=2,   # Converted to int by Pydantic
@@ -160,7 +160,7 @@ def test_run_experiment_ui_submit_no_token(MockedAsyncClient, client: TestClient
 
         form_data = { # Same form data as the success test
             "task_description": "Test experiment no token", "keywords": "ui,auth,test",
-            "execution_mode": ExecutionMode.SIMULATION.value, "num_generations": "5",
+            "execution_mode": ExecutionMode.TEST.value, "num_generations": "5",
             "population_size": "10", "elitism_count": "2", "parent_prompt_id": "",
             "prompt_name": "Test GA No Token", "prompt_description": "A prompt generated via UI no token."
         }

@@ -62,7 +62,8 @@ class ResultsEvaluatorAgent(BaseAgent):
         # Ensure the directory exists
         os.makedirs(os.path.dirname(self.knowledge_file_path), exist_ok=True)
 
-        logger.info(
+        self.logger = logger # Assign module-level logger to instance
+        self.logger.info(
             f"Agent '{self.agent_id}' initialized with LLM provider: {self.llm_provider}, "
             f"Evaluation model: {self.evaluation_llm_model}, Knowledge file: {self.knowledge_file_path}"
         )

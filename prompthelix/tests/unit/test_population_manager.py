@@ -229,7 +229,7 @@ class TestPopulationManager(unittest.TestCase):
         self.mock_genetic_ops.crossover.return_value = (mock_child1, mock_child2)
         
         # Mutate: return the chromosome passed, potentially modified (or a new mock)
-        self.mock_genetic_ops.mutate.side_effect = lambda chromo: PromptChromosome(genes=chromo.genes + ["_mutated"])
+        self.mock_genetic_ops.mutate.side_effect = lambda chromo, *args, **kwargs: PromptChromosome(genes=chromo.genes + ["_mutated"])
 
 
         task_desc = "Evolution task"

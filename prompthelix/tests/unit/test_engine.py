@@ -200,7 +200,8 @@ class TestPopulationManagerParallelEvaluation(unittest.TestCase):
             child2.id = uuid.uuid4()
             return child1, child2
         self.mock_genetic_operators.crossover.side_effect = mock_crossover
-        self.mock_genetic_operators.mutate.side_effect = lambda chromo: chromo.clone()
+        # Make the mock accept any arguments
+        self.mock_genetic_operators.mutate.side_effect = lambda chromo, *args, **kwargs: chromo.clone()
 
 
         self.mock_prompt_architect_agent.process_request.side_effect = [

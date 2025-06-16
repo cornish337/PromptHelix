@@ -1,3 +1,4 @@
+import json
 from prompthelix.agents.base import BaseAgent
 from prompthelix.genetics.engine import PromptChromosome
 from prompthelix.utils.llm_utils import call_llm_api

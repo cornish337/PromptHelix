@@ -161,7 +161,8 @@ class TestAgentPersistence(unittest.TestCase):
 
     def test_mla_save_reload_modified(self):
         def modify_mla_knowledge(kb):
-            kb["successful_prompt_features"]["new_feature_test"] = 10
+            # successful_prompt_features is a list of dicts
+            kb["successful_prompt_features"].append({"new_feature_test": 10, "description": "Test feature"})
         self._test_save_and_reload_modified_knowledge(MetaLearnerAgent, 'knowledge_base', modify_mla_knowledge, message_bus=self.mock_bus)
 
     def test_mla_corrupted_fallback(self):
@@ -176,7 +177,7 @@ class TestAgentPersistence(unittest.TestCase):
         with patch('logging.error') as mock_log_error:
             agent = MetaLearnerAgent(knowledge_file_path=temp_file, message_bus=self.mock_bus)
             # Compare with the structure _get_default_knowledge provides
-            expected_default_kb = agent._get_default_knowledge()
+            expected_default_kb = agent._default_knowledge_base_structure
             self.assertEqual(agent.knowledge_base, expected_default_kb,
                              "MetaLearnerAgent should fall back to default knowledge structure on corrupted file.")
             mock_log_error.assert_called()
