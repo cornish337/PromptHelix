@@ -41,7 +41,7 @@ The application requires certain environment variables to be set, especially for
 You can set these variables in a few ways:
 
 1.  **Using a `.env` file:**
-    Create a file named `.env` in the root directory of the project. Add your environment variables to this file in the following format:
+    Copy the provided `.env.example` to `.env` and fill in your values. The file should look like this:
     ```
     OPENAI_API_KEY="your_openai_api_key"
     ANTHROPIC_API_KEY="your_anthropic_api_key"
@@ -172,9 +172,10 @@ For a manual production setup, consider the following steps:
     *   **Database Migrations**: If you are using a database like PostgreSQL, you will need to manage database schema changes. It's mentioned that the project might consider Alembic. If Alembic is integrated (check `prompthelix/alembic`), you would typically run migrations like this:
         ```bash
         # Ensure ALEMBIC_CONFIG is set or alembic.ini is configured
+        cd /path/to/PromptHelix
         alembic upgrade head
         ```
-        If Alembic is not yet fully set up, you might need to initialize it or use manual SQL scripts for schema management. The current `init_db()` is for SQLite and development.
+        Run this command whenever deploying to a new environment so your production database schema matches the models. If Alembic is not yet fully set up, you might need to initialize it or use manual SQL scripts for schema management. The current `init_db()` is for SQLite and development.
 
 4.  **Environment Variables:**
     Ensure all required environment variables (API keys, `DATABASE_URL`, etc.) are securely set in your production environment.
@@ -189,7 +190,7 @@ We welcome contributions! Please see our `CONTRIBUTING.md` file for detailed gui
 
 ## License
 
-This project is licensed under the GNU General Public License v3.0. See the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
 ## Running the MVP
 
@@ -212,14 +213,17 @@ This command runs the `run_ga.py` script via the CLI, which prints the progress 
 PromptHelix also provides an API endpoint to trigger the genetic algorithm.
 
 1.  **Start the FastAPI server**:
-    Ensure the FastAPI server is running as described in the "Setup and Run the Web UI" section.
+    Run the Uvicorn server to serve the API:
+    ```bash
+    uvicorn prompthelix.main:app
+    ```
 
 2.  **Access the GA endpoint**:
-    Once the server is running, you can trigger the genetic algorithm by sending a GET request to the `/api/run-ga` endpoint. For example, using `curl`:
+    Once the server is running, you can trigger the genetic algorithm by sending a GET request to the `/api/experiments/run-ga` endpoint. For example, using `curl`:
     ```bash
-    curl http://127.0.0.1:8000/api/run-ga
+    curl http://127.0.0.1:8000/api/experiments/run-ga
     ```
-    Or you can open `http://127.0.0.1:8000/api/run-ga` in your web browser.
+    Or you can open `http://127.0.0.1:8000/api/experiments/run-ga` in your web browser.
 
 3.  **Try the Prompt Manager UI**:
     The Prompt Manager UI, for adding and viewing prompts, can be accessed as described in the "Setup and Run the Web UI" section.
