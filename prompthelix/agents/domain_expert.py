@@ -16,26 +16,30 @@ class DomainExpertAgent(BaseAgent):
     Provides domain-specific knowledge, constraints, terminology, and
     evaluation criteria to other agents.
     """
-    def __init__(self, message_bus=None):
+    def __init__(self, message_bus=None, knowledge_file_path: str = "domain_expert_knowledge.json"):
         """
         Initializes the DomainExpertAgent.
         Loads domain-specific knowledge and agent configuration.
 
         Args:
             message_bus (object, optional): The message bus for inter-agent communication.
+            knowledge_file_path (str, optional): Path to the JSON file for knowledge persistence.
+                                                 Defaults to "domain_expert_knowledge.json".
         """
         super().__init__(agent_id="DomainExpert", message_bus=message_bus)
+        self.knowledge_file_path = knowledge_file_path
 
         agent_config = AGENT_SETTINGS.get(self.agent_id, {})
         self.llm_provider = agent_config.get("default_llm_provider", FALLBACK_LLM_PROVIDER)
         self.llm_model = agent_config.get("default_llm_model", FALLBACK_LLM_MODEL)
         logger.info(f"Agent '{self.agent_id}' initialized with LLM provider: {self.llm_provider} and model: {self.llm_model}")
 
-        self.knowledge_base = self._load_domain_knowledge()
+        self.knowledge_base = {} # Initialize before loading
+        self.load_knowledge()
 
-    def _load_domain_knowledge(self) -> dict:
+    def _get_default_knowledge(self) -> dict:
         """
-        Loads a mock knowledge base with domain-specific information.
+        Provides a default mock knowledge base with domain-specific information.
 
         In a real system, this would load from configuration files, databases,
         or dedicated knowledge management systems.
@@ -45,6 +49,7 @@ class DomainExpertAgent(BaseAgent):
                   Keys are domain names, values are dicts of info
                   (e.g., keywords, constraints, evaluation_tips).
         """
+        logger.info(f"Agent '{self.agent_id}': Using default knowledge base.")
         return {
             "medical": {
                 "keywords": ["patient", "diagnosis", "treatment", "symptom", "prognosis", "EHR"],
@@ -107,6 +112,36 @@ class DomainExpertAgent(BaseAgent):
                 "evaluation_tips": ["Check for accuracy.", "Assess completeness and clarity of explanation."]
             }
         }
+
+    def load_knowledge(self):
+        """
+        Loads the knowledge base from the specified JSON file.
+        If the file is not found or is invalid, it loads default knowledge.
+        """
+        try:
+            with open(self.knowledge_file_path, 'r') as f:
+                self.knowledge_base = json.load(f)
+            logger.info(f"Agent '{self.agent_id}': Knowledge base loaded successfully from '{self.knowledge_file_path}'.")
+        except FileNotFoundError:
+            logger.warning(f"Agent '{self.agent_id}': Knowledge file '{self.knowledge_file_path}' not found. Using default knowledge.")
+            self.knowledge_base = self._get_default_knowledge()
+        except json.JSONDecodeError as e:
+            logger.error(f"Agent '{self.agent_id}': Error decoding JSON from '{self.knowledge_file_path}': {e}. Using default knowledge.", exc_info=True)
+            self.knowledge_base = self._get_default_knowledge()
+        except Exception as e:
+            logger.error(f"Agent '{self.agent_id}': Failed to load knowledge from '{self.knowledge_file_path}': {e}. Using default knowledge.", exc_info=True)
+            self.knowledge_base = self._get_default_knowledge()
+
+    def save_knowledge(self):
+        """
+        Saves the current knowledge base to the specified JSON file.
+        """
+        try:
+            with open(self.knowledge_file_path, 'w') as f:
+                json.dump(self.knowledge_base, f, indent=4)
+            logger.info(f"Agent '{self.agent_id}': Knowledge base saved successfully to '{self.knowledge_file_path}'.")
+        except Exception as e:
+            logger.error(f"Agent '{self.agent_id}': Failed to save knowledge to '{self.knowledge_file_path}': {e}", exc_info=True)
 
     def process_request(self, request_data: dict) -> dict:
         """

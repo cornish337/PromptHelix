@@ -20,7 +20,9 @@ class TestPromptArchitectAgent(unittest.TestCase):
         # For simplicity here, we assume a default mock if a test doesn't provide its own
         self.architect_config_patch = patch.dict(GLOBAL_AGENT_SETTINGS, {'PromptArchitectAgent': DEFAULT_ARCHITECT_CONFIG.copy()})
         self.mock_agent_settings = self.architect_config_patch.start()
-        self.architect = PromptArchitectAgent() # Uses mocked settings
+        # Provide knowledge_file_path=None to use default behavior (in-memory or default filename)
+        # without creating actual files during these specific unit tests unless persistence is being tested.
+        self.architect = PromptArchitectAgent(knowledge_file_path=None) # Uses mocked settings
 
     def tearDown(self):
         self.architect_config_patch.stop()

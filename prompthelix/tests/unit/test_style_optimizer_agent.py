@@ -7,7 +7,7 @@ class TestStyleOptimizerAgent(unittest.TestCase):
 
     def setUp(self):
         """Instantiate the StyleOptimizerAgent for each test."""
-        self.optimizer = StyleOptimizerAgent()
+        self.optimizer = StyleOptimizerAgent(knowledge_file_path=None)
 
     def test_agent_creation(self):
         """Test basic creation and initialization of the agent."""

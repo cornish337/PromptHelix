@@ -6,7 +6,7 @@ class TestDomainExpertAgent(unittest.TestCase):
 
     def setUp(self):
         """Instantiate the DomainExpertAgent for each test."""
-        self.expert = DomainExpertAgent()
+        self.expert = DomainExpertAgent(knowledge_file_path=None)
 
     def test_agent_creation(self):
         """Test basic creation and initialization of the agent."""

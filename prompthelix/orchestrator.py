@@ -1,7 +1,9 @@
 from prompthelix.message_bus import MessageBus
 from prompthelix.agents.architect import PromptArchitectAgent
 from prompthelix.agents.results_evaluator import ResultsEvaluatorAgent
-from prompthelix.agents.meta_learner import MetaLearnerAgent # Import MetaLearnerAgent
+from prompthelix.agents.meta_learner import MetaLearnerAgent
+from prompthelix.agents.domain_expert import DomainExpertAgent # Added for demo
+from prompthelix.agents.critic import PromptCriticAgent # Added for demo
 # Import BaseAgent if we need to use it for the example, or a mock agent
 from prompthelix.agents.base import BaseAgent
 from prompthelix.genetics.engine import (
@@ -35,9 +37,10 @@ def main_ga_loop(
 
     # 1. Instantiate Agents, passing the message bus
     print("Initializing agents with message bus...")
-    # Assuming agent_id is a class attribute or set in __init__
-    prompt_architect = PromptArchitectAgent(message_bus=message_bus)
-    results_evaluator = ResultsEvaluatorAgent(message_bus=message_bus)
+    prompt_architect = PromptArchitectAgent(message_bus=message_bus, knowledge_file_path="architect_ga_knowledge.json")
+    results_evaluator = ResultsEvaluatorAgent(message_bus=message_bus, knowledge_file_path="results_evaluator_ga_config.json")
+    # Note: PromptCriticAgent and StyleOptimizerAgent are typically used within FitnessEvaluator or other
+    # GA components. If they were instantiated directly here for the GA loop, they'd also get specific paths.
 
     # Register agents with the message bus
     message_bus.register(prompt_architect.agent_id, prompt_architect)
@@ -171,17 +174,90 @@ if __name__ == "__main__":
     demo_bus.register(agent_X.agent_id, agent_X)
     demo_bus.register(agent_Y.agent_id, agent_Y)
 
-    # Agent X sends a message to Agent Y
-    agent_X.do_something_and_send_ping(target_agent_id="AgentY", data="Hello from Agent X!")
+    # --- "Ping" Message Demonstration (using updated send_message) ---
+    print(f"\n--- 'Ping' Message Demonstration ---")
+    ping_payload = {"content": "AgentX checking in"}
+    print(f"{agent_X.agent_id} sending 'ping' to {agent_Y.agent_id} with payload: {ping_payload}")
+    pong_response = agent_X.send_message(recipient_agent_id="AgentY", message_content=ping_payload, message_type="ping")
+    print(f"{agent_X.agent_id} received pong response: {pong_response}")
 
     # Agent Y sends a message to a non-existent agent (will be logged by message bus)
-    agent_Y.send_message(recipient_agent_id="AgentZ", message_content={"data": "Test to Z"}, message_type="info_update")
-    print("--- End of Simple Message Bus Demonstration ---\n")
+    non_existent_response = agent_Y.send_message(recipient_agent_id="AgentZ", message_content={"data": "Test to Z"}, message_type="info_update")
+    print(f"{agent_Y.agent_id} sending to non-existent AgentZ, response: {non_existent_response}")
+    print("--- End of 'Ping' and Message Bus Demonstration ---\n")
+
+
+    # --- DomainExpertAgent Persistence Demonstration ---
+    print("\n--- DomainExpertAgent Persistence Demonstration ---")
+    dea_knowledge_file = "domain_expert_orchestrator_demo.json"
+    # Initial instantiation (might create the file with defaults)
+    domain_expert_1 = DomainExpertAgent(message_bus=demo_bus, knowledge_file_path=dea_knowledge_file)
+    # Ensure knowledge base is populated, especially if file didn't exist
+    if not domain_expert_1.knowledge_base:
+        print("Warning: DomainExpertAgent knowledge base is empty after init. Loading defaults for demo.")
+        domain_expert_1.knowledge_base = domain_expert_1._get_default_knowledge()
+
+
+    print(f"Initial medical keywords from instance 1: {domain_expert_1.knowledge_base.get('medical', {}).get('keywords', [])}")
+
+    # Modify knowledge
+    if 'medical' not in domain_expert_1.knowledge_base:
+        domain_expert_1.knowledge_base['medical'] = {'keywords': [], 'constraints': [], 'evaluation_tips': [], 'sample_prompt_starters': []}
+    if 'keywords' not in domain_expert_1.knowledge_base['medical']:
+        domain_expert_1.knowledge_base['medical']['keywords'] = []
+
+    domain_expert_1.knowledge_base['medical']['keywords'].append("orchestrator_added_keyword")
+    print(f"Modified medical keywords in instance 1: {domain_expert_1.knowledge_base['medical']['keywords']}")
+
+    domain_expert_1.save_knowledge()
+    print(f"Knowledge saved by instance 1 to '{dea_knowledge_file}'.")
+
+    # New instance loading from the same file
+    domain_expert_2 = DomainExpertAgent(message_bus=demo_bus, knowledge_file_path=dea_knowledge_file)
+    print(f"Medical keywords from instance 2 (should include modification): {domain_expert_2.knowledge_base.get('medical', {}).get('keywords', [])}")
+    print("--- End of DomainExpertAgent Persistence Demonstration ---\n")
+
+    # --- PromptCriticAgent Persistence Demonstration ---
+    print("\n--- PromptCriticAgent Persistence Demonstration ---")
+    pca_knowledge_file = "critic_orchestrator_demo.json"
+    # Initial instantiation
+    critic_agent_1 = PromptCriticAgent(message_bus=demo_bus, knowledge_file_path=pca_knowledge_file)
+    if not critic_agent_1.critique_rules:
+        print("Warning: PromptCriticAgent critique rules are empty after init. Loading defaults for demo.")
+        critic_agent_1.critique_rules = critic_agent_1._get_default_critique_rules()
+
+    rule_name_to_check = "PromptTooShort"
+    initial_rule = next((rule for rule in critic_agent_1.critique_rules if rule.get("name") == rule_name_to_check), None)
+    print(f"Initial '{rule_name_to_check}' rule from instance 1: {initial_rule}")
+
+    # Modify a rule
+    modified_min_genes = 1 # Change from default 3
+    rule_modified = False
+    if critic_agent_1.critique_rules:
+        for rule in critic_agent_1.critique_rules:
+            if rule.get("name") == rule_name_to_check:
+                rule["min_genes"] = modified_min_genes
+                rule_modified = True
+                break
+    if rule_modified:
+        print(f"Modified '{rule_name_to_check}' rule in instance 1 to have min_genes: {modified_min_genes}")
+    else:
+        print(f"Could not find or modify rule '{rule_name_to_check}' in instance 1. Rules: {critic_agent_1.critique_rules}")
+
+    critic_agent_1.save_knowledge()
+    print(f"Knowledge saved by Critic instance 1 to '{pca_knowledge_file}'.")
+
+    # New instance loading from the same file
+    critic_agent_2 = PromptCriticAgent(message_bus=demo_bus, knowledge_file_path=pca_knowledge_file)
+    loaded_rule = next((rule for rule in critic_agent_2.critique_rules if rule.get("name") == rule_name_to_check), None)
+    print(f"'{rule_name_to_check}' rule from instance 2 (should reflect modification): {loaded_rule}")
+    print("--- End of PromptCriticAgent Persistence Demonstration ---\n")
+
 
     # --- MetaLearnerAgent Persistence Demonstration ---
     print("\n--- MetaLearnerAgent Persistence Demonstration ---")
     # MetaLearnerAgent needs a message bus to be instantiated, even if not used in this simple demo part
-    meta_learner_bus = MessageBus()
+    meta_learner_bus = MessageBus() # Using demo_bus for consistency if preferred, or a new one.
     meta_learner_agent = MetaLearnerAgent(message_bus=meta_learner_bus, knowledge_file_path="meta_learner_knowledge_orchestrator_demo.json")
 
     print(f"Initial knowledge base keys: {list(meta_learner_agent.knowledge_base.keys())}")

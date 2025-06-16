@@ -32,11 +32,16 @@ class StyleOptimizerAgent(BaseAgent):
         self.llm_model = agent_config.get("default_llm_model", FALLBACK_LLM_MODEL)
         logger.info(f"Agent '{self.agent_id}' initialized with LLM provider: {self.llm_provider} and model: {self.llm_model}")
 
-        self.style_rules = self._load_style_rules()
+        self.knowledge_file_path = knowledge_file_path
+        if self.knowledge_file_path is None:
+            self.knowledge_file_path = "style_optimizer_rules.json"
 
-    def _load_style_rules(self) -> dict:
+        self.style_rules = {} # Initialize before loading
+        self.load_knowledge()
+
+    def _get_default_style_rules(self) -> dict:
         """
-        Loads mock style transformation rules.
+        Provides default mock style transformation rules.
 
         In a real scenario, this would load from a configuration file,
         a database, or be dynamically updated by other agents like MetaLearnerAgent.
@@ -44,6 +49,7 @@ class StyleOptimizerAgent(BaseAgent):
         Returns:
             dict: A dictionary of style rules.
         """
+        logger.info(f"Agent '{self.agent_id}': Using default style rules.")
         return {
             "formal": {
                 "replace": {"don't": "do not", "stuff": "items", "gonna": "going to", "wanna": "want to"},
@@ -60,6 +66,38 @@ class StyleOptimizerAgent(BaseAgent):
                 "replace": {"tell me": "explain"}
             }
         }
+
+    def load_knowledge(self):
+        """
+        Loads style rules from the specified JSON file.
+        If the file is not found or is invalid, it loads default rules
+        and saves them to a new file.
+        """
+        try:
+            with open(self.knowledge_file_path, 'r') as f:
+                self.style_rules = json.load(f)
+            logger.info(f"Agent '{self.agent_id}': Style rules loaded successfully from '{self.knowledge_file_path}'.")
+        except FileNotFoundError:
+            logger.warning(f"Agent '{self.agent_id}': Knowledge file '{self.knowledge_file_path}' not found. Using default rules and creating the file.")
+            self.style_rules = self._get_default_style_rules()
+            self.save_knowledge() # Save defaults if file not found
+        except json.JSONDecodeError as e:
+            logger.error(f"Agent '{self.agent_id}': Error decoding JSON from '{self.knowledge_file_path}': {e}. Using default rules.", exc_info=True)
+            self.style_rules = self._get_default_style_rules()
+        except Exception as e:
+            logger.error(f"Agent '{self.agent_id}': Failed to load style rules from '{self.knowledge_file_path}': {e}. Using default rules.", exc_info=True)
+            self.style_rules = self._get_default_style_rules()
+
+    def save_knowledge(self):
+        """
+        Saves the current style rules to the specified JSON file.
+        """
+        try:
+            with open(self.knowledge_file_path, 'w') as f:
+                json.dump(self.style_rules, f, indent=4)
+            logger.info(f"Agent '{self.agent_id}': Style rules saved successfully to '{self.knowledge_file_path}'.")
+        except Exception as e:
+            logger.error(f"Agent '{self.agent_id}': Failed to save style rules to '{self.knowledge_file_path}': {e}", exc_info=True)
 
     def _tone_analysis_adjustment(self, genes: list, target_tone: str) -> list:
         """
