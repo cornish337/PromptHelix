@@ -19,13 +19,16 @@ class PromptCriticAgent(BaseAgent):
     and adherence to best practices, without necessarily executing them.
     It acts as a "static analyzer" for prompts.
     """
-    def __init__(self, message_bus=None):
+    def __init__(self, message_bus=None, knowledge_file_path=None):
         """
         Initializes the PromptCriticAgent.
         Loads critique rules or heuristics and agent configuration.
 
         Args:
             message_bus (object, optional): The message bus for inter-agent communication.
+            knowledge_file_path (str, optional): Path to the JSON file storing
+                critique rules. Defaults to "critic_rules.json" if not
+                provided.
         """
         super().__init__(agent_id=self.agent_id, message_bus=message_bus)
 
@@ -34,9 +37,7 @@ class PromptCriticAgent(BaseAgent):
         self.llm_model = agent_config.get("default_llm_model", FALLBACK_LLM_MODEL)
         logger.info(f"Agent '{self.agent_id}' initialized with LLM provider: {self.llm_provider} and model: {self.llm_model}")
 
-        self.knowledge_file_path = knowledge_file_path
-        if self.knowledge_file_path is None:
-            self.knowledge_file_path = "critic_rules.json"
+        self.knowledge_file_path = knowledge_file_path or "critic_rules.json"
 
         self.critique_rules = [] # Initialize before loading
         self.load_knowledge()
