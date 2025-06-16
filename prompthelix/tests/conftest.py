@@ -71,3 +71,9 @@ def test_client(db_engine):
 
     # Clean up overrides after tests
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def client(test_client):
+    """Alias used by some tests."""
+    yield test_client

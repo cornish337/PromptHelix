@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Float, JSON
 from sqlalchemy.orm import relationship
 from datetime import datetime
-from prompthelix.database import Base
+from prompthelix.models.base import Base
 
 class Prompt(Base):
     __tablename__ = "prompts"

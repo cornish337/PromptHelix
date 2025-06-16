@@ -6,6 +6,7 @@ import openai
 from openai import OpenAIError
 from prompthelix.config import settings
 import logging
+from prompthelix.enums import ExecutionMode # Added import
 
 logger = logging.getLogger(__name__)
 
@@ -253,34 +254,38 @@ class FitnessEvaluator:
     This class simulates interaction with an LLM and uses a ResultsEvaluatorAgent
     to determine the fitness score based on the LLM's output.
     """
-    def __init__(self, results_evaluator_agent: 'ResultsEvaluatorAgent'):
+    def __init__(self, results_evaluator_agent: 'ResultsEvaluatorAgent', execution_mode: ExecutionMode):
         """
         Initializes the FitnessEvaluator.
         Args:
             results_evaluator_agent (ResultsEvaluatorAgent): An instance of
                 ResultsEvaluatorAgent that will be used to assess the quality
                 of LLM outputs.
+            execution_mode (ExecutionMode): The mode of execution (TEST or REAL).
         """
         from prompthelix.agents.results_evaluator import ResultsEvaluatorAgent
         if not isinstance(results_evaluator_agent, ResultsEvaluatorAgent):
             raise TypeError("results_evaluator_agent must be an instance of ResultsEvaluatorAgent.")
         self.results_evaluator_agent = results_evaluator_agent
+        self.execution_mode = execution_mode # Stored instance attribute
         self.openai_client = None  # Initialize to None
 
-        if not settings.OPENAI_API_KEY:
-            logger.error("OPENAI_API_KEY not found in settings. FitnessEvaluator will not be able to make LLM calls.")
+        if not settings.OPENAI_API_KEY and self.execution_mode == ExecutionMode.REAL: # Check only if in REAL mode
+            logger.error("OPENAI_API_KEY not found in settings. FitnessEvaluator will not be able to make LLM calls in REAL mode.")
             # The print warning can be removed or kept for immediate console feedback if desired.
             # print("Warning: OPENAI_API_KEY not found in settings. FitnessEvaluator may not function correctly.")
-        else:
+        elif self.execution_mode == ExecutionMode.REAL: # Only init client if REAL mode and key might be present
             try:
                 self.openai_client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
-                logger.info("OpenAI client initialized successfully.")
+                logger.info("OpenAI client initialized successfully for REAL mode.")
             except Exception as e: # Catch a broader exception during client initialization
-                logger.error(f"Error initializing OpenAI client: {e}", exc_info=True)
+                logger.error(f"Error initializing OpenAI client for REAL mode: {e}", exc_info=True)
                 # Depending on the desired behavior, either raise an error or ensure client remains None
                 # and is handled in _call_llm_api
                 # For robustness, we'll let it remain None and _call_llm_api will handle it.
                 # raise RuntimeError(f"Failed to initialize OpenAI client: {e}") # Or re-raise
+        else: # TEST mode
+            logger.info("FitnessEvaluator initialized in TEST mode. LLM calls will be skipped.")
 
     def _call_llm_api(self, prompt_string: str, model_name: str = "gpt-3.5-turbo") -> str:
         """
@@ -291,9 +296,13 @@ class FitnessEvaluator:
         Returns:
             str: The LLM's response content, or an error message string if the call fails.
         """
-        if not self.openai_client: # Check if client was initialized
-            logger.error("OpenAI client is not initialized. Cannot call LLM API.")
-            return "Error: LLM client not initialized."
+        if self.execution_mode == ExecutionMode.TEST:
+            logger.info(f"Executing in TEST mode. Returning dummy LLM output for prompt: {prompt_string[:100]}...")
+            return "This is a test output from dummy LLM in TEST mode."
+
+        if not self.openai_client: # Check if client was initialized (relevant for REAL mode)
+            logger.error("OpenAI client is not initialized. Cannot call LLM API in REAL mode.")
+            return "Error: LLM client not initialized for REAL mode."
 
         logger.info(f"Calling OpenAI API model {model_name} for prompt (first 100 chars): {prompt_string[:100]}...")
         try:
@@ -459,10 +468,27 @@ class PopulationManager:
         print(f"PopulationManager: Evolving population for generation {self.generation_number + 1}. Evaluating current population...")
         
         # 1. Evaluate Population
-        for chromosome in self.population:
-            self.fitness_evaluator.evaluate(chromosome, task_description, success_criteria)
+        futures = []
+        # Ensure ProcessPoolExecutor is imported
+        from concurrent.futures import ProcessPoolExecutor
+        with ProcessPoolExecutor() as executor:
+            for chromosome in self.population:
+                # Submit evaluation task to the executor
+                future = executor.submit(self.fitness_evaluator.evaluate, chromosome, task_description, success_criteria)
+                futures.append((future, chromosome)) # Store future and chromosome
+
+            # Retrieve results and update fitness scores
+            for future, chromosome in futures:
+                try:
+                    fitness_score = future.result()  # This will block until the future is complete
+                    chromosome.fitness_score = fitness_score
+                except Exception as e:
+                    logger.error(f"Error evaluating chromosome {chromosome.id} in parallel: {e}", exc_info=True)
+                    chromosome.fitness_score = 0.0 # Assign a default low fitness on error
+
 
         # 2. Sort Population by fitness (descending) without mutating original list reference
+        # Population is now updated with fitness scores from parallel execution
         sorted_population = sorted(self.population, key=lambda c: c.fitness_score, reverse=True)
         
         print(

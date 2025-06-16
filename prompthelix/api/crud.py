@@ -1,7 +1,12 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
+from typing import Optional
 from prompthelix.models import Prompt, PromptVersion
+from prompthelix.models.settings_models import APIKey
 from prompthelix.schemas import PromptCreate, PromptVersionCreate
+# Assuming schemas for APIKey will be created in a later step,
+# for now, create_or_update_api_key will just take strings.
+# We might need: from prompthelix import schemas
 
 def create_prompt(db: Session, prompt: PromptCreate) -> Prompt:
     db_prompt = Prompt(name=prompt.name, description=prompt.description)
@@ -53,5 +58,21 @@ def create_prompt_version(db: Session, version: PromptVersionCreate, prompt_id: 
     db.refresh(db_version)
     return db_version
 
-def get_prompt_version_by_id(db: Session, version_id: int) -> PromptVersion | None:
-    return db.query(PromptVersion).filter(PromptVersion.id == version_id).first()
+
+# Functions for APIKey
+
+def get_api_key(db: Session, service_name: str) -> Optional[APIKey]:
+    return db.query(APIKey).filter(APIKey.service_name == service_name).first()
+
+# No specific schema for api_key_data yet, using individual parameters
+def create_or_update_api_key(db: Session, service_name: str, api_key_value: str) -> APIKey:
+    db_api_key = db.query(APIKey).filter(APIKey.service_name == service_name).first()
+    if db_api_key:
+        db_api_key.api_key = api_key_value
+    else:
+        db_api_key = APIKey(service_name=service_name, api_key=api_key_value)
+        db.add(db_api_key)
+    db.commit()
+    db.refresh(db_api_key)
+    return db_api_key
+

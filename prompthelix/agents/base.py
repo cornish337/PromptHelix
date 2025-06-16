@@ -2,6 +2,7 @@ import abc
 from datetime import datetime
 import logging
 
+logger = logging.getLogger(__name__)
 
 class BaseAgent(abc.ABC):
     """
@@ -67,18 +68,17 @@ class BaseAgent(abc.ABC):
         if self.message_bus and callable(getattr(self.message_bus, "dispatch_message", None)):
             try:
                 self.message_bus.dispatch_message(message)
-                print(f"{self.agent_id} sent message to {recipient_agent_id} via message bus: Type='{message_type}', Payload Snippet='{str(message_content)[:50]}...'")
+                logger.info(f"Agent '{self.agent_id}' sent message to '{recipient_agent_id}' via message bus: Type='{message_type}', Payload Snippet='{str(message_content)[:50]}...'")
                 return True
             except Exception as e:
-                print(f"{self.agent_id} failed to send message to {recipient_agent_id} via message bus: {e}")
-                # Fallback to direct print if bus dispatch fails
-                print(f"{self.agent_id} (bus dispatch failed) details for {recipient_agent_id}: Type='{message_type}', Payload='{message_content}'")
-                return True # Still attempted
+                logger.error(f"Agent '{self.agent_id}' failed to send message to '{recipient_agent_id}' via message bus: {e}", exc_info=True)
+                # Fallback to direct print if bus dispatch fails (for debugging, though not true delivery)
+                logger.warning(f"Agent '{self.agent_id}' (bus dispatch failed) falling back to print for message to '{recipient_agent_id}': Type='{message_type}', Payload='{message_content}'")
+                return False # Indicate dispatch failed
         else:
-            print(f"{self.agent_id} (no bus) sending message to {recipient_agent_id}: Type='{message_type}', Payload='{message_content}'")
-            # In a real scenario without a bus, this message wouldn't actually be delivered
-            # unless a direct P2P mechanism was implemented here.
-            return True
+            logger.warning(f"Agent '{self.agent_id}' (no message bus) attempting to print message for '{recipient_agent_id}': Type='{message_type}', Payload='{message_content}'")
+            # This is not actual delivery, just a log/print action.
+            return False # Indicate no bus to dispatch
 
 
     def receive_message(self, message: dict):
@@ -102,16 +102,16 @@ class BaseAgent(abc.ABC):
         msg_type = message.get('message_type', 'UnknownType')
         payload = message.get('payload', {})
 
-        print(f"{self.agent_id} received message from {sender_id}: Type='{msg_type}', Payload Snippet='{str(payload)[:50]}...'")
+        logger.info(f"Agent '{self.agent_id}' received message from '{sender_id}': Type='{msg_type}', Payload Snippet='{str(payload)[:50]}...'")
 
         if msg_type == "direct_request":
-            print(f"{self.agent_id} processing 'direct_request' from {sender_id}.")
+            logger.info(f"Agent '{self.agent_id}' processing 'direct_request' from '{sender_id}'.")
             return self.process_request(payload)
         elif msg_type == "info_update": # Example of another message type
-            print(f"{self.agent_id} received 'info_update' from {sender_id}. Logging: {payload}")
+            logger.info(f"Agent '{self.agent_id}' received 'info_update' from '{sender_id}'. Logging payload: {payload}")
             # Potentially update internal state based on this info
-            return {"status": "info_logged"}
+            return {"status": "info_logged", "agent_id": self.agent_id}
         else:
-            print(f"{self.agent_id} logged message of type '{msg_type}' or will handle differently.")
-            return {"status": "message_logged", "type": msg_type}
+            logger.info(f"Agent '{self.agent_id}' logged message of type '{msg_type}' from '{sender_id}'. No specific handler implemented in BaseAgent.")
+            return {"status": "message_logged_by_base_agent", "type": msg_type, "agent_id": self.agent_id}
 

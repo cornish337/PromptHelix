@@ -3,6 +3,7 @@ from unittest.mock import patch, Mock, MagicMock
 
 from prompthelix.genetics.engine import FitnessEvaluator, PromptChromosome
 from prompthelix.agents.results_evaluator import ResultsEvaluatorAgent # May need to mock this
+from prompthelix.enums import ExecutionMode # Added import
 from prompthelix.config import settings
 import openai # Necessary to mock openai.OpenAI and specific errors like OpenAIError
 import logging # For capturing log messages
@@ -45,7 +46,7 @@ def test_evaluate_successful_llm_call(mock_openai_constructor, mock_results_eval
     mock_openai_constructor.return_value = mock_openai_client # The constructor now returns our mock client
 
     with patch.object(settings, 'OPENAI_API_KEY', 'fake_key_present'):
-        evaluator = FitnessEvaluator(results_evaluator_agent=mock_results_evaluator_agent)
+        evaluator = FitnessEvaluator(results_evaluator_agent=mock_results_evaluator_agent, execution_mode=ExecutionMode.REAL)
 
     fitness_score = evaluator.evaluate(sample_chromosome, "Test task", {"criteria": "none"})
 
@@ -71,7 +72,7 @@ def test_evaluate_llm_api_error(mock_openai_constructor, mock_results_evaluator_
     mock_openai_client.chat.completions.create.side_effect = openai.APIError("Test API Error", request=Mock(), body=None)
 
     with patch.object(settings, 'OPENAI_API_KEY', 'fake_key_present'):
-        evaluator = FitnessEvaluator(results_evaluator_agent=mock_results_evaluator_agent)
+        evaluator = FitnessEvaluator(results_evaluator_agent=mock_results_evaluator_agent, execution_mode=ExecutionMode.REAL)
 
     evaluator.evaluate(sample_chromosome, "Test task", {})
 
@@ -96,7 +97,7 @@ def test_evaluate_llm_no_content_response(mock_openai_constructor, mock_results_
     mock_openai_client.chat.completions.create.return_value = mock_completion_no_content
 
     with patch.object(settings, 'OPENAI_API_KEY', 'fake_key_present'):
-        evaluator = FitnessEvaluator(results_evaluator_agent=mock_results_evaluator_agent)
+        evaluator = FitnessEvaluator(results_evaluator_agent=mock_results_evaluator_agent, execution_mode=ExecutionMode.REAL)
 
     evaluator.evaluate(sample_chromosome, "Test task", {})
 
@@ -112,11 +113,25 @@ def test_fitness_evaluator_init_no_api_key(mock_openai_constructor, mock_results
     """Test FitnessEvaluator initialization and evaluate call when OPENAI_API_KEY is missing."""
     caplog.set_level(logging.ERROR) # For init error
 
+    # Test REAL mode init without API key
     with patch.object(settings, 'OPENAI_API_KEY', None): # Simulate missing API key
-        evaluator = FitnessEvaluator(results_evaluator_agent=mock_results_evaluator_agent)
+        evaluator_real_no_key = FitnessEvaluator(results_evaluator_agent=mock_results_evaluator_agent, execution_mode=ExecutionMode.REAL)
 
-    assert "OPENAI_API_KEY not found in settings" in caplog.text
-    mock_openai_constructor.assert_not_called() # OpenAI client should not be initialized
+    assert "OPENAI_API_KEY not found in settings" in caplog.text # Error logged by __init__
+    mock_openai_constructor.assert_not_called() # OpenAI client should not be initialized in REAL mode if key is missing
+
+    # Test TEST mode init without API key (should not log error about key)
+    caplog.clear()
+    with patch.object(settings, 'OPENAI_API_KEY', None): # Simulate missing API key
+        evaluator_test_no_key = FitnessEvaluator(results_evaluator_agent=mock_results_evaluator_agent, execution_mode=ExecutionMode.TEST)
+    assert "OPENAI_API_KEY not found in settings" not in caplog.text # No error for TEST mode
+    mock_openai_constructor.assert_not_called() # Client not initialized in TEST mode
+
+    # Now test calling evaluate with no client (using the evaluator_real_no_key instance)
+    caplog.clear() # Clear previous log messages
+    caplog.set_level(logging.WARNING) # For the evaluate warning
+
+    evaluator_real_no_key.evaluate(sample_chromosome, "Test task", {})
 
     # Now test calling evaluate with no client
     caplog.clear() # Clear previous log messages
@@ -130,8 +145,72 @@ def test_fitness_evaluator_init_no_api_key(mock_openai_constructor, mock_results
     assert args[0]["llm_output"] == "Error: LLM client not initialized."
 
     # Check log for the specific failure within evaluate (or _call_llm_api)
-    assert "LLM client is not initialized. Cannot call LLM API." in caplog.text # This is from _call_llm_api
+    assert "LLM client is not initialized. Cannot call LLM API in REAL mode." in caplog.text # This is from _call_llm_api
     assert f"LLM call for prompt ID {sample_chromosome.id}" in caplog.text # This is from evaluate
-    assert "failed. Output: Error: LLM client not initialized." in caplog.text # This is from evaluate
+    assert "failed. Output: Error: LLM client not initialized for REAL mode." in caplog.text # This is from evaluate
 
-print("New test file created and initial tests added: prompthelix/tests/unit/test_fitness_evaluator.py")
+
+# New tests for ExecutionMode
+def test_fitness_evaluator_call_llm_api_test_mode(mock_results_evaluator_agent, caplog):
+    """Test _call_llm_api in TEST mode."""
+    caplog.set_level(logging.INFO)
+    evaluator = FitnessEvaluator(results_evaluator_agent=mock_results_evaluator_agent, execution_mode=ExecutionMode.TEST)
+
+    response = evaluator._call_llm_api("test prompt in test mode")
+    assert response == "This is a test output from dummy LLM in TEST mode."
+    assert "Executing in TEST mode." in caplog.text
+    # Ensure no actual LLM call was attempted (e.g. by checking if openai_client.chat.completions.create was called, if client was mocked)
+    # In this case, evaluator.openai_client is None in TEST mode, so no need to mock create.
+
+@patch('prompthelix.genetics.engine.openai.OpenAI')
+def test_fitness_evaluator_call_llm_api_real_mode(mock_openai_constructor, mock_results_evaluator_agent, mock_openai_client, caplog):
+    """Test _call_llm_api in REAL mode with a mocked OpenAI client."""
+    caplog.set_level(logging.INFO)
+    mock_openai_constructor.return_value = mock_openai_client
+
+    # Patch settings to ensure OPENAI_API_KEY is present for REAL mode client initialization
+    with patch.object(settings, 'OPENAI_API_KEY', 'fake_key_for_real_mode'):
+        evaluator = FitnessEvaluator(results_evaluator_agent=mock_results_evaluator_agent, execution_mode=ExecutionMode.REAL)
+
+    response = evaluator._call_llm_api("test prompt for real mode")
+
+    mock_openai_client.chat.completions.create.assert_called_once()
+    assert response == "Mocked LLM response content."
+    assert "Calling OpenAI API model gpt-3.5-turbo" in caplog.text
+    assert "OpenAI API call successful." in caplog.text
+
+@patch('prompthelix.genetics.engine.openai.OpenAI')
+def test_fitness_evaluator_evaluate_test_mode(mock_openai_constructor, mock_results_evaluator_agent, sample_chromosome, caplog):
+    """Test FitnessEvaluator.evaluate in TEST mode."""
+    caplog.set_level(logging.INFO)
+    # No need to mock_openai_constructor return value as it shouldn't be used for client.create in TEST mode
+
+    evaluator = FitnessEvaluator(results_evaluator_agent=mock_results_evaluator_agent, execution_mode=ExecutionMode.TEST)
+
+    fitness_score = evaluator.evaluate(sample_chromosome, "Test task for evaluate", {"criteria": "test_mode"})
+
+    # Check that _call_llm_api returned the dummy response
+    # And results_evaluator_agent was called with this dummy response
+    mock_results_evaluator_agent.process_request.assert_called_once_with({
+        "prompt_chromosome": sample_chromosome,
+        "llm_output": "This is a test output from dummy LLM in TEST mode.", # Expected dummy output
+        "task_description": "Test task for evaluate",
+        "success_criteria": {"criteria": "test_mode"}
+    })
+    assert sample_chromosome.fitness_score == 0.75 # As per mock_results_evaluator_agent
+    assert fitness_score == 0.75
+
+    assert "Executing in TEST mode." in caplog.text # Log from _call_llm_api
+    mock_openai_constructor.assert_not_called() # Ensure OpenAI client was not even attempted to be constructed if FitnessEvaluator skips it in TEST mode
+                                                # (Current __init__ logic does try to init if key is there, but _call_llm_api short-circuits)
+                                                # A stricter test would be mock_openai_client.chat.completions.create.assert_not_called()
+                                                # if mock_openai_client was passed to the evaluator or set on it.
+                                                # Since the client is an instance var, we check its methods weren't called.
+    # If evaluator.openai_client could exist, check its methods:
+    if evaluator.openai_client: # Should be None in TEST mode if API key not set, or if init logic changes
+        evaluator.openai_client.chat.completions.create.assert_not_called()
+
+
+# The print statement at the end of the original file is not standard for test files.
+# It's removed in this modified version.
+# print("New test file created and initial tests added: prompthelix/tests/unit/test_fitness_evaluator.py")

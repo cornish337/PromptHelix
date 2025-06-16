@@ -1,4 +1,9 @@
-# SQLAlchemy declarative base will be defined here.
-# from sqlalchemy.ext.declarative import declarative_base
-# Base = declarative_base()
-# TODO: Setup SQLAlchemy Base for ORM models.
+"""Shared SQLAlchemy declarative base used by all ORM models."""
+
+from sqlalchemy.orm import declarative_base
+
+# A single Base instance is used across the project so that models can be
+# registered without creating import cycles.
+Base = declarative_base()
+
+__all__ = ["Base"]
