@@ -1,29 +1,42 @@
-import collections.abc
+from __future__ import annotations
 
-def update_settings(base_settings: dict, override_settings: dict) -> dict:
+from collections.abc import Mapping
+from typing import Any
+
+def update_settings(
+    base: Mapping[str, Any],
+    overrides: Mapping[str, Any] | None
+) -> dict[str, Any]:
     """
-    Recursively merges override_settings into base_settings.
+    Recursively deep-merges `overrides` into a copy of `base`.
 
-    For nested dictionaries, it performs a deep merge. For other types,
-    the value from override_settings takes precedence if the key exists
-    in both. New keys from override_settings are added to base_settings.
+    - Nested mappings are merged by recursing.
+    - Scalar or non-mapping values in `overrides` overwrite those in `base`.
+    - If `overrides` is None or empty, returns a shallow copy of `base`.
 
     Args:
-        base_settings: The base dictionary to update.
-        override_settings: The dictionary with overrides.
+        base:      Original settings mapping.
+        overrides: Overrides to apply.
 
     Returns:
-        A new dictionary containing the merged settings.
+        A new dict with merged settings.
     """
-    # Start with a copy of base_settings to avoid modifying the original
-    merged = base_settings.copy()
+    # Start with a shallow copy so we don’t mutate the input
+    merged: dict[str, Any] = dict(base)
 
-    if override_settings is None: # Handle case where override_settings might be None
+    if not overrides:
         return merged
 
-    for key, value in override_settings.items():
-        if isinstance(value, collections.abc.Mapping) and isinstance(merged.get(key), collections.abc.Mapping):
+    for key, value in overrides.items():
+        if (
+            key in merged
+            and isinstance(merged[key], Mapping)
+            and isinstance(value, Mapping)
+        ):
+            # Recurse for nested mappings
             merged[key] = update_settings(merged[key], value)
         else:
+            # Override or add
             merged[key] = value
+
     return merged

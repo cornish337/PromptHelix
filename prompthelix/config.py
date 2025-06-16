@@ -74,7 +74,12 @@ class Settings:
 
 # Instantiate the settings
 settings = Settings()
-logger.info(f"Loaded OPENAI_API_KEY: {settings.OPENAI_API_KEY[:5]}...{settings.OPENAI_API_KEY[-4:] if settings.OPENAI_API_KEY and len(settings.OPENAI_API_KEY) > 9 else 'INVALID_OR_SHORT_KEY'}")
+_openai_key = settings.OPENAI_API_KEY
+if _openai_key:
+    display_key = f"{_openai_key[:5]}...{_openai_key[-4:] if len(_openai_key) > 9 else ''}"
+else:
+    display_key = "NOT_SET"
+logger.info(f"Loaded OPENAI_API_KEY: {display_key}")
 
 # Example of how to access a setting:
 # print(settings.DATABASE_URL)
