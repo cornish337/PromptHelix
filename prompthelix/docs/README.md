@@ -118,7 +118,7 @@ The `prompthelix/orchestrator.py` mentioned in previous versions of this documen
 
 ## License
 
-This project is licensed under the GNU General Public License v3.0. See the [LICENSE](../../LICENSE) file in the root directory for details.
+This project is licensed under the MIT License. See the [LICENSE](../../LICENSE) file in the root directory for details.
 
 ## Contributing
 
