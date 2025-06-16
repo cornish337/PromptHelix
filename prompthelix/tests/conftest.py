@@ -70,11 +70,47 @@ def test_client_fixture(db_engine): # Renamed to avoid conflict if 'test_client'
         del app.dependency_overrides[get_db]
 
 
-@pytest.fixture(scope="function") # Changed to function scope to align with db_session if needed for overrides
-def client(test_client_fixture: TestClient): # Use the renamed fixture
-    """Provides a TestClient instance for function-scoped tests."""
-    # If tests using this client need transactional behavior tied to db_session,
-    # this setup might need further refinement, e.g., by having the TestClient
-    # use the same session provided by db_session. However, for service unit tests,
-    # we'll use db_session directly. TestClient is more for API/integration tests.
-    yield test_client_fixture
+@pytest.fixture
+def client(test_client):
+    """Alias used by some tests."""
+    yield test_client
+
+
+@pytest.fixture(scope="function")
+def experiment_prompt(db_engine, test_client: TestClient): # Use db_engine for own session
+    """
+    Fixture to create a prompt for experiment tests, and clean it up afterwards.
+    Yields the ID of the created prompt.
+    Uses its own database session to ensure the commit is visible across test client requests.
+    """
+    from prompthelix.api import crud
+    from prompthelix import schemas
+    from sqlalchemy.orm import sessionmaker
+
+    SessionLocalFixture = sessionmaker(autocommit=False, autoflush=False, bind=db_engine)
+    fixture_db_session = SessionLocalFixture()
+
+    created_prompt_model = None  # To store the SQLAlchemy model instance
+    try:
+        prompt_create_schema = schemas.PromptCreate(
+            name="Test Experiment Parent Prompt",
+            description="Prompt for testing experiment parent association."
+        )
+        # Create prompt using the fixture's own session
+        created_prompt_model = crud.create_prompt(db=fixture_db_session, prompt=prompt_create_schema)
+        fixture_db_session.commit()  # Commit this session
+
+        yield created_prompt_model.id  # Yield the ID
+
+    finally:
+        # Teardown: delete the prompt using its ID via an API call
+        if created_prompt_model:
+            # print(f"Cleaning up prompt ID: {created_prompt_model.id}")
+            response = test_client.delete(f"/api/prompts/{created_prompt_model.id}")
+            # Assert 200 (deleted) or 404 (already deleted, e.g. by the test itself)
+            assert response.status_code in [200, 404], \
+                f"Failed to cleanup prompt {created_prompt_model.id}: {response.text}"
+            # print(f"Cleanup response: {response.status_code}")
+
+        if fixture_db_session:
+            fixture_db_session.close()
