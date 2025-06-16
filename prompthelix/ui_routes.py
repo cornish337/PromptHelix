@@ -180,6 +180,16 @@ async def run_experiment_ui_submit(
     )
 
 
+@router.get("/ui/playground", name="llm_playground_ui")
+async def get_llm_playground_ui(request: Request, db: Session = Depends(get_db)):
+    # For now, using the static list from SUPPORTED_LLM_SERVICES
+    llm_providers = SUPPORTED_LLM_SERVICES
+    return templates.TemplateResponse(
+        "llm_playground.html",
+        {"request": request, "llm_providers": llm_providers}
+    )
+
+
 @router.get("/ui/prompts/{prompt_id}", name="view_prompt_ui") # Keep existing view_prompt_ui
 async def view_prompt_ui(request: Request, prompt_id: int, db: Session = Depends(get_db), new_version_id: Optional[int] = Query(None)):
     db_prompt = crud.get_prompt(db, prompt_id=prompt_id)
