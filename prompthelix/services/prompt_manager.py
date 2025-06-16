@@ -1,11 +1,8 @@
-"""Simple in-memory prompt manager used in unit tests."""
-
-from __future__ import annotations
-
 import uuid
 from typing import Dict, List, Optional
 
 class PromptManager:
+
     def __init__(self) -> None:
         self._prompts: Dict[str, str] = {}
 
@@ -18,4 +15,6 @@ class PromptManager:
         return self._prompts.get(prompt_id)
 
     def list_prompts(self) -> List[Dict[str, str]]:
-        return [{"id": pid, "content": text} for pid, text in self._prompts.items()]
+
+        return [{"id": pid, "content": content} for pid, content in self._prompts.items()]
+

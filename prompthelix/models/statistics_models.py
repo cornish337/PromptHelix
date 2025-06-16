@@ -19,4 +19,3 @@ class LLMUsageStatistic(Base):
 
     def __repr__(self) -> str:
         return f"<LLMUsageStatistic(service={self.llm_service}, count={self.request_count})>"
-
