@@ -172,9 +172,10 @@ For a manual production setup, consider the following steps:
     *   **Database Migrations**: If you are using a database like PostgreSQL, you will need to manage database schema changes. It's mentioned that the project might consider Alembic. If Alembic is integrated (check `prompthelix/alembic`), you would typically run migrations like this:
         ```bash
         # Ensure ALEMBIC_CONFIG is set or alembic.ini is configured
+        cd /path/to/PromptHelix
         alembic upgrade head
         ```
-        If Alembic is not yet fully set up, you might need to initialize it or use manual SQL scripts for schema management. The current `init_db()` is for SQLite and development.
+        Run this command whenever deploying to a new environment so your production database schema matches the models. If Alembic is not yet fully set up, you might need to initialize it or use manual SQL scripts for schema management. The current `init_db()` is for SQLite and development.
 
 4.  **Environment Variables:**
     Ensure all required environment variables (API keys, `DATABASE_URL`, etc.) are securely set in your production environment.
