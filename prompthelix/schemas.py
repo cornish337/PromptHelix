@@ -105,6 +105,7 @@ class PromptUpdate(PromptBase): # Fields are optional for update
 
 class Prompt(PromptBase):
     id: int
+    owner_id: int
     created_at: datetime
     versions: List[PromptVersion] = []
 

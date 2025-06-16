@@ -41,8 +41,8 @@ def db_session(db_engine) -> SQLAlchemySession: # Use the specific type hint
         transaction.rollback()
         connection.close()
 
-@pytest.fixture(scope="session") # test_client can be session-scoped if get_db override provides function-scoped sessions
-def test_client_fixture(db_engine): # Renamed to avoid conflict if 'test_client' is used as a function name
+@pytest.fixture(scope="session")
+def test_client(db_engine):
     """
     Provides a TestClient for the FastAPI application, with the database
     dependency overridden to use the test database.
@@ -97,7 +97,11 @@ def experiment_prompt(db_engine, test_client: TestClient): # Use db_engine for o
             description="Prompt for testing experiment parent association."
         )
         # Create prompt using the fixture's own session
-        created_prompt_model = crud.create_prompt(db=fixture_db_session, prompt=prompt_create_schema)
+        created_prompt_model = crud.create_prompt(
+            db=fixture_db_session,
+            prompt=prompt_create_schema,
+            owner_id=1,
+        )
         fixture_db_session.commit()  # Commit this session
 
         yield created_prompt_model.id  # Yield the ID

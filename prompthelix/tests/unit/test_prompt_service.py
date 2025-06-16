@@ -12,7 +12,7 @@ def prompt_service_instance() -> PromptService:
 
 def test_create_prompt(db_session: SQLAlchemySession, prompt_service_instance: PromptService):
     prompt_data = PromptCreate(name="Test Prompt", description="A test prompt description.")
-    db_prompt = prompt_service_instance.create_prompt(db_session, prompt_create=prompt_data)
+    db_prompt = prompt_service_instance.create_prompt(db_session, prompt_create=prompt_data, owner_id=1)
 
     assert db_prompt is not None
     assert db_prompt.name == "Test Prompt"
@@ -22,7 +22,7 @@ def test_create_prompt(db_session: SQLAlchemySession, prompt_service_instance: P
     assert len(db_prompt.versions) == 0 # Initially no versions
 
 def test_get_prompt(db_session: SQLAlchemySession, prompt_service_instance: PromptService):
-    created_prompt = prompt_service_instance.create_prompt(db_session, PromptCreate(name="Get Me"))
+    created_prompt = prompt_service_instance.create_prompt(db_session, PromptCreate(name="Get Me"), owner_id=1)
     # Add a version to test relationship loading
     prompt_service_instance.create_prompt_version(db_session, created_prompt.id, PromptVersionCreate(content="v1 content"))
 
@@ -37,9 +37,9 @@ def test_get_prompt(db_session: SQLAlchemySession, prompt_service_instance: Prom
     assert non_existent_prompt is None
 
 def test_get_prompts(db_session: SQLAlchemySession, prompt_service_instance: PromptService):
-    prompt1 = prompt_service_instance.create_prompt(db_session, PromptCreate(name="Prompt A"))
+    prompt1 = prompt_service_instance.create_prompt(db_session, PromptCreate(name="Prompt A"), owner_id=1)
     prompt_service_instance.create_prompt_version(db_session, prompt1.id, PromptVersionCreate(content="A v1"))
-    prompt2 = prompt_service_instance.create_prompt(db_session, PromptCreate(name="Prompt B"))
+    prompt2 = prompt_service_instance.create_prompt(db_session, PromptCreate(name="Prompt B"), owner_id=1)
     prompt_service_instance.create_prompt_version(db_session, prompt2.id, PromptVersionCreate(content="B v1"))
     prompt_service_instance.create_prompt_version(db_session, prompt2.id, PromptVersionCreate(content="B v2"))
 
@@ -62,7 +62,7 @@ def test_get_prompts(db_session: SQLAlchemySession, prompt_service_instance: Pro
     assert prompts_skip_1[0].id != prompts_limit_1[0].id # Ensure they are different prompts
 
 def test_update_prompt(db_session: SQLAlchemySession, prompt_service_instance: PromptService):
-    db_prompt = prompt_service_instance.create_prompt(db_session, PromptCreate(name="Old Name", description="Old Desc"))
+    db_prompt = prompt_service_instance.create_prompt(db_session, PromptCreate(name="Old Name", description="Old Desc"), owner_id=1)
 
     update_data = PromptUpdate(name="New Name", description="New Desc")
     updated_prompt = prompt_service_instance.update_prompt(db_session, prompt_id=db_prompt.id, prompt_update=update_data)
@@ -79,7 +79,7 @@ def test_update_prompt(db_session: SQLAlchemySession, prompt_service_instance: P
     assert update_non_existent is None
 
 def test_delete_prompt(db_session: SQLAlchemySession, prompt_service_instance: PromptService):
-    prompt_to_delete = prompt_service_instance.create_prompt(db_session, PromptCreate(name="Delete Me"))
+    prompt_to_delete = prompt_service_instance.create_prompt(db_session, PromptCreate(name="Delete Me"), owner_id=1)
     # Add a version to check cascade delete
     prompt_service_instance.create_prompt_version(db_session, prompt_to_delete.id, PromptVersionCreate(content="v1 content"))
 
@@ -94,7 +94,7 @@ def test_delete_prompt(db_session: SQLAlchemySession, prompt_service_instance: P
     assert delete_non_existent is None
 
 def test_create_prompt_version(db_session: SQLAlchemySession, prompt_service_instance: PromptService):
-    prompt = prompt_service_instance.create_prompt(db_session, PromptCreate(name="Version Test Prompt"))
+    prompt = prompt_service_instance.create_prompt(db_session, PromptCreate(name="Version Test Prompt"), owner_id=1)
 
     version_data1 = PromptVersionCreate(content="Version 1 content", parameters_used={"temp": 0.7}, fitness_score=0.8)
     db_version1 = prompt_service_instance.create_prompt_version(db_session, prompt_id=prompt.id, version_create=version_data1)
@@ -116,7 +116,7 @@ def test_create_prompt_version(db_session: SQLAlchemySession, prompt_service_ins
 
 
 def test_get_prompt_version(db_session: SQLAlchemySession, prompt_service_instance: PromptService):
-    prompt = prompt_service_instance.create_prompt(db_session, PromptCreate(name="PV Get Test"))
+    prompt = prompt_service_instance.create_prompt(db_session, PromptCreate(name="PV Get Test"), owner_id=1)
     created_version = prompt_service_instance.create_prompt_version(db_session, prompt.id, PromptVersionCreate(content="Content to get"))
 
     retrieved_version = prompt_service_instance.get_prompt_version(db_session, prompt_version_id=created_version.id)
@@ -128,8 +128,8 @@ def test_get_prompt_version(db_session: SQLAlchemySession, prompt_service_instan
     assert non_existent_version is None
 
 def test_get_prompt_versions_for_prompt(db_session: SQLAlchemySession, prompt_service_instance: PromptService):
-    prompt1 = prompt_service_instance.create_prompt(db_session, PromptCreate(name="PV List Test 1"))
-    prompt2 = prompt_service_instance.create_prompt(db_session, PromptCreate(name="PV List Test 2"))
+    prompt1 = prompt_service_instance.create_prompt(db_session, PromptCreate(name="PV List Test 1"), owner_id=1)
+    prompt2 = prompt_service_instance.create_prompt(db_session, PromptCreate(name="PV List Test 2"), owner_id=1)
 
     v1_p1 = prompt_service_instance.create_prompt_version(db_session, prompt1.id, PromptVersionCreate(content="P1V1"))
     v2_p1 = prompt_service_instance.create_prompt_version(db_session, prompt1.id, PromptVersionCreate(content="P1V2"))
@@ -158,7 +158,7 @@ def test_get_prompt_versions_for_prompt(db_session: SQLAlchemySession, prompt_se
     assert len(versions_non_existent_prompt) == 0
 
 def test_update_prompt_version(db_session: SQLAlchemySession, prompt_service_instance: PromptService):
-    prompt = prompt_service_instance.create_prompt(db_session, PromptCreate(name="PV Update Test"))
+    prompt = prompt_service_instance.create_prompt(db_session, PromptCreate(name="PV Update Test"), owner_id=1)
     db_version = prompt_service_instance.create_prompt_version(db_session, prompt.id, PromptVersionCreate(content="Old Content", parameters_used={"temp": 0.5}, fitness_score=0.7))
 
     update_data = PromptVersionUpdate(content="New Content", parameters_used={"temp": 0.8, "top_p": 0.9}, fitness_score=0.9)
@@ -178,7 +178,7 @@ def test_update_prompt_version(db_session: SQLAlchemySession, prompt_service_ins
     assert update_non_existent is None
 
 def test_delete_prompt_version(db_session: SQLAlchemySession, prompt_service_instance: PromptService):
-    prompt = prompt_service_instance.create_prompt(db_session, PromptCreate(name="PV Delete Test"))
+    prompt = prompt_service_instance.create_prompt(db_session, PromptCreate(name="PV Delete Test"), owner_id=1)
     version_to_delete = prompt_service_instance.create_prompt_version(db_session, prompt.id, PromptVersionCreate(content="Delete Me Version"))
 
     # Create another version to ensure only one is deleted

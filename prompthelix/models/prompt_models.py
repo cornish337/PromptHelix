@@ -9,8 +9,14 @@ class Prompt(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True, nullable=False)
     description = Column(Text, nullable=True)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
-    versions = relationship("PromptVersion", back_populates="prompt", cascade="all, delete-orphan")
+    owner = relationship("User", back_populates="prompts")
+    versions = relationship(
+        "PromptVersion",
+        back_populates="prompt",
+        cascade="all, delete-orphan",
+    )
 
 class PromptVersion(Base):
     __tablename__ = "prompt_versions"

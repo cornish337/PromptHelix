@@ -91,3 +91,8 @@ def call_llm_api(prompt: str, provider: str, model: Optional[str] = None, db: Se
         return call_google_api(prompt, model=model_to_use, db=db)
     else:
         raise ValueError(f"Unsupported LLM provider: {provider}")
+
+
+# Backwards compatibility for older tests
+def call_llm_api_directly(prompt: str, provider: str, model: Optional[str] = None, db: Session = None) -> str:
+    return call_llm_api(prompt, provider, model, db)

@@ -55,6 +55,7 @@ class Settings:
     DEFAULT_POPULATION_SIZE: int = int(os.getenv("DEFAULT_POPULATION_SIZE", "50"))
     DEFAULT_MAX_GENERATIONS: int = int(os.getenv("DEFAULT_MAX_GENERATIONS", "100"))
     DEFAULT_MUTATION_RATE: float = float(os.getenv("DEFAULT_MUTATION_RATE", "0.01"))
+    DEFAULT_SESSION_EXPIRE_MINUTES: int = int(os.getenv("SESSION_EXPIRE_MINUTES", "60"))
     # Add other relevant system parameters here
 
     # Security settings

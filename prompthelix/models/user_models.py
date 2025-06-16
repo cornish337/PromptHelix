@@ -14,6 +14,7 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     sessions = relationship("Session", back_populates="user", cascade="all, delete-orphan")
+    prompts = relationship("Prompt", back_populates="owner", cascade="all, delete-orphan")
 
 class Session(Base):
     __tablename__ = "sessions"

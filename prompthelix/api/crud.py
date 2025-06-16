@@ -24,9 +24,9 @@ prompt_service_instance = PromptService()
 
 # --- Prompt CRUD Functions (delegating to PromptService) ---
 
-def create_prompt(db: Session, prompt: schemas.PromptCreate) -> schemas.Prompt:
+def create_prompt(db: Session, prompt: schemas.PromptCreate, owner_id: int) -> schemas.Prompt:
     # The service now returns a model instance, which FastAPI will convert using the response_model (schemas.Prompt)
-    return prompt_service_instance.create_prompt(db=db, prompt_create=prompt)
+    return prompt_service_instance.create_prompt(db=db, prompt_create=prompt, owner_id=owner_id)
 
 def get_prompt(db: Session, prompt_id: int) -> Optional[schemas.Prompt]:
     return prompt_service_instance.get_prompt(db=db, prompt_id=prompt_id)
