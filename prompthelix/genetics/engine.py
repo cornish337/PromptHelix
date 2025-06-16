@@ -775,43 +775,61 @@ class PopulationManager:
         
         # 1. Evaluate Population
         logger.info(f"Generation {current_generation_number}: Evaluating fitness of {len(self.population)} chromosomes.")
-        futures = []
-        # Ensure ProcessPoolExecutor is imported
-        from concurrent.futures import ProcessPoolExecutor, TimeoutError
 
         evaluated_chromosomes_count = 0
         failed_evaluations_count = 0
 
-        with ProcessPoolExecutor(max_workers=self.parallel_workers) as executor:
+        # Ensure ProcessPoolExecutor is imported only when needed
+        from concurrent.futures import ProcessPoolExecutor, TimeoutError
+
+        if self.parallel_workers == 1:
+            logger.info(f"Generation {current_generation_number}: Running fitness evaluation in serial mode.")
             for chromosome in self.population:
-                # Submit evaluation task to the executor
-                future = executor.submit(self.fitness_evaluator.evaluate, chromosome, task_description, success_criteria)
-                futures.append((future, chromosome)) # Store future and chromosome
-
-            # Retrieve results and update fitness scores
-            for future, chromosome in futures:
                 try:
-                    # Use self.evaluation_timeout; if None, future.result() has no timeout
-                    fitness_score = future.result(timeout=self.evaluation_timeout)
+                    fitness_score = self.fitness_evaluator.evaluate(chromosome, task_description, success_criteria)
                     chromosome.fitness_score = fitness_score
-                    evaluated_chromosomes_count +=1
-                except TimeoutError:
-                    logger.error(f"Fitness evaluation for chromosome {chromosome.id} timed out after {self.evaluation_timeout} seconds.")
-                    chromosome.fitness_score = 0.0 # Assign a default low fitness on error
-                    failed_evaluations_count += 1
+                    evaluated_chromosomes_count += 1
                 except Exception as e:
-                    logger.error(f"Error evaluating chromosome {chromosome.id} in parallel: {e}", exc_info=True)
-                    chromosome.fitness_score = 0.0 # Assign a default low fitness on error
+                    logger.error(f"Error evaluating chromosome {chromosome.id} in serial mode: {e}", exc_info=True)
+                    chromosome.fitness_score = 0.0  # Assign a default low fitness on error
                     failed_evaluations_count += 1
+        else:
+            logger.info(f"Generation {current_generation_number}: Running fitness evaluation in parallel mode (workers={self.parallel_workers}).")
+            futures = []
+            with ProcessPoolExecutor(max_workers=self.parallel_workers) as executor:
+                for chromosome in self.population:
+                    # Submit evaluation task to the executor
+                    future = executor.submit(self.fitness_evaluator.evaluate, chromosome, task_description, success_criteria)
+                    futures.append((future, chromosome)) # Store future and chromosome
 
+                # Retrieve results and update fitness scores
+                for future, chromosome in futures:
+                    try:
+                        # Use self.evaluation_timeout; if None, future.result() has no timeout
+                        fitness_score = future.result(timeout=self.evaluation_timeout)
+                        chromosome.fitness_score = fitness_score
+                        evaluated_chromosomes_count +=1
+                    except TimeoutError:
+                        logger.error(f"Fitness evaluation for chromosome {chromosome.id} timed out after {self.evaluation_timeout} seconds.")
+                        chromosome.fitness_score = 0.0 # Assign a default low fitness on error
+                        failed_evaluations_count += 1
+                    except Exception as e:
+                        logger.error(f"Error evaluating chromosome {chromosome.id} in parallel: {e}", exc_info=True)
+                        chromosome.fitness_score = 0.0 # Assign a default low fitness on error
+                        failed_evaluations_count += 1
+
+        # This logging seems to have a slight logic error in original: evaluated_chromosomes_count already includes failures if we count attempts.
+        # Let's adjust to show successful vs attempted.
+        successful_evaluations = evaluated_chromosomes_count - failed_evaluations_count
         logger.info(f"PopulationManager: Fitness evaluation complete for generation {self.generation_number + 1}.")
-        logger.info(f"Successfully evaluated: {evaluated_chromosomes_count - failed_evaluations_count}/{len(self.population)} chromosomes.")
+        logger.info(f"Successfully evaluated: {successful_evaluations}/{len(self.population)} chromosomes.")
         if failed_evaluations_count > 0:
             logger.warning(f"Failed evaluations (due to timeout or other errors): {failed_evaluations_count}/{len(self.population)} chromosomes.")
 
-
         # 2. Sort Population by fitness (descending)
-        sorted_population = sorted(self.population, key=lambda c: c.fitness_score, reverse=True)
+        # Ensure population is not empty before sorting, though it should generally not be.
+        # If population is empty and sorted, it will result in an empty list.
+        sorted_population = sorted(self.population, key=lambda c: c.fitness_score, reverse=True) if self.population else []
         
         if sorted_population:
             fittest_individual = sorted_population[0]
