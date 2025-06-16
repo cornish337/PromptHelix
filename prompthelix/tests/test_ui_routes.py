@@ -54,9 +54,18 @@ def test_run_experiment_ui_submit_success(MockedAsyncClient, client: TestClient)
             "prompt_description": "A prompt generated via UI test."
         }
 
+        # Simulate logged-in user by setting the auth cookie
+        test_token = "test_auth_token_for_ui_call"
+        cookies = {"prompthelix_access_token": test_token}
+
         # Make the request to the UI endpoint using the TestClient
         # The TestClient is synchronous but calls the async route handler correctly.
-        response = client.post("/ui/experiments/new", data=form_data, follow_redirects=False)
+        response = client.post(
+            "/ui/experiments/new",
+            data=form_data,
+            cookies=cookies, # Pass the cookies with the request
+            follow_redirects=False
+        )
 
         # --- Assertions ---
         assert response.status_code == 303, f"Expected redirect (303), got {response.status_code}. Response text: {response.text}"
@@ -73,6 +82,13 @@ def test_run_experiment_ui_submit_success(MockedAsyncClient, client: TestClient)
         # Optional: Check the content of the URL
         # TestClient's default base_url is http://testserver
         assert args[0].endswith("/api/experiments/run-ga"), f"URL '{args[0]}' does not end with '/api/experiments/run-ga'"
+
+        # ----> New/Modified Assertions for Auth Header <----
+        assert "headers" in kwargs, "Expected 'headers' in httpx call keyword arguments."
+        assert "Authorization" in kwargs["headers"], "Expected 'Authorization' header in httpx call."
+        assert kwargs["headers"]["Authorization"] == f"Bearer {test_token}", \
+            f"Authorization header incorrect. Expected 'Bearer {test_token}', Got '{kwargs['headers']['Authorization']}'"
+        # ----> End of New/Modified Assertions <----
 
         # Verify the JSON payload sent to the API
         expected_ga_params_payload = schemas.GAExperimentParams(
@@ -113,3 +129,62 @@ def test_run_experiment_ui_submit_success(MockedAsyncClient, client: TestClient)
         expected_message = f"New version (ID: {expected_version_id}) created successfully from experiment."
         assert query_params.get("message") == [expected_message], \
             f"Redirect query param 'message' mismatch. Got {query_params.get('message')}"
+
+
+@patch('prompthelix.ui_routes.httpx.AsyncClient')
+def test_run_experiment_ui_submit_no_token(MockedAsyncClient, client: TestClient):
+    with patch('prompthelix.ui_routes.crud.get_prompts') as mock_get_prompts:
+        mock_get_prompts.return_value = [] # For re-rendering the form page
+
+        mock_client_instance = MockedAsyncClient.return_value
+        mock_async_context_manager = mock_client_instance.__aenter__.return_value
+
+        # Simulate API returning 401 when no token is provided
+        mock_api_response = MagicMock(spec=httpx.Response)
+        mock_api_response.status_code = 401
+        mock_api_response.text = '{"detail":"Not authenticated"}' # Example 401 response text
+        mock_api_response.json.return_value = {"detail":"Not authenticated"} # If .json() is called
+
+        # Configure the client's post method to raise an HTTPStatusError for 401
+        # This simulates how httpx would behave with response.raise_for_status()
+        # Ensure the mock request object has a URL attribute
+        mock_request = MagicMock(spec=httpx.Request)
+        mock_request.url = "http://testserver/api/experiments/run-ga" # Example URL
+
+        mock_post_method = AsyncMock(side_effect=httpx.HTTPStatusError(
+            message="Client error '401 Unauthorized' for url http://testserver/api/experiments/run-ga",
+            request=mock_request,
+            response=mock_api_response
+        ))
+        mock_async_context_manager.post = mock_post_method
+
+        form_data = { # Same form data as the success test
+            "task_description": "Test experiment no token", "keywords": "ui,auth,test",
+            "execution_mode": ExecutionMode.SIMULATION.value, "num_generations": "5",
+            "population_size": "10", "elitism_count": "2", "parent_prompt_id": "",
+            "prompt_name": "Test GA No Token", "prompt_description": "A prompt generated via UI no token."
+        }
+
+        # Make the request *without* setting the auth cookie
+        response = client.post(
+            "/ui/experiments/new",
+            data=form_data,
+            follow_redirects=False # We expect to stay on the same page with an error
+        )
+
+        # Assert that we didn't redirect, but re-rendered the page (status 200) with an error
+        assert response.status_code == 200, f"Expected status 200 (re-render with error), got {response.status_code}"
+
+        # Check that the error message is present in the response content
+        # This depends on how error messages are rendered in experiment.html
+        content = response.text
+        assert "Authentication failed" in content
+        assert "Please ensure you are logged in and try again" in content
+
+        # Verify that the httpx call was made without Authorization header
+        mock_post_method.assert_called_once()
+        _, kwargs = mock_post_method.call_args
+        if "headers" in kwargs:
+            assert "Authorization" not in kwargs["headers"], \
+                "Authorization header should not be present when no token cookie is set."
+        # If no headers dict is passed at all, kwargs might not have 'headers' key, which is also fine.
