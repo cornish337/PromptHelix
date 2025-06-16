@@ -96,7 +96,7 @@ document.addEventListener('DOMContentLoaded', function () {
             // For now, constructing relative path, assuming API is served from same domain/port.
             // The API route for testing prompts is assumed to be '/api/llm/test_prompt'
             // If the API route has a name like 'test_llm_prompt_api', use:
-            // const apiUrl = "{{ request.url_for('test_llm_prompt_api') }}";
+            // const apiUrl = ""; // Formerly: "{{ request.url_for('test_llm_prompt_api') }}"
             // For this subtask, using the literal path as specified.
             const apiUrl = '/api/llm/test_prompt';
 
