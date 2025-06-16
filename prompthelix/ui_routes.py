@@ -140,7 +140,19 @@ async def run_experiment_ui_submit(
 
     async with httpx.AsyncClient(app=request.app, base_url=str(request.base_url)) as client:
         try:
-            response = await client.post(str(api_experiment_url), json=ga_params.model_dump(exclude_none=True))
+            access_token = request.cookies.get("prompthelix_access_token")
+            headers = {}
+            if access_token:
+                headers["Authorization"] = f"Bearer {access_token}"
+            else:
+                # Optional: log that token is missing for server-side diagnosis
+                print("DEBUG: prompthelix_access_token cookie not found in run_experiment_ui_submit.")
+
+            response = await client.post(
+                str(api_experiment_url),
+                json=ga_params.model_dump(exclude_none=True),
+                headers=headers # Pass the headers
+            )
             response.raise_for_status()  # Raises an exception for 4XX/5XX responses
 
             returned_prompt_version_data = response.json()
@@ -154,7 +166,10 @@ async def run_experiment_ui_submit(
             return RedirectResponse(url=redirect_url, status_code=303)
 
         except httpx.HTTPStatusError as e:
-            error_message = f"API Error: {e.response.status_code} - {e.response.text}"
+            error_detail = e.response.text
+            error_message = f"API Error: {e.response.status_code} - {error_detail}"
+            if e.response.status_code == 401:
+                error_message = f"Authentication failed. Please ensure you are logged in and try again. Detail: {error_detail}"
         except Exception as e: # Catch other errors like connection errors
             error_message = f"An unexpected error occurred: {str(e)}"
 
