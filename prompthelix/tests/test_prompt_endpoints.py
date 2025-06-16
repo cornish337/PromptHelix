@@ -7,17 +7,19 @@ class TestPromptEndpoints(unittest.TestCase):
         self.client = TestClient(app)
 
     def test_create_and_list_prompts(self):
-        create_resp = self.client.post("/api/prompts", json={"content": "hello"})
-        self.assertEqual(create_resp.status_code, 200)
+        payload = {"name": "Test Prompt from unittest", "description": "hello"}
+        create_resp = self.client.post("/api/prompts", json=payload)
+        self.assertEqual(create_resp.status_code, 200, create_resp.text) # Added response text for debugging
         data = create_resp.json()
         self.assertIn("id", data)
-        self.assertEqual(data["content"], "hello")
+        self.assertEqual(data["name"], payload["name"])
+        self.assertEqual(data["description"], payload["description"])
 
         list_resp = self.client.get("/api/prompts")
-        self.assertEqual(list_resp.status_code, 200)
+        self.assertEqual(list_resp.status_code, 200, list_resp.text) # Added response text
         listing = list_resp.json()
-        self.assertIn("prompts", listing)
-        self.assertTrue(any(p["id"] == data["id"] for p in listing["prompts"]))
+        # The endpoint returns a list of prompts directly
+        self.assertTrue(any(p["id"] == data["id"] and p["name"] == payload["name"] for p in listing))
 
 if __name__ == '__main__':
     unittest.main()
