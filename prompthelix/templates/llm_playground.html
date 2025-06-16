@@ -99,10 +99,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
             // const apiUrl = ""; // Formerly: (a url_for call for 'test_llm_prompt_api' was here)
 
-            // const apiUrl = ""; // Formerly: "{{ request.url_for('test_llm_prompt_api') }}"
+            const apiUrl = "{{ request.url_for('test_llm_prompt') }}";
 
             // For this subtask, using the literal path as specified.
-            const apiUrl = '/api/llm/test_prompt';
 
 
             const response = await fetch(apiUrl, {
