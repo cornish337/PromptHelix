@@ -5,14 +5,15 @@ import copy
 import json
 import os
 import random
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional, Dict # Ensure Optional is here
+import asyncio # Added
 import openai
 from openai import OpenAIError
 from prompthelix.config import settings as global_sdk_settings # Renamed to avoid conflict
 from prompthelix import config as global_ph_config # For LLM_UTILS_SETTINGS
 import logging
 from prompthelix.enums import ExecutionMode # Added import
-from typing import Optional, Dict # Added for type hinting
+# from typing import Optional, Dict # Already imported above and updated
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,7 @@ if TYPE_CHECKING:  # pragma: no cover - only for type hints
     from prompthelix.agents.architect import PromptArchitectAgent
     from prompthelix.agents.results_evaluator import ResultsEvaluatorAgent
     from prompthelix.agents.style_optimizer import StyleOptimizerAgent
+    from prompthelix.message_bus import MessageBus # Added for type hinting
 
 
 # PromptChromosome class remains unchanged
@@ -634,7 +636,8 @@ class PopulationManager:
                  population_path: str | None = None,
                  initial_prompt_str: str | None = None, # New parameter
                  parallel_workers: Optional[int] = None,
-                 evaluation_timeout: Optional[int] = 60):
+                 evaluation_timeout: Optional[int] = 60,
+                 message_bus: Optional['MessageBus'] = None): # Added message_bus
         """
         Initializes the PopulationManager.
 
@@ -676,12 +679,72 @@ class PopulationManager:
         self.initial_prompt_str = initial_prompt_str # Store the new parameter
         self.parallel_workers = parallel_workers
         self.evaluation_timeout = evaluation_timeout
+        self.message_bus = message_bus # Added
 
         self.population: list[PromptChromosome] = []
         self.generation_number: int = 0
 
+        self.is_paused: bool = False # Added
+        self.should_stop: bool = False # Added
+        self.status: str = "IDLE" # Added
+
         if self.population_path:
             self.load_population(self.population_path)
+
+        self.broadcast_ga_update(event_type="ga_manager_initialized") # Initial broadcast
+
+    def pause_evolution(self): # Added
+        self.is_paused = True
+        self.status = "PAUSED"
+        logger.info("GA evolution paused.")
+        self.broadcast_ga_update(event_type="ga_paused")
+
+    def resume_evolution(self): # Added
+        self.is_paused = False
+        self.status = "RUNNING" # Or should it wait for evolve_population to set it?
+        logger.info("GA evolution resumed.")
+        self.broadcast_ga_update(event_type="ga_resumed")
+
+    def stop_evolution(self): # Added
+        self.should_stop = True
+        self.is_paused = False # Ensure it's not stuck in pause
+        self.status = "STOPPING"
+        logger.info("GA evolution stopping...")
+        self.broadcast_ga_update(event_type="ga_stopping")
+
+    def broadcast_ga_update(self, event_type: str = "ga_status_update", additional_data: Optional[dict] = None): # Added
+        if not self.message_bus or not self.message_bus.connection_manager:
+            # logger.debug("Message bus or connection manager not available for GA update broadcast.")
+            return
+
+        fittest = self.get_fittest_individual()
+        payload = {
+            "status": self.status,
+            "generation": self.generation_number,
+            "population_size": len(self.population) if self.population else 0,
+            "best_fitness": fittest.fitness_score if fittest else None,
+            "is_paused": self.is_paused,
+            "should_stop": self.should_stop,
+        }
+        if additional_data:
+            payload.update(additional_data)
+
+        try:
+            # Ensuring the event loop is running for create_task
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                 asyncio.create_task(self.message_bus.connection_manager.broadcast_json({"type": event_type, "data": payload}))
+            else:
+                 logger.warning("Event loop not running, cannot broadcast GA update via asyncio.create_task. Consider running loop.run_until_complete or ensuring GA runs within an async context if WebSocket updates are critical from non-async paths.")
+            # For environments where GA might not run in an async context that keeps the loop alive:
+            # asyncio.run(self.message_bus.connection_manager.broadcast_json({"type": event_type, "data": payload}))
+            # However, asyncio.run() cannot be called when the event loop is already running.
+            # create_task is generally safer if an event loop is managed by FastAPI/Uvicorn.
+        except RuntimeError as e: # Catch "no event loop" or "event loop is closed"
+            logger.error(f"Failed to broadcast GA update due to asyncio event loop issue: {e}. Update not sent for event: {event_type}")
+        except Exception as e:
+            logger.error(f"Unexpected error during GA update broadcast: {e}", exc_info=True)
+
 
     def initialize_population(self, initial_task_description: str, 
                               initial_keywords: list | None = None, 
@@ -696,6 +759,9 @@ class PopulationManager:
             initial_keywords (list | None, optional): Keywords for initial prompts. Defaults to None.
             initial_constraints (dict | None, optional): Constraints for initial prompts. Defaults to None.
         """
+        self.status = "INITIALIZING" # Added
+        self.broadcast_ga_update(event_type="ga_initialization_started") # Added
+
         logger.info(f"PopulationManager: Initializing population of size {self.population_size} for task: '{initial_task_description}'")
         self.population = []
         
@@ -755,6 +821,9 @@ class PopulationManager:
         self.generation_number = 0
         logger.info(f"PopulationManager: Population initialized. Generation: {self.generation_number}, Size: {len(self.population)}")
 
+        self.status = "IDLE"  # Or "READY_TO_EVOLVE" # Added
+        self.broadcast_ga_update(event_type="ga_initialization_complete") # Added
+
     def evolve_population(self, task_description: str, success_criteria: dict | None = None,
                           target_style: str | None = None):
         """
@@ -766,8 +835,25 @@ class PopulationManager:
             target_style (str | None, optional): Desired style used during mutation when
                 StyleOptimizerAgent is available. Defaults to None.
         """
+        if self.should_stop: # Moved this check up, and modified its behavior
+            logger.info(f"PopulationManager.evolve_population: Stop requested before starting generation {self.generation_number + 1}. Aborting evolution for this generation.")
+            # Do not change self.status here, let the orchestrator loop handle final status.
+            # self.status = "STOPPED" # This was here, but task says orchestrator handles final status
+            # self.broadcast_ga_update(event_type="ga_stopped_before_generation") # This was here
+            return # Exit early
+
+        if self.is_paused: # This check is fine
+            logger.info("Evolution is paused, skipping generation.")
+            # broadcast_ga_update is called by pause_evolution (which sets status to PAUSED)
+            return
+
+        self.status = "RUNNING" # Added
+        self.broadcast_ga_update(event_type="ga_generation_started", additional_data={"generation": self.generation_number + 1}) # Added
+
         if not self.population:
             logger.warning("PopulationManager: Cannot evolve an empty population. Please initialize first.")
+            self.status = "ERROR" # Or IDLE
+            self.broadcast_ga_update(event_type="ga_error", additional_data={"error": "Empty population"})
             return
 
         current_generation_number = self.generation_number + 1
@@ -820,11 +906,14 @@ class PopulationManager:
 
         # This logging seems to have a slight logic error in original: evaluated_chromosomes_count already includes failures if we count attempts.
         # Let's adjust to show successful vs attempted.
-        successful_evaluations = evaluated_chromosomes_count - failed_evaluations_count
-        logger.info(f"PopulationManager: Fitness evaluation complete for generation {self.generation_number + 1}.")
+        successful_evaluations = evaluated_chromosomes_count # This was already successes
+        # failed_evaluations_count is correct
+        logger.info(f"PopulationManager: Fitness evaluation complete for generation {current_generation_number}.") # Use current_generation_number
         logger.info(f"Successfully evaluated: {successful_evaluations}/{len(self.population)} chromosomes.")
         if failed_evaluations_count > 0:
             logger.warning(f"Failed evaluations (due to timeout or other errors): {failed_evaluations_count}/{len(self.population)} chromosomes.")
+
+        self.broadcast_ga_update(event_type="ga_evaluation_complete", additional_data={"generation": current_generation_number, "evaluated_count": successful_evaluations, "failed_count": failed_evaluations_count}) # Added
 
         # 2. Sort Population by fitness (descending)
         # Ensure population is not empty before sorting, though it should generally not be.
@@ -881,7 +970,19 @@ class PopulationManager:
         self.population = new_population[: self.population_size]
 
         self.generation_number = current_generation_number # Update generation number
-        logger.info(f"PopulationManager: Evolution complete for generation {self.generation_number}. New population size: {len(self.population)}")
+
+        # Update status based on pause/stop flags before final broadcast for the generation
+        if self.is_paused:
+            self.status = "PAUSED"
+        elif self.should_stop:
+            self.status = "STOPPED" # Or "COMPLETED_STOP_REQUESTED"
+        else:
+            # If not paused or stopped, it's still running (or completed if this was the last gen planned by orchestrator)
+            # Orchestrator should set final "COMPLETED" status.
+            self.status = "RUNNING"
+
+        logger.info(f"PopulationManager: Evolution complete for generation {self.generation_number}. New population size: {len(self.population)}. Status: {self.status}")
+        self.broadcast_ga_update(event_type="ga_generation_complete", additional_data={"generation": self.generation_number}) # Added
 
 
     def get_fittest_individual(self) -> PromptChromosome | None:

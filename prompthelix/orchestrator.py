@@ -1,5 +1,8 @@
 from prompthelix.message_bus import MessageBus
 import logging
+import time # Added
+from prompthelix.database import SessionLocal # Added
+from prompthelix.main import websocket_manager # Added
 from prompthelix.agents.architect import PromptArchitectAgent
 from prompthelix.agents.results_evaluator import ResultsEvaluatorAgent
 from prompthelix.agents.style_optimizer import StyleOptimizerAgent
@@ -69,7 +72,7 @@ def main_ga_loop(
 
     # 0. Instantiate Message Bus
     logger.debug("Initializing Message Bus...")
-    message_bus = MessageBus()
+    message_bus = MessageBus(db_session_factory=SessionLocal, connection_manager=websocket_manager)
     logger.debug("Message Bus initialized.")
 
     # Handle LLM settings override
@@ -139,7 +142,8 @@ def main_ga_loop(
         population_size=population_size,
         elitism_count=elitism_count,
         parallel_workers=parallel_workers, # Pass the new parameter
-        population_path=population_path
+        population_path=population_path,
+        message_bus=message_bus # Added
         # TODO: Pass agent_settings_override or specific agent configs if PopulationManager
         # is responsible for creating/configuring more agents during its operations.
         # For now, agents are configured above.
@@ -197,24 +201,53 @@ def main_ga_loop(
     print("\n--- Starting Evolution Loop ---")
     logger.info("Starting evolution loop for %d generations", num_generations)
     fittest_individual = None
+
+    if pop_manager.population: # Ensure there's a population to manage
+        pop_manager.status = "RUNNING" # Initial status before first generation
+        pop_manager.broadcast_ga_update(event_type="ga_run_started")
+
     for i in range(num_generations):
+        # --- Start of new control logic ---
+        while pop_manager.is_paused and not pop_manager.should_stop:
+            logger.info("GA run is paused. Waiting for resume or stop command...")
+            pop_manager.broadcast_ga_update(event_type="ga_status_heartbeat") # Optional: send periodic updates while paused
+            time.sleep(1) # Check every second
+
+        if pop_manager.should_stop:
+            logger.info("GA run stopping as per request.")
+            pop_manager.status = "STOPPED" # Status already set by stop_evolution, but ensure it's reflected
+            pop_manager.broadcast_ga_update(event_type="ga_run_stopped") # Broadcast again to confirm orchestrator loop stop
+            break # Exit the generation loop
+        # --- End of new control logic ---
+
         current_generation_num = pop_manager.generation_number + 1
         print(f"\n--- Generation {current_generation_num} of {num_generations} ---")
         logger.info("Generation %d start", current_generation_num)
+
+        # evolve_population now checks for should_stop internally as well.
         pop_manager.evolve_population(
             task_description=evaluation_task_desc,  # Use consistent task for evaluation
             success_criteria=evaluation_success_criteria,
-            target_style="formal"
+            target_style="formal" # Example, ensure this is handled or removed if not dynamic
         )
+
+        # If evolve_population was skipped due to should_stop, this check handles it
+        if pop_manager.should_stop and pop_manager.status == "STOPPED": # Status might be set by evolve_population's end or by stop_evolution
+            logger.info(f"GA run stopped during generation {current_generation_num} processing.")
+            # An event for ga_run_stopped would have been sent by stop_evolution or the check above.
+            # If evolve_population itself sets status to STOPPED and broadcasts, this might be redundant.
+            # For clarity, let's ensure a final "run_stopped" is sent if loop breaks here.
+            # pop_manager.broadcast_ga_update(event_type="ga_run_stopped_in_gen") # Or rely on evolve_population's broadcast
+            break
+
 
         fittest_in_gen = pop_manager.get_fittest_individual()
         if fittest_in_gen:
-            print(f"Fittest in Generation {pop_manager.generation_number}: Fitness={fittest_in_gen.fitness_score:.4f}") # pop_manager.generation_number is updated by evolve_population
+            print(f"Fittest in Generation {pop_manager.generation_number}: Fitness={fittest_in_gen.fitness_score:.4f}")
             print(f"Prompt (ID: {fittest_in_gen.id}): {fittest_in_gen.to_prompt_string()[:200]}...")
-            fittest_individual = fittest_in_gen # Keep track of the fittest from the last successful generation
+            fittest_individual = fittest_in_gen
         else:
             print("No fittest individual found in this generation.")
-            # If population collapses or no valid individuals, might stop or handle differently
         logger.info(
             "Generation %d end - population size: %d, best fitness: %s",
             pop_manager.generation_number,
@@ -222,25 +255,45 @@ def main_ga_loop(
             f"{fittest_in_gen.fitness_score:.4f}" if fittest_in_gen else "N/A",
         )
 
-    # 6. Final Best
-    # The fittest_individual variable now holds the best from the last generation,
-    # or the best from a previous one if the population degraded.
-    # PopulationManager.get_fittest_individual() gets the current best.
-    final_fittest_overall = pop_manager.get_fittest_individual()
+        # If loop completes normally (all generations run for this iteration)
+        if i == num_generations - 1 and not pop_manager.should_stop:
+             pop_manager.status = "COMPLETED" # Mark as completed if it finished all generations
+             pop_manager.broadcast_ga_update(event_type="ga_run_completed")
+
+
+    # After the loop (if it broke due to stop or completed naturally)
+    final_fittest_overall = pop_manager.get_fittest_individual() # Get the best regardless of how loop ended
+
+    # Consolidate final status update logic
+    if pop_manager.should_stop and pop_manager.status != "STOPPED":
+        # This case might occur if stop_evolution was called but loop exited before status was updated by main loop logic
+        pop_manager.status = "STOPPED"
+        logger.info("GA run has been externally stopped. Final status set to STOPPED.")
+    elif not pop_manager.should_stop and pop_manager.status != "COMPLETED":
+        # If not stopped and not already marked COMPLETED (e.g. if num_generations was 0 or loop exited unexpectedly)
+        # This could also be an ERROR state if population became empty, etc.
+        # For now, if it wasn't explicitly stopped, and didn't complete all gens, assume it finished its course.
+        pop_manager.status = "COMPLETED" # Or "UNKNOWN_EXIT_STATUS"
+        logger.info(f"GA run finished. Final status set to {pop_manager.status}.")
+
+    pop_manager.broadcast_ga_update(event_type="ga_run_final_status") # Send final status
+
 
     if final_fittest_overall:
         print("\n--- Overall Best Prompt Found ---")
         print(str(final_fittest_overall))
         logger.info(
-            "GA finished - final population size: %d, best fitness: %.4f",
+            "GA finished - final population size: %d, best fitness: %.4f, status: %s",
             len(pop_manager.population),
             final_fittest_overall.fitness_score,
+            pop_manager.status
         )
     else:
         print("\nNo solution found after all generations.")
         logger.info(
-            "GA finished - final population size: %d, no valid solution",
+            "GA finished - final population size: %d, no valid solution, status: %s",
             len(pop_manager.population),
+            pop_manager.status
         )
 
     if population_path:
@@ -269,7 +322,7 @@ if __name__ == "__main__":
             print(f"DemoAgent '{self.agent_id}' is sending a ping to '{target_agent_id}'.")
             self.send_message(target_agent_id, {"ping_data": data}, "direct_request") # Use direct_request for demo
 
-    demo_bus = MessageBus()
+    demo_bus = MessageBus(db_session_factory=SessionLocal, connection_manager=websocket_manager)
     agent_X = DemoAgent(agent_id="AgentX", message_bus=demo_bus)
     agent_Y = DemoAgent(agent_id="AgentY", message_bus=demo_bus)
     demo_bus.register(agent_X.agent_id, agent_X)
@@ -358,7 +411,7 @@ if __name__ == "__main__":
     # --- MetaLearnerAgent Persistence Demonstration ---
     print("\n--- MetaLearnerAgent Persistence Demonstration ---")
     # MetaLearnerAgent needs a message bus to be instantiated, even if not used in this simple demo part
-    meta_learner_bus = MessageBus() # Using demo_bus for consistency if preferred, or a new one.
+    meta_learner_bus = MessageBus(db_session_factory=SessionLocal, connection_manager=websocket_manager) # Using demo_bus for consistency if preferred, or a new one.
     meta_learner_agent = MetaLearnerAgent(message_bus=meta_learner_bus, knowledge_file_path="meta_learner_knowledge_orchestrator_demo.json")
 
     print(f"Initial knowledge base keys: {list(meta_learner_agent.knowledge_base.keys())}")

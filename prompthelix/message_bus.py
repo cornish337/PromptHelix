@@ -2,8 +2,13 @@ import logging
 import asyncio
 import inspect
 import json
+from datetime import datetime # Added
+from typing import TYPE_CHECKING, Optional, Dict, Set, Any # Added TYPE_CHECKING, Optional, Dict, Set, Any
 from sqlalchemy.orm import Session as DbSession
 from prompthelix.models import ConversationLog
+
+if TYPE_CHECKING: # Added
+    from prompthelix.websocket_manager import ConnectionManager # For type hinting
 
 # Configure basic logging for the message bus
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -13,20 +18,66 @@ class MessageBus:
     """
     A simple message bus for inter-agent communication.
     """
-    def __init__(self, db_session_factory=None):
-        self._registry = {}
-        self._subscriptions = {}
-        self._queue = asyncio.Queue()
-        self._task = None
-        self._running = False
+    def __init__(self, db_session_factory=None, connection_manager: Optional['ConnectionManager'] = None): # Modified
+        self._registry: Dict[str, Any] = {} # Added type hint
+        self._subscriptions: Dict[str, Set[str]] = {} # Added type hint
+        self._queue: asyncio.Queue = asyncio.Queue() # Added type hint
+        self._task: Optional[asyncio.Task] = None # Added type hint
+        self._running: bool = False # Added type hint
         self.db_session_factory = db_session_factory
+        self.connection_manager = connection_manager # Added
         logger.info("MessageBus initialized.")
 
-    def _log_message_to_db(self, session_id: str, sender_id: str, recipient_id: str, message_type: str, content_payload: dict):
-        if not self.db_session_factory:
-            return
+    async def _broadcast_log_async(self, log_data: dict): # Added method
+        """Helper to broadcast log data asynchronously via WebSocket."""
+        if self.connection_manager:
+            try:
+                await self.connection_manager.broadcast_json({"type": "new_conversation_log", "data": log_data})
+                logger.debug("Log data broadcasted via WebSocket.")
+            except Exception as e:
+                logger.error(f"Error broadcasting log data via WebSocket: {e}", exc_info=True)
 
-        db: DbSession = None
+    def _log_message_to_db(self, session_id: str, sender_id: str, recipient_id: Optional[str], message_type: str, content_payload: dict): # recipient_id can be Optional
+        db_logged_successfully = False
+        if self.db_session_factory:
+            db: Optional[DbSession] = None # type hint
+            try:
+                db = self.db_session_factory()
+                log_entry = ConversationLog(
+                    session_id=session_id,
+                    sender_id=sender_id,
+                    recipient_id=recipient_id,
+                    message_type=message_type,
+                    content=json.dumps(content_payload)
+                )
+                db.add(log_entry)
+                db.commit()
+                db_logged_successfully = True
+                logger.debug(f"Message from {sender_id} to {recipient_id} logged to DB. Session: {session_id}, Type: {message_type}")
+            except Exception as e:
+                logger.error(f"Failed to log message to DB: {e}", exc_info=True)
+                if db:
+                    db.rollback()
+            finally:
+                if db:
+                    db.close()
+
+        # WebSocket broadcast logic
+        if self.connection_manager:
+            log_data = {
+                "session_id": session_id,
+                "sender_id": sender_id,
+                "recipient_id": recipient_id,
+                "message_type": message_type,
+                "content": content_payload, # content_payload is already a dict
+                "timestamp": datetime.utcnow().isoformat(),
+                "db_logged": db_logged_successfully
+            }
+            asyncio.create_task(self._broadcast_log_async(log_data))
+
+    def register(self, agent_id: str, agent_instance):
+        """
+        Registers an agent instance with the message bus.
         try:
             db = self.db_session_factory()
             log_entry = ConversationLog(
@@ -149,6 +200,9 @@ class MessageBus:
         recipient_id = message.get('recipient_id')
         sender_id = message.get('sender_id')
         message_type = message.get('message_type')
+        # Ensure recipient_id is a string, even if it's None from the message, for logging consistency.
+        # However, _log_message_to_db now accepts Optional[str] for recipient_id.
+        # So direct pass-through is fine.
 
         logger.info(f"Attempting to dispatch message of type '{message_type}' from '{sender_id}' to '{recipient_id}'.")
 
@@ -182,11 +236,13 @@ class MessageBus:
             elif session_id_val is None:
                 session_id_str = 'unknown_session_dispatch_none' # Specific placeholder
             else: # For complex types like dicts or lists
-                session_id_str = 'unknown_session_dispatch_complex_type'
+                session_id_str = 'unknown_session_dispatch_complex_type' # Ensure this aligns with expectations
 
-
+            # recipient_id for logging can be None if it's a broadcast or system message not targeting a specific agent directly in this context
+            # However, dispatch_message implies a specific recipient. If recipient_id is None here, it's unusual.
+            # For now, we pass recipient_id as is.
             self._log_message_to_db(
-                session_id=session_id_str,
+                session_id=session_id_str, # This needs to be robust
                 sender_id=sender_id,
                 recipient_id=recipient_id,
                 message_type=message_type,
@@ -207,19 +263,19 @@ class MessageBus:
 
         # Log the broadcast attempt
         session_id_val = payload.get('session_id')
-        if isinstance(session_id_val, (str, int, float)):
+        if isinstance(session_id_val, (str, int, float)): # Ensure session_id is a simple type or correctly stringified
             session_id_str = str(session_id_val)
         elif session_id_val is None:
             session_id_str = 'unknown_broadcast_session_none' # Specific placeholder
         else: # For complex types
-            session_id_str = 'unknown_broadcast_session_complex_type'
+            session_id_str = 'unknown_broadcast_session_complex_type' # Ensure this aligns
 
         self._log_message_to_db(
-            session_id=session_id_str,
+            session_id=session_id_str, # This needs to be robust
             sender_id=sender_id,
-            recipient_id=None, # Or a special value like "BROADCAST"
+            recipient_id="BROADCAST", # Explicitly mark broadcast recipient for logs
             message_type=message_type,
-            content_payload=payload # Log the original payload
+            content_payload=payload
         )
 
 if __name__ == '__main__':

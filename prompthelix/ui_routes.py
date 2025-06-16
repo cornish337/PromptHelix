@@ -343,3 +343,9 @@ async def ui_list_conversations(request: Request):
 async def ui_login_form(request: Request):
     """Serves the UI page for user login."""
     return templates.TemplateResponse("login.html", {"request": request})
+
+
+@router.get("/ui/dashboard", response_class=HTMLResponse, name="ui_dashboard")
+async def get_dashboard_ui(request: Request):
+    """Serves the UI page for the real-time monitoring dashboard."""
+    return templates.TemplateResponse("dashboard.html", {"request": request})
