@@ -4,11 +4,11 @@ from sqlalchemy.orm import Session as DbSession # Renamed to avoid conflict
 
 from prompthelix.models.performance_models import PerformanceMetric
 # Schemas will be defined elsewhere, using them in type hints for now
-from prompthelix.schemas import PerformanceMetricCreateSchema, PerformanceMetricUpdateSchema # Assuming schemas.py will exist
+from prompthelix.schemas import PerformanceMetricCreate, PerformanceMetricUpdate
 
 # Performance Metric Service Functions
 
-def record_performance_metric(db: DbSession, metric_create: PerformanceMetricCreateSchema) -> PerformanceMetric:
+def record_performance_metric(db: DbSession, metric_create: PerformanceMetricCreate) -> PerformanceMetric:
     """
     Creates a new performance metric and saves it to the database.
     """
@@ -45,7 +45,7 @@ def delete_performance_metric(db: DbSession, metric_id: int) -> bool:
         return True
     return False
 
-def update_performance_metric(db: DbSession, metric_id: int, metric_update: PerformanceMetricUpdateSchema) -> Optional[PerformanceMetric]:
+def update_performance_metric(db: DbSession, metric_id: int, metric_update: PerformanceMetricUpdate) -> Optional[PerformanceMetric]:
     """
     Updates an existing performance metric.
     """

@@ -7,14 +7,15 @@ from passlib.context import CryptContext
 
 from prompthelix.models.user_models import User, Session # Model import
 # Schemas will be defined elsewhere, using them in type hints for now
-from prompthelix.schemas import UserCreateSchema, UserUpdateSchema # Assuming schemas.py will exist
+# Import Pydantic schemas for creating and updating users
+from prompthelix.schemas import UserCreate, UserUpdate
 
 # Initialize password context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # User Service Functions
 
-def create_user(db: DbSession, user_create: UserCreateSchema) -> User:
+def create_user(db: DbSession, user_create: UserCreate) -> User:
     """
     Creates a new user.
     """
@@ -53,7 +54,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
     return pwd_context.verify(plain_password, hashed_password)
 
-def update_user(db: DbSession, user_id: int, user_update: UserUpdateSchema) -> Optional[User]:
+def update_user(db: DbSession, user_id: int, user_update: UserUpdate) -> Optional[User]:
     """
     Updates user information.
     """

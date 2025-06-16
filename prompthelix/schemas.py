@@ -42,6 +42,11 @@ class Session(SessionBase):
     class Config:
         from_attributes = True
 
+# Token schema used for authentication responses
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
 # --- PerformanceMetric Schemas ---
 class PerformanceMetricBase(BaseModel):
     metric_name: str

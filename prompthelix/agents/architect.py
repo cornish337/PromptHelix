@@ -18,7 +18,7 @@ class PromptArchitectAgent(BaseAgent):
     Designs initial prompt structures based on user requirements, 
     system goals, or existing successful prompt patterns.
     """
-    def __init__(self, message_bus=None):
+    def __init__(self, message_bus=None, knowledge_file_path=None):
         """
         Initializes the PromptArchitectAgent.
         Loads prompt templates and configuration.
@@ -41,9 +41,7 @@ class PromptArchitectAgent(BaseAgent):
         ]
 
         # Load initial templates
-        self.knowledge_file_path = knowledge_file_path
-        if self.knowledge_file_path is None:
-            self.knowledge_file_path = "architect_knowledge.json"
+        self.knowledge_file_path = knowledge_file_path or "architect_knowledge.json"
 
         self.templates = {} # Initialize before loading
         self.load_knowledge()
