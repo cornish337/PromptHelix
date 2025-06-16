@@ -90,23 +90,4 @@ def call_llm_api(prompt: str, provider: str, model: Optional[str] = None, db: Se
         model_to_use = model if model else "gemini-pro"
         return call_google_api(prompt, model=model_to_use, db=db)
     else:
-        logger.error(f"Unsupported LLM provider: {provider}")
         raise ValueError(f"Unsupported LLM provider: {provider}")
-
-def list_available_llms(db: Session) -> list[str]:
-    available_services = []
-    # These are the services also considered in `ui_routes.SUPPORTED_LLM_SERVICES`
-    # and `config.py` for API key retrieval.
-    # The name string (e.g., "OPENAI") should match what `crud.get_api_key` expects.
-    service_checks = [
-        ("OPENAI", get_openai_api_key(db)),
-        ("ANTHROPIC", get_anthropic_api_key(db)),
-        ("GOOGLE", get_google_api_key(db)),
-    ]
-
-    for service_name, api_key_value in service_checks:
-        if api_key_value: # If a key is found (either from DB or environment via config functions)
-            available_services.append(service_name)
-
-    logger.info(f"Available LLMs based on configured keys: {available_services}")
-    return available_services

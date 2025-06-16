@@ -9,10 +9,12 @@ import secrets
 from prompthelix.database import get_db
 from prompthelix.api import crud
 from prompthelix import schemas
+
 from prompthelix.models.user_models import User as UserModel # For get_current_user return type
 from prompthelix.utils import llm_utils
 from prompthelix.orchestrator import main_ga_loop
 from prompthelix.genetics.engine import PromptChromosome
+
 
 # Import services (individual functions, not classes, based on previous service structure)
 from prompthelix.services import user_service, performance_service
