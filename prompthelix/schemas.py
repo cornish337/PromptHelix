@@ -176,3 +176,24 @@ class LLMUsageStatisticCreate(BaseModel):
 
 class LLMUsageStatisticUpdate(BaseModel):
     request_count: int
+
+# --- ConversationLog Schemas ---
+class ConversationLogBase(BaseModel):
+    timestamp: datetime
+    session_id: str
+    sender_id: str
+    recipient_id: Optional[str] = None
+    message_type: Optional[str] = None
+    content: str # Should be str, as it's stored as JSON string in DB
+
+class ConversationLogEntry(ConversationLogBase):
+    id: int
+
+    class Config:
+        from_attributes = True # For SQLAlchemy model conversion (orm_mode in Pydantic v1)
+
+class ConversationSession(BaseModel):
+    session_id: str
+    message_count: int
+    first_message_at: datetime
+    last_message_at: datetime

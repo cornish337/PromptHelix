@@ -4,5 +4,6 @@ from .settings_models import APIKey # Ensure APIKey is also in __all__ if it was
 from .statistics_models import LLMUsageStatistic # Add this import
 from .user_models import User, Session
 from .performance_models import PerformanceMetric
+from .conversation_models import ConversationLog
 
-__all__ = ["Base", "Prompt", "PromptVersion", "APIKey", "LLMUsageStatistic", "User", "Session", "PerformanceMetric"]
+__all__ = ["Base", "Prompt", "PromptVersion", "APIKey", "LLMUsageStatistic", "User", "Session", "PerformanceMetric", "ConversationLog"]

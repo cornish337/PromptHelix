@@ -301,3 +301,9 @@ async def save_api_keys_settings(
         redirect_url += f"&error={error_status}"
 
     return RedirectResponse(url=redirect_url, status_code=HTTP_303_SEE_OTHER)
+
+
+@router.get("/ui/conversations", response_class=HTMLResponse, name="ui_list_conversations")
+async def ui_list_conversations(request: Request):
+    """Serves the UI page for viewing conversation logs."""
+    return templates.TemplateResponse("conversations.html", {"request": request})

@@ -15,12 +15,15 @@ from prompthelix.utils import llm_utils
 from prompthelix.orchestrator import main_ga_loop
 from prompthelix.genetics.engine import PromptChromosome
 
+from . import conversation_routes # Added for conversation logs
 
 # Import services (individual functions, not classes, based on previous service structure)
 from prompthelix.services import user_service, performance_service
 # PromptService is a class, so it's used via crud.py which instantiates it.
 
 router = APIRouter()
+
+router.include_router(conversation_routes.router) # Added for conversation logs
 
 # --- Authentication Setup ---
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
