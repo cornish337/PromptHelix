@@ -338,3 +338,8 @@ async def save_api_keys_settings(
 async def ui_list_conversations(request: Request):
     """Serves the UI page for viewing conversation logs."""
     return templates.TemplateResponse("conversations.html", {"request": request})
+
+@router.get("/ui/login", response_class=HTMLResponse, name="ui_login")
+async def ui_login_form(request: Request):
+    """Serves the UI page for user login."""
+    return templates.TemplateResponse("login.html", {"request": request})

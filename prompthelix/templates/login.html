@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Login - PromptHelix</title>
+    <link rel="stylesheet" type="text/css" href="/static/styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Login</h1>
+        <div id="error-message" class="error-message"></div>
+        <form id="loginForm">
+            <div>
+                <label for="username">Username:</label>
+                <input type="text" id="username" name="username" required>
+            </div>
+            <div>
+                <label for="password">Password:</label>
+                <input type="password" id="password" name="password" required>
+            </div>
+            <button type="submit">Login</button>
+        </form>
+    </div>
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', async function(event) {
+            event.preventDefault();
+            const username = event.target.username.value;
+            const password = event.target.password.value;
+            const errorMessageDiv = document.getElementById('error-message');
+            errorMessageDiv.textContent = ''; // Clear previous errors
+
+            const formData = new FormData();
+            formData.append('username', username);
+            formData.append('password', password);
+
+            try {
+                const response = await fetch('/auth/token', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    const token = data.access_token;
+                    // Set cookie
+                    document.cookie = \`prompthelix_access_token=\${token}; Path=/; SameSite=Lax\`;
+                    // Redirect to prompts page
+                    window.location.href = '/ui/prompts';
+                } else {
+                    const errorData = await response.json();
+                    errorMessageDiv.textContent = errorData.detail || 'Login failed. Please check your credentials.';
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                errorMessageDiv.textContent = 'An unexpected error occurred. Please try again.';
+            }
+        });
+    </script>
+</body>
+</html>
