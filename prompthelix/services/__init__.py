@@ -20,6 +20,7 @@ from .performance_service import (
 )
 
 from .prompt_service import PromptService
+from .prompt_manager import PromptManager
 
 __all__ = [
     # User service
@@ -41,4 +42,5 @@ __all__ = [
     "update_performance_metric",
     # Prompt service
     "PromptService",
+    "PromptManager",
 ]
