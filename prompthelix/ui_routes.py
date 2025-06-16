@@ -87,7 +87,8 @@ async def create_prompt_ui_submit(
     initial_content: str = Form(...)
 ):
     prompt_data = schemas.PromptCreate(name=name, description=description)
-    db_prompt = crud.create_prompt(db, prompt=prompt_data)
+    # UI routes do not handle authentication yet; default owner_id=1
+    db_prompt = crud.create_prompt(db, prompt=prompt_data, owner_id=1)
 
     version_data = schemas.PromptVersionCreate(content=initial_content)
     crud.create_prompt_version(db, version=version_data, prompt_id=db_prompt.id)

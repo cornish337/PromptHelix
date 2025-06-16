@@ -102,3 +102,15 @@ def test_logout_unauthenticated(client: TestClient):
     response = client.post("/auth/logout") # No auth headers
     assert response.status_code == 401
     assert "Not authenticated" in response.json()["detail"]
+
+
+def test_token_expiration(client: TestClient, db_session: SQLAlchemySession, monkeypatch):
+    monkeypatch.setattr("prompthelix.config.settings.DEFAULT_SESSION_EXPIRE_MINUTES", 0)
+    login_data = {"username": DEFAULT_TEST_USERNAME, "password": DEFAULT_TEST_PASSWORD}
+    # ensure user exists
+    get_auth_headers(client, db_session)
+    resp = client.post("/auth/token", data=login_data)
+    assert resp.status_code == 200
+    token = resp.json()["access_token"]
+    me_resp = client.get("/users/me", headers={"Authorization": f"Bearer {token}"})
+    assert me_resp.status_code == 401

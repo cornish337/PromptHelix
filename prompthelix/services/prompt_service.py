@@ -13,13 +13,16 @@ from prompthelix.schemas import (
 )
 
 class PromptService:
-    def create_prompt(self, db: DbSession, prompt_create: PromptCreate) -> Prompt:
+    def create_prompt(
+        self, db: DbSession, prompt_create: PromptCreate, owner_id: int
+    ) -> Prompt:
         """
         Creates a new prompt.
         """
         db_prompt = Prompt(
             name=prompt_create.name,
-            description=prompt_create.description
+            description=prompt_create.description,
+            owner_id=owner_id,
         )
         db.add(db_prompt)
         db.commit()
