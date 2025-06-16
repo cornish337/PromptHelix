@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 old_prompthelix.db
+prompthelix.db
 
 # C extensions
 *.so
