@@ -14,6 +14,8 @@ FALLBACK_LLM_MODEL = AGENT_SETTINGS.get("StyleOptimizerAgent", {}).get("default_
 
 
 class StyleOptimizerAgent(BaseAgent):
+    agent_id = "StyleOptimizer"
+    agent_description = "Improves prompt style and clarity."
     """
     Refines prompts to enhance their style, tone, clarity, and persuasiveness,
     often based on specific target audience or desired communication effect.

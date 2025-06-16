@@ -16,6 +16,8 @@ DEFAULT_KNOWLEDGE_FILENAME = AGENT_SETTINGS.get("MetaLearnerAgent", {}).get("kno
 PERSIST_ON_UPDATE_DEFAULT = AGENT_SETTINGS.get("MetaLearnerAgent", {}).get("persist_knowledge_on_update", True)
 
 class MetaLearnerAgent(BaseAgent):
+    agent_id = "MetaLearner"
+    agent_description = "Learns from performance metrics to guide other agents."
     """
     Analyzes the overall performance of the prompt generation and optimization
     process over time. It learns from successful and unsuccessful prompts and

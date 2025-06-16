@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session # For type hinting if db fixture is used dire
 # from prompthelix.main import app # Client fixture should handle app creation
 # from prompthelix.database import get_db, Base, engine # For test DB setup if needed
 from prompthelix.api import crud # To verify db changes
+from prompthelix.schemas import APIKeyCreate
 
 # Assume 'client' fixture is provided by conftest.py, configured for testing.
 # Assume 'db_session' fixture for direct DB assertions if needed.
@@ -49,7 +50,10 @@ def test_submit_api_key_form_empty_submission(client: TestClient, db_session: Se
     """Test submitting the API key form with no changes or empty values."""
     # Initial state: ensure no keys are set for a test service or use one of the existing ones
     service_to_test = "OPENAI" # Or a unique test service
-    crud.create_or_update_api_key(db_session, service_name=service_to_test, api_key_value="") # Ensure it's clear
+    crud.create_or_update_api_key(
+        db_session,
+        api_key_create=APIKeyCreate(service_name=service_to_test, api_key=""),
+    )  # Ensure it's clear
 
     response = client.post(
         "/ui/settings/api_keys",
@@ -76,7 +80,10 @@ def test_submit_api_key_form_saves_new_key(client: TestClient, db_session: Sessi
     new_key_value = "test_openai_key_functional_123"
 
     # Ensure the key is initially not set or different
-    crud.create_or_update_api_key(db_session, service_name=service_to_test, api_key_value="")
+    crud.create_or_update_api_key(
+        db_session,
+        api_key_create=APIKeyCreate(service_name=service_to_test, api_key=""),
+    )
 
     response = client.post(
         "/ui/settings/api_keys",
@@ -103,7 +110,10 @@ def test_submit_api_key_form_clears_existing_key(client: TestClient, db_session:
     initial_key_value = "anthropic_key_to_clear_789"
 
     # Set an initial key
-    crud.create_or_update_api_key(db_session, service_name=service_to_test, api_key_value=initial_key_value)
+    crud.create_or_update_api_key(
+        db_session,
+        api_key_create=APIKeyCreate(service_name=service_to_test, api_key=initial_key_value),
+    )
     key_in_db = crud.get_api_key(db_session, service_name=service_to_test)
     assert key_in_db.api_key == initial_key_value
 

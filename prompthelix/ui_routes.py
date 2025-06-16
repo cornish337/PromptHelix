@@ -253,8 +253,10 @@ async def save_api_keys_settings(
                 try:
                     crud.create_or_update_api_key(
                         db,
-                        service_name=submitted_service_name,
-                        api_key_value=submitted_api_key_value
+                        api_key_create=schemas.APIKeyCreate(
+                            service_name=submitted_service_name,
+                            api_key=submitted_api_key_value,
+                        ),
                     )
                     # Add to processed_services_names only if key has some value, or if you want to indicate "processed" even if cleared
                     if submitted_api_key_value: # Key has a value
@@ -281,7 +283,7 @@ async def save_api_keys_settings(
         # No errors, but no services processed (e.g., form submitted with no changes to actual values, or all keys blank)
         final_message = "No changes to API keys were applied."
 
-    redirect_url = request.url_for('view_settings_ui')
+    redirect_url = str(request.url_for('view_settings_ui'))
     redirect_url += f"?message={final_message}"
     if error_status:
         redirect_url += f"&error={error_status}"
