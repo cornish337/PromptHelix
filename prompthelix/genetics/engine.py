@@ -5,6 +5,7 @@ import copy
 import json
 import os
 import random
+import statistics # Added import
 from typing import TYPE_CHECKING, Optional, Dict  # Ensure Optional is here
 import asyncio  # Added
 import openai
@@ -1170,6 +1171,29 @@ class PopulationManager:
             evaluated_chromosomes_count  # This was already successes
         )
         # failed_evaluations_count is correct
+
+        # Log fitness statistics before sorting
+        if self.population: # Ensure population is not empty
+            fitness_scores = [c.fitness_score for c in self.population if hasattr(c, 'fitness_score')] # Added check for attribute
+            if fitness_scores: # Ensure we have scores to process
+                min_fitness = min(fitness_scores)
+                max_fitness = max(fitness_scores)
+                mean_fitness = statistics.mean(fitness_scores)
+                median_fitness = statistics.median(fitness_scores)
+                std_dev_fitness = statistics.stdev(fitness_scores) if len(fitness_scores) > 1 else 0.0
+
+                logger.info(
+                    f"Generation {current_generation_number}: Fitness Stats - "
+                    f"Count: {len(fitness_scores)}, "
+                    f"Min: {min_fitness:.4f}, Max: {max_fitness:.4f}, "
+                    f"Mean: {mean_fitness:.4f}, Median: {median_fitness:.4f}, "
+                    f"StdDev: {std_dev_fitness:.4f}"
+                )
+            else:
+                logger.info(f"Generation {current_generation_number}: No valid fitness scores found in population to report statistics.")
+        else:
+            logger.info(f"Generation {current_generation_number}: Population is empty, no fitness statistics to report.")
+
         logger.info(
             f"PopulationManager: Fitness evaluation complete for generation {current_generation_number}."
         )  # Use current_generation_number

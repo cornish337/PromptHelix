@@ -16,6 +16,10 @@ from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
 
+# --- Directory for persistent knowledge ---
+# Define KNOWLEDGE_DIR early as it's used in Settings defaults
+KNOWLEDGE_DIR = os.getenv("KNOWLEDGE_DIR", "knowledge") # Relative to project root
+
 # Automatically load variables from a .env file in the project root.
 # This allows users to define their API keys and other configuration
 # settings in a local .env file without exporting them manually.
@@ -63,6 +67,10 @@ class Settings:
     DEFAULT_SESSION_EXPIRE_MINUTES: int = int(os.getenv("SESSION_EXPIRE_MINUTES", "60"))
     # Add other relevant system parameters here
 
+    # Population persistence settings
+    DEFAULT_POPULATION_PERSISTENCE_PATH: str = os.getenv("DEFAULT_POPULATION_PERSISTENCE_PATH", os.path.join(KNOWLEDGE_DIR, "ga_population.json"))
+    DEFAULT_SAVE_POPULATION_FREQUENCY: int = int(os.getenv("DEFAULT_SAVE_POPULATION_FREQUENCY", "10"))
+
     # Security settings
     # TODO: Uncomment and set a strong, unique SECRET_KEY for production environments.
     # SECRET_KEY: str = os.getenv("SECRET_KEY", "a_very_secret_key") # For JWT, session management etc.
@@ -80,6 +88,8 @@ if _openai_key:
 else:
     display_key = "NOT_SET"
 logger.info(f"Loaded OPENAI_API_KEY: {display_key}")
+logger.info(f"Default population persistence path: {settings.DEFAULT_POPULATION_PERSISTENCE_PATH}")
+logger.info(f"Default save population frequency: {settings.DEFAULT_SAVE_POPULATION_FREQUENCY}")
 
 # Example of how to access a setting:
 # print(settings.DATABASE_URL)
@@ -166,8 +176,9 @@ LOGGING_CONFIG = {
     "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 }
 
-# --- Directory for persistent knowledge ---
-KNOWLEDGE_DIR = "knowledge" # Relative to project root
+# ensure_directories_exist() function was moved up or is handled differently if KNOWLEDGE_DIR is defined early.
+# We still need to ensure KNOWLEDGE_DIR exists, this can be done at app startup.
+# For now, the definition of KNOWLEDGE_DIR is at the top of the file.
 
 def ensure_directories_exist():
     """
