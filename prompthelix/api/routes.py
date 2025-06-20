@@ -24,7 +24,13 @@ from . import conversation_routes # Added for conversation logs
 from .dependencies import get_current_user, oauth2_scheme
 
 # Import services (individual functions, not classes, based on previous service structure)
-from prompthelix.services import user_service, performance_service
+from prompthelix.services import (
+    user_service,
+    performance_service,
+    get_experiment_runs,
+    get_experiment_run,
+    get_chromosomes_for_run,
+)
 from prompthelix.services.prompt_service import PromptService
 
 prompt_service = PromptService()
@@ -322,6 +328,42 @@ def get_ga_experiment_status():
             is_paused=False,
             should_stop=False
         )
+
+# --- GA Experiment History Routes ---
+
+@router.get(
+    "/api/experiments/runs",
+    response_model=List[schemas.GAExperimentRun],
+    tags=["Experiments"],
+    summary="List GA experiment runs",
+)
+def list_ga_experiment_runs(
+    skip: int = 0,
+    limit: int = 100,
+    db: DbSession = Depends(get_db),
+):
+    """Return a paginated list of recorded GA experiment runs."""
+    return get_experiment_runs(db=db, skip=skip, limit=limit)
+
+
+@router.get(
+    "/api/experiments/runs/{run_id}/chromosomes",
+    response_model=List[schemas.GAChromosome],
+    tags=["Experiments"],
+    summary="Get chromosomes for a GA run",
+)
+def list_chromosomes_for_run(
+    run_id: int,
+    skip: int = 0,
+    limit: int = 100,
+    db: DbSession = Depends(get_db),
+):
+    """Return chromosomes for the specified run, with optional pagination."""
+    run = get_experiment_run(db=db, run_id=run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Experiment run not found")
+    records = get_chromosomes_for_run(db=db, run_id=run_id)
+    return records[skip : skip + limit]
 
 # --- LLM Utility Routes (Verified, using CRUD layer for stats) ---
 
