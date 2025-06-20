@@ -17,7 +17,9 @@ from prompthelix.database import init_db
 
 # Call init_db to create database tables on startup
 # For production, you'd likely use Alembic migrations separately.
-init_db()
+# init_db() # This should be commented out for tests; conftest.py handles DB setup.
+            # For running the app directly (e.g. `python -m prompthelix.main`),
+            # it might be called below if __name__ == "__main__".
 
 # Initialize FastAPI application
 app = FastAPI()
@@ -115,3 +117,16 @@ async def root():
 app.include_router(api_routes.router)
 # Include UI routes
 app.include_router(ui_router)
+
+if __name__ == "__main__":
+    # This block is for when you run the application directly, e.g., using `python -m prompthelix.main`
+    # It's a good place to initialize the database if it hasn't been set up by other means (like Alembic).
+    # init_db() # Uncomment if you want to ensure DB is created/checked when running directly.
+                # However, be cautious if you use Alembic for migrations, as this might conflict.
+                # For development, manually running `init_db()` via a script or an initial check might be safer.
+
+    # Note: Uvicorn is typically used to run the app, e.g., `uvicorn prompthelix.main:app --reload`
+    # In that case, this __main__ block might not be executed depending on how uvicorn imports/runs the app.
+    # If `init_db()` is critical on every startup when not testing, ensure it's called appropriately,
+    # possibly earlier in the script if not managed by a migration tool or separate startup script.
+    pass # Placeholder if no direct run actions are needed here right now.

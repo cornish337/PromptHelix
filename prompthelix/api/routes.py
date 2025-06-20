@@ -29,7 +29,8 @@ from prompthelix.services import user_service, performance_service
 
 router = APIRouter()
 
-router.include_router(conversation_routes.router) # Added for conversation logs
+# Prefix conversation routes with /api/v1
+router.include_router(conversation_routes.router, prefix="/api/v1") # Added for conversation logs
 
 # --- User Management Routes ---
 @router.post("/users/", response_model=schemas.User, status_code=status.HTTP_201_CREATED, tags=["Users"], summary="Create a new user", description="Registers a new user in the system.")
@@ -354,14 +355,26 @@ async def get_available_llms_route(db: DbSession = Depends(get_db)):
 #         is_set=bool(db_apikey.api_key)
 #     )
 
-# @router.get("/api/settings/apikeys/{service_name}", response_model=schemas.APIKeyDisplay, tags=["Settings"])
-# def get_api_key_route(service_name: str, db: DbSession = Depends(get_db), current_user: UserModel = Depends(get_current_user)):
-#     db_apikey = crud.get_api_key(db=db, service_name=service_name)
-#     if not db_apikey:
-#         raise HTTPException(status_code=404, detail="API Key not found for this service.")
-#     return schemas.APIKeyDisplay(
-#         id=db_apikey.id,
-#         service_name=db_apikey.service_name,
-#         api_key_hint=f"**********{db_apikey.api_key[-4:]}" if db_apikey.api_key else "Not Set",
-#         is_set=bool(db_apikey.api_key)
-#     )
+@router.post("/api/settings/apikeys/", response_model=schemas.APIKeyDisplay, tags=["Settings"])
+def upsert_api_key_route(api_key_data: schemas.APIKeyCreate, db: DbSession = Depends(get_db), current_user: UserModel = Depends(get_current_user)):
+    # crud.create_or_update_api_key now expects schemas.APIKeyCreate
+    db_apikey = crud.create_or_update_api_key(db=db, api_key_create=api_key_data)
+    # Return APIKeyDisplay to avoid exposing the key
+    return schemas.APIKeyDisplay(
+        id=db_apikey.id,
+        service_name=db_apikey.service_name,
+        api_key_hint=f"**********{db_apikey.api_key[-4:]}" if db_apikey.api_key and len(db_apikey.api_key) >=4 else "Not Set", # Ensure api_key is not empty and long enough
+        is_set=bool(db_apikey.api_key)
+    )
+
+@router.get("/api/settings/apikeys/{service_name}", response_model=schemas.APIKeyDisplay, tags=["Settings"])
+def get_api_key_route(service_name: str, db: DbSession = Depends(get_db), current_user: UserModel = Depends(get_current_user)):
+    db_apikey = crud.get_api_key(db=db, service_name=service_name)
+    if not db_apikey:
+        raise HTTPException(status_code=404, detail="API Key not found for this service.")
+    return schemas.APIKeyDisplay(
+        id=db_apikey.id,
+        service_name=db_apikey.service_name,
+        api_key_hint=f"**********{db_apikey.api_key[-4:]}" if db_apikey.api_key and len(db_apikey.api_key) >=4 else "Not Set", # Ensure api_key is not empty and long enough
+        is_set=bool(db_apikey.api_key)
+    )
