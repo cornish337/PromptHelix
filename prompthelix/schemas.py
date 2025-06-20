@@ -214,3 +214,41 @@ class GAStatusResponse(BaseModel):
     # Fields from PopulationManager often included in status broadcasts
     is_paused: Optional[bool] = None
     should_stop: Optional[bool] = None
+
+# --- GA Experiment History Schemas ---
+class GAExperimentRunBase(BaseModel):
+    parameters: Optional[Dict[str, Any]] = None
+    completed_at: Optional[datetime] = None
+    prompt_version_id: Optional[int] = None
+
+
+class GAExperimentRunCreate(GAExperimentRunBase):
+    pass
+
+
+class GAExperimentRun(GAExperimentRunBase):
+    id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class GAChromosomeBase(BaseModel):
+    run_id: int
+    generation_number: int
+    genes: List[Any]
+    fitness_score: float
+    evaluation_details: Optional[Dict[str, Any]] = None
+
+
+class GAChromosomeCreate(GAChromosomeBase):
+    id: str
+
+
+class GAChromosome(GAChromosomeBase):
+    id: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

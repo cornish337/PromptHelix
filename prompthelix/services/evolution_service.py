@@ -1,0 +1,44 @@
+from typing import List, Optional, Dict, Any
+from datetime import datetime
+from sqlalchemy.orm import Session as DbSession
+
+from prompthelix.models.evolution_models import GAExperimentRun, GAChromosome
+from prompthelix.genetics.engine import PromptChromosome
+
+
+def create_experiment_run(db: DbSession, parameters: Optional[Dict[str, Any]] = None) -> GAExperimentRun:
+    run = GAExperimentRun(parameters=parameters or {})
+    db.add(run)
+    db.commit()
+    db.refresh(run)
+    return run
+
+
+def complete_experiment_run(db: DbSession, run: GAExperimentRun, prompt_version_id: Optional[int] = None) -> GAExperimentRun:
+    run.completed_at = datetime.utcnow()
+    if prompt_version_id is not None:
+        run.prompt_version_id = prompt_version_id
+    db.add(run)
+    db.commit()
+    db.refresh(run)
+    return run
+
+
+def add_chromosome_record(db: DbSession, run: GAExperimentRun, generation_number: int, chromosome: PromptChromosome) -> GAChromosome:
+    record = GAChromosome(
+        id=str(chromosome.id),
+        run_id=run.id,
+        generation_number=generation_number,
+        genes=chromosome.genes,
+        fitness_score=chromosome.fitness_score,
+        evaluation_details=getattr(chromosome, "evaluation_details", None),
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+def get_chromosomes_for_run(db: DbSession, run_id: int) -> List[GAChromosome]:
+    return db.query(GAChromosome).filter(GAChromosome.run_id == run_id).all()
+

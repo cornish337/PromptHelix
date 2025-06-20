@@ -21,6 +21,12 @@ from .performance_service import (
 
 from .prompt_service import PromptService
 from .prompt_manager import PromptManager
+from .evolution_service import (
+    create_experiment_run,
+    complete_experiment_run,
+    add_chromosome_record,
+    get_chromosomes_for_run,
+)
 
 __all__ = [
     # User service
@@ -43,4 +49,8 @@ __all__ = [
     # Prompt service
     "PromptService",
     "PromptManager",
+    "create_experiment_run",
+    "complete_experiment_run",
+    "add_chromosome_record",
+    "get_chromosomes_for_run",
 ]
