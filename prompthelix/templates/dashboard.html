@@ -31,15 +31,36 @@
                     <span class="font-semibold text-gray-700">Fittest Chromosome:</span>
                     <pre id="ga-fittest-chromosome" class="text-gray-900 bg-gray-100 p-2 rounded mt-1 overflow-x-auto">-</pre>
                 </div>
+                <!-- New Fitness Statistics -->
+                <div>
+                    <span class="font-semibold text-gray-700">Min Fitness:</span>
+                    <span id="ga-min-fitness" class="text-gray-900">-</span>
+                </div>
+                <div>
+                    <span class="font-semibold text-gray-700">Max Fitness:</span>
+                    <span id="ga-max-fitness" class="text-gray-900">-</span>
+                </div>
+                <div>
+                    <span class="font-semibold text-gray-700">Mean Fitness:</span>
+                    <span id="ga-mean-fitness" class="text-gray-900">-</span>
+                </div>
+                <div>
+                    <span class="font-semibold text-gray-700">Median Fitness:</span>
+                    <span id="ga-median-fitness" class="text-gray-900">-</span>
+                </div>
+                <div>
+                    <span class="font-semibold text-gray-700">Std Dev Fitness:</span>
+                    <span id="ga-stddev-fitness" class="text-gray-900">-</span>
+                </div>
             </div>
             <div class="mt-4 flex space-x-2">
                 <button id="ga-pause-btn" class="bg-amber-500 hover:bg-amber-600 text-white font-bold py-2 px-4 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150 ease-in-out">Pause</button>
                 <button id="ga-resume-btn" class="bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 px-4 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150 ease-in-out">Resume</button>
                 <button id="ga-cancel-btn" class="bg-rose-500 hover:bg-rose-600 text-white font-bold py-2 px-4 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150 ease-in-out">Cancel</button>
             </div>
-            <!-- Placeholder for charts -->
-            <div id="ga-charts-placeholder" class="mt-4 p-8 bg-gray-50 border border-gray-300 border-dashed rounded-md text-center text-gray-500">
-                Chart will appear here.
+            <!-- Chart.js Canvas -->
+            <div class="mt-4">
+                <canvas id="fitnessTrendChart"></canvas>
             </div>
         </div>
     </section>
@@ -79,13 +100,19 @@
 
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         const gaStatus = document.getElementById('ga-status');
         const gaGeneration = document.getElementById('ga-generation');
         const gaBestFitness = document.getElementById('ga-best-fitness');
-        const gaAgentsUsed = document.getElementById('ga-agents-used'); // Added
-        const gaFittestChromosome = document.getElementById('ga-fittest-chromosome'); // Added
+        const gaMinFitness = document.getElementById('ga-min-fitness'); // New
+        const gaMaxFitness = document.getElementById('ga-max-fitness'); // New
+        const gaMeanFitness = document.getElementById('ga-mean-fitness'); // New
+        const gaMedianFitness = document.getElementById('ga-median-fitness'); // New
+        const gaStdDevFitness = document.getElementById('ga-stddev-fitness'); // New
+        const gaAgentsUsed = document.getElementById('ga-agents-used');
+        const gaFittestChromosome = document.getElementById('ga-fittest-chromosome');
         const logsContainer = document.getElementById('logs-container');
         const agentMetricsData = document.getElementById('agent-metrics-data');
         const debugLogsContainer = document.getElementById('debug-logs-container'); // Add this
@@ -95,12 +122,87 @@
         const gaResumeBtn = document.getElementById('ga-resume-btn');
         const gaCancelBtn = document.getElementById('ga-cancel-btn');
 
+        let fitnessChart = null;
+        const chartData = {
+            labels: [],
+            datasets: [
+                {
+                    label: 'Max Fitness',
+                    borderColor: 'rgb(75, 192, 192)',
+                    backgroundColor: 'rgba(75, 192, 192, 0.5)',
+                    data: [],
+                    tension: 0.1
+                },
+                {
+                    label: 'Mean Fitness',
+                    borderColor: 'rgb(54, 162, 235)',
+                    backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                    data: [],
+                    tension: 0.1
+                },
+                {
+                    label: 'Min Fitness',
+                    borderColor: 'rgb(255, 99, 132)',
+                    backgroundColor: 'rgba(255, 99, 132, 0.5)',
+                    data: [],
+                    tension: 0.1
+                }
+            ]
+        };
+
+        function initializeFitnessChart() {
+            const ctx = document.getElementById('fitnessTrendChart').getContext('2d');
+            if (fitnessChart) {
+                fitnessChart.destroy(); // Destroy existing chart if any
+            }
+            fitnessChart = new Chart(ctx, {
+                type: 'line',
+                data: chartData,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Generation'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Fitness Score'
+                            },
+                            beginAtZero: true // Adjust as needed
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        title: {
+                            display: true,
+                            text: 'Fitness Trend Over Generations'
+                        }
+                    }
+                }
+            });
+        }
+
+
         // Function to handle GA data updates from WebSocket
         function handleGaDataUpdate(data) {
             gaStatus.textContent = data.status || 'N/A';
             updateStatusBadge(gaStatus.textContent);
-            gaGeneration.textContent = data.generation || '-';
-            gaBestFitness.textContent = data.best_fitness ? parseFloat(data.best_fitness).toFixed(4) : '-';
+            gaGeneration.textContent = data.generation !== undefined ? data.generation : '-';
+            gaBestFitness.textContent = data.best_fitness !== null && data.best_fitness !== undefined ? parseFloat(data.best_fitness).toFixed(4) : '-';
+
+            // Update new fitness stats
+            gaMinFitness.textContent = data.fitness_min !== null && data.fitness_min !== undefined ? parseFloat(data.fitness_min).toFixed(4) : '-';
+            gaMaxFitness.textContent = data.fitness_max !== null && data.fitness_max !== undefined ? parseFloat(data.fitness_max).toFixed(4) : '-';
+            gaMeanFitness.textContent = data.fitness_mean !== null && data.fitness_mean !== undefined ? parseFloat(data.fitness_mean).toFixed(4) : '-';
+            gaMedianFitness.textContent = data.fitness_median !== null && data.fitness_median !== undefined ? parseFloat(data.fitness_median).toFixed(4) : '-';
+            gaStdDevFitness.textContent = data.fitness_std_dev !== null && data.fitness_std_dev !== undefined ? parseFloat(data.fitness_std_dev).toFixed(4) : '-';
 
             if (data.agents_used && Array.isArray(data.agents_used)) {
                 gaAgentsUsed.textContent = data.agents_used.join(', ') || 'N/A';
@@ -109,7 +211,43 @@
             }
             gaFittestChromosome.textContent = data.fittest_chromosome_string || 'N/A';
             updateGaControlButtons(data.status);
-            console.log("GA Data Processed for event type, data:", data); // Modified console log
+
+            // Update chart if generation data is present and it's a relevant event
+            // Consider "ga_evaluation_complete" or "ga_generation_complete" as good points to update chart
+            // For simplicity, updating if generation and fitness_mean are present
+            if (data.generation !== undefined && data.fitness_mean !== null && data.fitness_mean !== undefined) {
+                // Avoid duplicate generation numbers in labels if data comes too rapidly for same generation
+                if (!chartData.labels.includes(data.generation)) {
+                    chartData.labels.push(data.generation);
+                } else {
+                    // If generation already exists, find its index to update data instead of pushing
+                    // This handles cases where multiple updates for the same generation might arrive
+                    // For simplicity here, we'll assume unique generation updates or let Chart.js handle it
+                    // A more robust way would be to map generations to indices.
+                }
+
+                // Ensure data arrays are appended to correctly or updated if generation label already existed
+                // This basic implementation assumes new generation data comes sequentially
+                // For a new generation, push data. If updating existing, replace at index.
+                // Current logic: always appends if generation is new, which is typical for GA progress.
+                const currentLabelIndex = chartData.labels.indexOf(data.generation);
+
+                if (currentLabelIndex === chartData.datasets[0].data.length) { // New data point
+                    chartData.datasets[0].data.push(data.fitness_max !== null && data.fitness_max !== undefined ? parseFloat(data.fitness_max) : null);
+                    chartData.datasets[1].data.push(data.fitness_mean !== null && data.fitness_mean !== undefined ? parseFloat(data.fitness_mean) : null);
+                    chartData.datasets[2].data.push(data.fitness_min !== null && data.fitness_min !== undefined ? parseFloat(data.fitness_min) : null);
+                } else if (currentLabelIndex !== -1 && currentLabelIndex < chartData.datasets[0].data.length) { // Update existing data point
+                    chartData.datasets[0].data[currentLabelIndex] = data.fitness_max !== null && data.fitness_max !== undefined ? parseFloat(data.fitness_max) : null;
+                    chartData.datasets[1].data[currentLabelIndex] = data.fitness_mean !== null && data.fitness_mean !== undefined ? parseFloat(data.fitness_mean) : null;
+                    chartData.datasets[2].data[currentLabelIndex] = data.fitness_min !== null && data.fitness_min !== undefined ? parseFloat(data.fitness_min) : null;
+                }
+
+
+                if (fitnessChart) {
+                    fitnessChart.update();
+                }
+            }
+            // console.log("GA Data Processed for event type, data:", data);
         }
 
         function updateStatusBadge(statusText) {
@@ -180,10 +318,18 @@
                     const statusData = await response.json();
                     console.log('Initial GA Status:', statusData);
                     // Update UI elements based on this initial status
-                    gaStatus.textContent = statusData.status || 'N/A'; // Set text first
-                    updateStatusBadge(gaStatus.textContent); // Then update badge based on the new text
-                    gaGeneration.textContent = statusData.generation || '-';
-                    gaBestFitness.textContent = statusData.best_fitness ? parseFloat(statusData.best_fitness).toFixed(4) : '-';
+                    gaStatus.textContent = statusData.status || 'N/A';
+                    updateStatusBadge(gaStatus.textContent);
+                    gaGeneration.textContent = statusData.generation !== undefined ? statusData.generation : '-';
+                    gaBestFitness.textContent = statusData.best_fitness !== null && statusData.best_fitness !== undefined ? parseFloat(statusData.best_fitness).toFixed(4) : '-';
+
+                    // Update new fitness stats from initial fetch
+                    gaMinFitness.textContent = statusData.fitness_min !== null && statusData.fitness_min !== undefined ? parseFloat(statusData.fitness_min).toFixed(4) : '-';
+                    gaMaxFitness.textContent = statusData.fitness_max !== null && statusData.fitness_max !== undefined ? parseFloat(statusData.fitness_max).toFixed(4) : '-';
+                    gaMeanFitness.textContent = statusData.fitness_mean !== null && statusData.fitness_mean !== undefined ? parseFloat(statusData.fitness_mean).toFixed(4) : '-';
+                    gaMedianFitness.textContent = statusData.fitness_median !== null && statusData.fitness_median !== undefined ? parseFloat(statusData.fitness_median).toFixed(4) : '-';
+                    gaStdDevFitness.textContent = statusData.fitness_std_dev !== null && statusData.fitness_std_dev !== undefined ? parseFloat(statusData.fitness_std_dev).toFixed(4) : '-';
+
                     if (statusData.agents_used && Array.isArray(statusData.agents_used)) {
                         gaAgentsUsed.textContent = statusData.agents_used.join(', ') || 'N/A';
                     } else {
@@ -192,6 +338,19 @@
                     gaFittestChromosome.textContent = statusData.fittest_chromosome_string || 'N/A';
 
                     updateGaControlButtons(statusData.status);
+
+                    // Initialize chart with potentially empty data from initial status,
+                    // or if historical data was part of statusData (not assumed here)
+                    // For now, chart is initialized empty and populates with WebSocket data.
+                    // If statusData contains initial points for the chart:
+                    // if (statusData.generation !== undefined && statusData.fitness_mean !== null) {
+                    //    chartData.labels.push(statusData.generation);
+                    //    chartData.datasets[0].data.push(parseFloat(statusData.fitness_max));
+                    //    chartData.datasets[1].data.push(parseFloat(statusData.fitness_mean));
+                    //    chartData.datasets[2].data.push(parseFloat(statusData.fitness_min));
+                    // }
+                    // initializeFitnessChart(); // Call after potentially populating chartData
+
                 } else {
                     console.error('Failed to fetch initial GA status:', response.status);
                     gaStatus.textContent = 'Error'; // Update text before badge
@@ -409,9 +568,10 @@
         }
 
         // Set initial state for buttons and fetch initial status
-        // updateGaControlButtons('IDLE'); // This will be set by fetchInitialGaStatus
-        // updateStatusBadge('IDLE'); // Also set by fetchInitialGaStatus
-        fetchInitialGaStatus(); // Fetch current status on load
+        // updateGaControlButtons('IDLE');
+        // updateStatusBadge('IDLE');
+        fetchInitialGaStatus();
+        initializeFitnessChart(); // Initialize chart on page load
 
     });
 </script>
