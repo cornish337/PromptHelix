@@ -729,6 +729,8 @@ class PopulationManager:
             "best_fitness": fittest.fitness_score if fittest else None,
             "is_paused": self.is_paused,
             "should_stop": self.should_stop,
+            "agents_used": self.agents_used,
+            "fittest_chromosome_string": fittest.to_prompt_string() if fittest else None
         }
         if additional_data:
             payload.update(additional_data)
