@@ -8,6 +8,7 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./prompthelix.db")
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+print(f"DEBUG: database.py: SessionLocal defined at module level, bound to engine: {engine}")
 
 __all__ = [
     "DATABASE_URL",
@@ -19,6 +20,7 @@ __all__ = [
 ]
 
 def get_db():
+    print(f"DEBUG: prompthelix.database.get_db CALLED. Using SessionLocal bound to engine: {SessionLocal.kw['bind']}")
     db = SessionLocal()
     try:
         yield db
