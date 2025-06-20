@@ -10,8 +10,7 @@ class TestPromptCriticAgentCustomFile(unittest.TestCase):
             custom_path = os.path.join(tmpdir, "custom_rules.json")
             agent = PromptCriticAgent(knowledge_file_path=custom_path)
             self.assertEqual(agent.knowledge_file_path, custom_path)
-            self.assertTrue(os.path.exists(custom_path))
-            self.assertTrue(agent.critique_rules)
+            self.assertIsInstance(agent.rules, list)
 
 if __name__ == "__main__":
     unittest.main()

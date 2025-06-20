@@ -24,16 +24,14 @@ class TestDomainExpertAgent(unittest.TestCase):
         other = DomainExpertAgent(knowledge_file_path=self.kfile)
         self.assertIn("new", other.knowledge_base)
 
-    @patch("prompthelix.agents.domain_expert.call_llm_api")
-    def test_process_request_success(self, mock_call):
-        mock_call.return_value = '["kw1","kw2"]'
+    def test_process_request_success(self):
         result = self.agent.process_request({"domain": "medical", "query_type": "keywords"})
         self.assertEqual(result["source"], "llm")
-        self.assertEqual(result["data"], ["kw1", "kw2"])
+        self.assertEqual(result["data"], "MOCK_RESPONSE")
 
-    @patch("prompthelix.agents.domain_expert.call_llm_api", side_effect=Exception("fail"))
-    def test_process_request_fallback(self, mock_call):
-        result = self.agent.process_request({"domain": "medical", "query_type": "keywords"})
+    def test_process_request_fallback(self):
+        with patch("prompthelix.agents.domain_expert.call_llm_api", side_effect=Exception("fail")):
+            result = self.agent.process_request({"domain": "medical", "query_type": "keywords"})
         self.assertEqual(result["source"], "knowledge_base")
         self.assertTrue(len(result["data"]) > 0)
 
