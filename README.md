@@ -178,6 +178,26 @@ You can deploy PromptHelix using Docker or by setting it up manually in a produc
     ```
     *Ensure your `.env` file has the correct `DATABASE_URL` for your production database if you use this method.*
 
+#### Docker Compose with Redis
+
+The repository includes a `docker-compose.yaml` that runs both the application and a Redis instance. This is the easiest way to start everything together.
+
+1.  **Copy the example environment file:**
+    ```bash
+    cp .env.example .env
+    ```
+    Edit `.env` as needed. When using Docker Compose, set `REDIS_HOST=redis`.
+
+2.  **Build and start the services:**
+    ```bash
+    docker compose up --build
+    ```
+    This builds the application image and starts the FastAPI app on port `8000` and Redis on port `6379`.
+
+3.  **Access the application:**
+    The API and UI will be available at [http://localhost:8000](http://localhost:8000).
+
+
 ### Manual Deployment
 
 For a manual production setup, consider the following steps:
