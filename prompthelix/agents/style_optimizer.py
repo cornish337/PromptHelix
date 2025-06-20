@@ -104,6 +104,47 @@ class StyleOptimizerAgent(BaseAgent):
             logger.error(f"Agent '{self.agent_id}': Failed to load style rules from '{self.knowledge_file_path}': {e}. Using default rules.", exc_info=True)
             self.style_rules = self._get_default_style_rules()
 
+    def optimize(self, prompt: str, tone: str = "concise") -> str:
+        """
+        Optimizes the style of a given prompt string using an LLM.
+
+        Args:
+            prompt (str): The prompt string to optimize.
+            tone (str): The desired tone for the optimization (e.g., "concise", "formal", "casual").
+
+        Returns:
+            str: The optimized prompt string or a placeholder if not in "REAL" LLM mode.
+        """
+        llm_template = f"Rephrase the following prompt to be more {tone}: {prompt}"
+
+        # Ensure self.settings is available. BaseAgent should store it.
+        if not hasattr(self, 'settings') or self.settings is None:
+            logger.warning(f"Agent '{self.agent_id}': Settings not available. Defaulting to non-REAL mode for optimize.")
+            # Attempt to fetch from AGENT_SETTINGS if self.settings is missing
+            # This is a fallback, ideally settings should be passed during init.
+            agent_specific_settings = AGENT_SETTINGS.get(self.agent_id, {})
+            llm_mode = agent_specific_settings.get("llm_mode", "PLACEHOLDER")
+        else:
+            llm_mode = self.settings.get("llm_mode", "PLACEHOLDER")
+
+        if llm_mode == "REAL":
+            try:
+                logger.info(f"Agent '{self.agent_id}': Calling LLM for style optimization. Tone: {tone}. Prompt: \"{prompt[:100]}...\"")
+                optimized_prompt = call_llm_api(
+                    prompt_text=llm_template,
+                    provider=self.llm_provider,
+                    model=self.llm_model
+                )
+                logger.info(f"Agent '{self.agent_id}': LLM optimization successful. Returning optimized prompt.")
+                return optimized_prompt
+            except Exception as e:
+                logger.error(f"Agent '{self.agent_id}': Error calling LLM API during style optimization: {e}. Returning original prompt with placeholder.", exc_info=True)
+                # Fallback to placeholder behavior in case of LLM error even in REAL mode
+                return f"{prompt} [Styled: Placeholder - Error]"
+        else:
+            logger.info(f"Agent '{self.agent_id}': LLM mode is '{llm_mode}'. Returning placeholder styled prompt.")
+            return f"{prompt} [Styled: Placeholder]"
+
     def save_knowledge(self):
         """
         Saves the current style rules to the specified JSON file.
