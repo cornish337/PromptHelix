@@ -128,10 +128,12 @@
                 logsContainer.appendChild(logEntry);
                 logsContainer.scrollTop = logsContainer.scrollHeight; // Auto-scroll
             } else if (message.type === 'debug_log' && message.data) {
+
                 // REMOVED: const debugLogsContainer = document.getElementById('debug-logs-container');
                 // REMOVED: const toggleDebugLogs = document.getElementById('toggle-debug-logs');
 
                 // Use the 'toggleDebugLogs' and 'debugLogsContainer' from the outer scope (DOMContentLoaded)
+
                 if (toggleDebugLogs && toggleDebugLogs.checked) {
                     const logEntry = document.createElement('div');
                     logEntry.classList.add('log-entry', 'p-1', 'rounded', 'text-xs', 'mb-1', 'font-mono'); // Added font-mono
