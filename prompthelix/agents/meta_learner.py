@@ -9,9 +9,7 @@ from prompthelix.config import AGENT_SETTINGS, KNOWLEDGE_DIR # Import new config
 
 logger = logging.getLogger(__name__)
 
-# Default provider from config if specific agent setting is not found
-# However, agent-specific settings should ideally cover this.
-FALLBACK_LLM_PROVIDER = AGENT_SETTINGS.get("MetaLearnerAgent", {}).get("default_llm_provider", "openai")
+# Default file name and persist flag; other defaults are resolved during initialization
 DEFAULT_KNOWLEDGE_FILENAME = AGENT_SETTINGS.get("MetaLearnerAgent", {}).get("knowledge_file_path", "meta_learner_knowledge_fallback.json")
 PERSIST_ON_UPDATE_DEFAULT = AGENT_SETTINGS.get("MetaLearnerAgent", {}).get("persist_knowledge_on_update", True)
 
@@ -37,8 +35,9 @@ class MetaLearnerAgent(BaseAgent):
         super().__init__(agent_id="MetaLearner", message_bus=message_bus)
 
         agent_config = AGENT_SETTINGS.get(self.agent_id, {})
-        self.llm_provider = agent_config.get("default_llm_provider", FALLBACK_LLM_PROVIDER)
-        self.llm_model = agent_config.get("default_llm_model") # Used by call_llm_api if no model is passed
+        llm_provider_default = agent_config.get("default_llm_provider", "openai")
+        self.llm_provider = llm_provider_default
+        self.llm_model = agent_config.get("default_llm_model")  # Used by call_llm_api if no model is passed
 
         _knowledge_filename = knowledge_file_path if knowledge_file_path else agent_config.get("knowledge_file_path", DEFAULT_KNOWLEDGE_FILENAME)
         # Ensure KNOWLEDGE_DIR exists for storing the knowledge file
