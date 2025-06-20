@@ -212,6 +212,51 @@
             gaFittestChromosome.textContent = data.fittest_chromosome_string || 'N/A';
             updateGaControlButtons(data.status);
 
+            if (data.agent_metrics) {
+                const metricsContainer = document.getElementById('agent-metrics-data');
+                let table = document.getElementById('agent-metrics-table');
+                if (!table) {
+                    table = document.createElement('table');
+                    table.id = 'agent-metrics-table';
+                    table.classList.add('min-w-full', 'text-sm', 'table-auto', 'border-collapse');
+                    table.innerHTML = `
+                        <thead>
+                            <tr>
+                                <th class="border px-2">Agent</th>
+                                <th class="border px-2">Messages</th>
+                                <th class="border px-2">Errors</th>
+                                <th class="border px-2">Last Operation</th>
+                                <th class="border px-2">Avg Fitness Δ</th>
+                                <th class="border px-2">Updated</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>`;
+                    metricsContainer.innerHTML = '';
+                    metricsContainer.appendChild(table);
+                }
+
+                const tbody = table.querySelector('tbody');
+                Object.entries(data.agent_metrics).forEach(([id, m]) => {
+                    let row = tbody.querySelector(`tr[data-agent-id="${id}"]`);
+                    if (!row) {
+                        row = document.createElement('tr');
+                        row.dataset.agentId = id;
+                        tbody.appendChild(row);
+                    }
+                    const avgDelta = m.average_fitness_change !== undefined && m.average_fitness_change !== null
+                        ? parseFloat(m.average_fitness_change).toFixed(4)
+                        : '-';
+                    row.innerHTML = `
+                        <td class="border px-2">${id}</td>
+                        <td class="border px-2">${m.messages_processed}</td>
+                        <td class="border px-2">${m.errors_encountered}</td>
+                        <td class="border px-2">${m.last_operation_type || '-'}</td>
+                        <td class="border px-2">${avgDelta}</td>
+                        <td class="border px-2">${new Date(m.timestamp).toLocaleTimeString()}</td>
+                    `;
+                });
+            }
+
             // Update chart if generation data is present and it's a relevant event
             // Consider "ga_evaluation_complete" or "ga_generation_complete" as good points to update chart
             // For simplicity, updating if generation and fitness_mean are present
