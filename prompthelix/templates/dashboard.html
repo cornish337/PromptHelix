@@ -29,6 +29,21 @@
             <!-- Logs will be appended here by JavaScript -->
             <div class="log-entry text-gray-500">Waiting for logs...</div>
         </div>
+    </section> <!-- Conversation Logs Section -->
+
+    <!-- Debug Logs Section -->
+    <section id="debug-logs" class="mb-6 p-4 bg-white rounded shadow">
+        <div class="flex justify-between items-center mb-3">
+            <h2 class="text-xl font-semibold">Real-Time Debug Logs</h2>
+            <div class="flex items-center">
+                <input type="checkbox" id="toggle-debug-logs" class="form-checkbox h-5 w-5 text-blue-600 rounded focus:ring-blue-500" checked>
+                <label for="toggle-debug-logs" class="ml-2 text-sm text-gray-700">Show Debug Logs</label>
+            </div>
+        </div>
+        <div id="debug-logs-container" class="max-h-96 overflow-y-auto space-y-2 pr-2 border rounded p-2 bg-gray-50">
+            <!-- Debug logs will be appended here by JavaScript -->
+            <div class="log-entry text-gray-500">Waiting for debug logs...</div>
+        </div>
     </section>
 
     <!-- Agent Metrics Section -->
@@ -51,6 +66,9 @@
         const gaFittestChromosome = document.getElementById('ga-fittest-chromosome'); // Added
         const logsContainer = document.getElementById('logs-container');
         const agentMetricsData = document.getElementById('agent-metrics-data');
+        const debugLogsContainer = document.getElementById('debug-logs-container'); // Add this
+        const toggleDebugLogs = document.getElementById('toggle-debug-logs'); // Add this
+
 
         // Determine WebSocket protocol
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -109,6 +127,47 @@
 
                 logsContainer.appendChild(logEntry);
                 logsContainer.scrollTop = logsContainer.scrollHeight; // Auto-scroll
+            } else if (message.type === 'debug_log' && message.data) {
+                const debugLogsContainer = document.getElementById('debug-logs-container'); // Re-fetch or ensure it's in scope
+                const toggleDebugLogs = document.getElementById('toggle-debug-logs'); // Re-fetch or ensure it's in scope
+
+                if (toggleDebugLogs && toggleDebugLogs.checked) {
+                    const logEntry = document.createElement('div');
+                    logEntry.classList.add('log-entry', 'p-1', 'rounded', 'text-xs', 'mb-1', 'font-mono'); // Added font-mono
+
+                    const level = message.data.level ? message.data.level.toLowerCase() : 'info';
+                    if (level === 'error') {
+                        logEntry.classList.add('bg-red-50', 'text-red-700');
+                    } else if (level === 'warning') {
+                        logEntry.classList.add('bg-yellow-50', 'text-yellow-700');
+                    } else if (level === 'debug') {
+                        logEntry.classList.add('bg-blue-50', 'text-blue-700');
+                    } else {
+                        logEntry.classList.add('bg-gray-100');
+                    }
+
+                    const timestamp = new Date(message.data.timestamp * 1000).toLocaleTimeString();
+                    const logMessage = message.data.message || '';
+                    const module = message.data.module || 'unknown_module';
+                    const funcName = message.data.funcName || 'unknown_function';
+                    const lineno = message.data.lineno || '?';
+
+                    logEntry.innerHTML = `
+                        <div class="grid grid-cols-12 gap-x-1">
+                            <span class="col-span-2 text-gray-600">${timestamp}</span>
+                            <span class="col-span-1 font-semibold ${level === 'error' || level === 'warning' ? '' : 'text-gray-700'}">${message.data.level}</span>
+                            <span class="col-span-3 text-purple-600">${module}.${funcName}:${lineno}</span>
+                            <span class="col-span-6">${logMessage}</span>
+                        </div>
+                    `;
+
+                    const waitingMsg = debugLogsContainer.querySelector('.text-gray-500');
+                    if (waitingMsg && waitingMsg.textContent === 'Waiting for debug logs...') {
+                        debugLogsContainer.innerHTML = '';
+                    }
+                    debugLogsContainer.appendChild(logEntry);
+                    debugLogsContainer.scrollTop = debugLogsContainer.scrollHeight; // Auto-scroll
+                }
             } else if (message.type === 'ga_update' && message.data) {
                 // Placeholder for GA updates
                 gaStatus.textContent = message.data.status || 'N/A';
