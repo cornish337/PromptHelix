@@ -8,6 +8,7 @@ configurations from environment variables and potentially .env files.
 # Load environment variables from a .env file if present
 import os
 import logging
+import json
 from sqlalchemy.orm import Session
 from typing import Optional
 from prompthelix.api import crud
@@ -15,6 +16,10 @@ from dotenv import load_dotenv
 # from pydantic import BaseSettings # Uncomment if Pydantic is used for settings management
 
 logger = logging.getLogger(__name__)
+
+# --- Directory for persistent knowledge ---
+# Define KNOWLEDGE_DIR early as it's used in Settings defaults
+KNOWLEDGE_DIR = os.getenv("KNOWLEDGE_DIR", "knowledge") # Relative to project root
 
 # Automatically load variables from a .env file in the project root.
 # This allows users to define their API keys and other configuration
@@ -63,6 +68,10 @@ class Settings:
     DEFAULT_SESSION_EXPIRE_MINUTES: int = int(os.getenv("SESSION_EXPIRE_MINUTES", "60"))
     # Add other relevant system parameters here
 
+    # Population persistence settings
+    DEFAULT_POPULATION_PERSISTENCE_PATH: str = os.getenv("DEFAULT_POPULATION_PERSISTENCE_PATH", os.path.join(KNOWLEDGE_DIR, "ga_population.json"))
+    DEFAULT_SAVE_POPULATION_FREQUENCY: int = int(os.getenv("DEFAULT_SAVE_POPULATION_FREQUENCY", "10"))
+
     # Security settings
     # TODO: Uncomment and set a strong, unique SECRET_KEY for production environments.
     # SECRET_KEY: str = os.getenv("SECRET_KEY", "a_very_secret_key") # For JWT, session management etc.
@@ -80,6 +89,8 @@ if _openai_key:
 else:
     display_key = "NOT_SET"
 logger.info(f"Loaded OPENAI_API_KEY: {display_key}")
+logger.info(f"Default population persistence path: {settings.DEFAULT_POPULATION_PERSISTENCE_PATH}")
+logger.info(f"Default save population frequency: {settings.DEFAULT_SAVE_POPULATION_FREQUENCY}")
 
 # Example of how to access a setting:
 # print(settings.DATABASE_URL)
@@ -154,6 +165,32 @@ AGENT_SETTINGS = {
     },
 }
 
+# Apply environment variable overrides for agent settings
+def _apply_agent_env_overrides(agent_settings: dict) -> dict:
+    """Override agent settings using environment variables."""
+    for agent_name, settings_dict in agent_settings.items():
+        prefix = agent_name.replace("Agent", "").upper()
+        for key, default_val in settings_dict.items():
+            env_var = f"{prefix}_{key.upper()}"
+            if env_var in os.environ:
+                raw_val = os.environ[env_var]
+                new_val = raw_val
+                try:
+                    if isinstance(default_val, bool):
+                        new_val = raw_val.lower() in {"1", "true", "yes"}
+                    elif isinstance(default_val, int) and raw_val.isdigit():
+                        new_val = int(raw_val)
+                    elif isinstance(default_val, float):
+                        new_val = float(raw_val)
+                    elif isinstance(default_val, (dict, list)):
+                        new_val = json.loads(raw_val)
+                except Exception:
+                    new_val = raw_val
+                settings_dict[key] = new_val
+    return agent_settings
+
+AGENT_SETTINGS = _apply_agent_env_overrides(AGENT_SETTINGS)
+
 # --- LLM Utility Settings ---
 LLM_UTILS_SETTINGS = {
     "default_timeout": 60,
@@ -166,8 +203,9 @@ LOGGING_CONFIG = {
     "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 }
 
-# --- Directory for persistent knowledge ---
-KNOWLEDGE_DIR = "knowledge" # Relative to project root
+# ensure_directories_exist() function was moved up or is handled differently if KNOWLEDGE_DIR is defined early.
+# We still need to ensure KNOWLEDGE_DIR exists, this can be done at app startup.
+# For now, the definition of KNOWLEDGE_DIR is at the top of the file.
 
 def ensure_directories_exist():
     """

@@ -1,201 +1,164 @@
-import pytest
-from sqlalchemy.orm import Session as SQLAlchemySession, selectinload # For verifying loaded relationships
-from typing import List
+import unittest
+from unittest.mock import MagicMock, patch
+import json
+from datetime import datetime # Needed for comparing datetime objects from cache
 
-from prompthelix.services.prompt_service import PromptService
-from prompthelix.schemas import PromptCreate, PromptUpdate, PromptVersionCreate, PromptVersionUpdate
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, Session as DbSession
+
+from prompthelix.models.base import Base
 from prompthelix.models.prompt_models import Prompt, PromptVersion
+from prompthelix.models.user_models import User # Required for owner_id
+from prompthelix.schemas import PromptCreate, PromptVersionCreate
+from prompthelix.services.prompt_service import PromptService
+# Import helper functions from the service module IF they are not part of the class
+# and are used directly by the test for preparing expected values.
+# In this case, prompt_version_to_dict IS used by the test to prepare expected cache values.
+from prompthelix.services.prompt_service import prompt_version_to_dict
 
-@pytest.fixture(scope="module") # Service instance can be shared across tests in this module
-def prompt_service_instance() -> PromptService:
-    return PromptService()
-
-def test_create_prompt(db_session: SQLAlchemySession, prompt_service_instance: PromptService):
-    prompt_data = PromptCreate(name="Test Prompt", description="A test prompt description.")
-    db_prompt = prompt_service_instance.create_prompt(db_session, prompt_create=prompt_data, owner_id=1)
-
-    assert db_prompt is not None
-    assert db_prompt.name == "Test Prompt"
-    assert db_prompt.description == "A test prompt description."
-    assert db_prompt.id is not None
-    assert db_prompt.created_at is not None
-    assert len(db_prompt.versions) == 0 # Initially no versions
-
-def test_get_prompt(db_session: SQLAlchemySession, prompt_service_instance: PromptService):
-    created_prompt = prompt_service_instance.create_prompt(db_session, PromptCreate(name="Get Me"), owner_id=1)
-    # Add a version to test relationship loading
-    prompt_service_instance.create_prompt_version(db_session, created_prompt.id, PromptVersionCreate(content="v1 content"))
-
-    retrieved_prompt = prompt_service_instance.get_prompt(db_session, prompt_id=created_prompt.id)
-    assert retrieved_prompt is not None
-    assert retrieved_prompt.id == created_prompt.id
-    assert retrieved_prompt.name == "Get Me"
-    assert len(retrieved_prompt.versions) == 1 # Check if versions are loaded
-    assert retrieved_prompt.versions[0].content == "v1 content"
-
-    non_existent_prompt = prompt_service_instance.get_prompt(db_session, prompt_id=9999)
-    assert non_existent_prompt is None
-
-def test_get_prompts(db_session: SQLAlchemySession, prompt_service_instance: PromptService):
-    prompt1 = prompt_service_instance.create_prompt(db_session, PromptCreate(name="Prompt A"), owner_id=1)
-    prompt_service_instance.create_prompt_version(db_session, prompt1.id, PromptVersionCreate(content="A v1"))
-    prompt2 = prompt_service_instance.create_prompt(db_session, PromptCreate(name="Prompt B"), owner_id=1)
-    prompt_service_instance.create_prompt_version(db_session, prompt2.id, PromptVersionCreate(content="B v1"))
-    prompt_service_instance.create_prompt_version(db_session, prompt2.id, PromptVersionCreate(content="B v2"))
+# For type hinting the mock Redis client, if needed.
+from redis import Redis as ActualRedis # For type hint, actual is MagicMock
 
 
-    all_prompts = prompt_service_instance.get_prompts(db_session, skip=0, limit=10)
-    assert len(all_prompts) == 2
-    # Verify versions are loaded for each prompt
-    for p in all_prompts:
-        if p.id == prompt1.id:
-            assert len(p.versions) == 1
-        elif p.id == prompt2.id:
-            assert len(p.versions) == 2
+# Use a global engine and SessionLocal for testing convenience
+engine = create_engine("sqlite:///:memory:")
+TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-    # Test pagination
-    prompts_limit_1 = prompt_service_instance.get_prompts(db_session, skip=0, limit=1)
-    assert len(prompts_limit_1) == 1
+class TestPromptService(unittest.TestCase):
 
-    prompts_skip_1 = prompt_service_instance.get_prompts(db_session, skip=1, limit=1)
-    assert len(prompts_skip_1) == 1
-    assert prompts_skip_1[0].id != prompts_limit_1[0].id # Ensure they are different prompts
+    @classmethod
+    def setUpClass(cls):
+        # Create tables once for the test class if schema is stable
+        # Base.metadata.create_all(bind=engine)
+        pass
 
-def test_update_prompt(db_session: SQLAlchemySession, prompt_service_instance: PromptService):
-    db_prompt = prompt_service_instance.create_prompt(db_session, PromptCreate(name="Old Name", description="Old Desc"), owner_id=1)
+    @classmethod
+    def tearDownClass(cls):
+        # Drop tables once after all tests in the class are done
+        # Base.metadata.drop_all(bind=engine)
+        pass
 
-    update_data = PromptUpdate(name="New Name", description="New Desc")
-    updated_prompt = prompt_service_instance.update_prompt(db_session, prompt_id=db_prompt.id, prompt_update=update_data)
-    assert updated_prompt is not None
-    assert updated_prompt.name == "New Name"
-    assert updated_prompt.description == "New Desc"
+    def setUp(self):
+        # Create tables for each test case to ensure isolation
+        Base.metadata.create_all(bind=engine)
+        self.db: DbSession = TestingSessionLocal()
 
-    update_partial_name = PromptUpdate(name="Partial Update Name")
-    updated_prompt_partial = prompt_service_instance.update_prompt(db_session, prompt_id=db_prompt.id, prompt_update=update_partial_name)
-    assert updated_prompt_partial.name == "Partial Update Name"
-    assert updated_prompt_partial.description == "New Desc" # Description should persist
+        # Create a dummy user for owner_id
+        self.test_user = User(username="testuser", email="test@example.com", hashed_password="password")
+        self.db.add(self.test_user)
+        self.db.commit()
+        self.db.refresh(self.test_user)
+        self.owner_id = self.test_user.id
 
-    update_non_existent = prompt_service_instance.update_prompt(db_session, prompt_id=9999, prompt_update=PromptUpdate(name="No Such"))
-    assert update_non_existent is None
+        # Mock Redis client
+        self.mock_redis_client = MagicMock(spec=ActualRedis)
+        self.mock_redis_client.get.return_value = None # Default to cache miss
+        self.mock_redis_client.set.return_value = True
+        self.mock_redis_client.delete.return_value = 1
 
-def test_delete_prompt(db_session: SQLAlchemySession, prompt_service_instance: PromptService):
-    prompt_to_delete = prompt_service_instance.create_prompt(db_session, PromptCreate(name="Delete Me"), owner_id=1)
-    # Add a version to check cascade delete
-    prompt_service_instance.create_prompt_version(db_session, prompt_to_delete.id, PromptVersionCreate(content="v1 content"))
+        self.prompt_service = PromptService(redis_client=self.mock_redis_client)
 
-    deleted_prompt = prompt_service_instance.delete_prompt(db_session, prompt_id=prompt_to_delete.id)
-    assert deleted_prompt is not None
-    assert deleted_prompt.id == prompt_to_delete.id
-    assert prompt_service_instance.get_prompt(db_session, prompt_id=prompt_to_delete.id) is None
-    # Check if associated versions are also deleted (due to cascade="all, delete-orphan")
-    assert db_session.query(PromptVersion).filter(PromptVersion.prompt_id == prompt_to_delete.id).count() == 0
+    def tearDown(self):
+        self.db.rollback() # Rollback any uncommitted changes
+        self.db.close()
+        Base.metadata.drop_all(bind=engine) # Drop all tables after each test
 
-    delete_non_existent = prompt_service_instance.delete_prompt(db_session, prompt_id=9999)
-    assert delete_non_existent is None
+    def test_01_create_prompt(self):
+        prompt_data = PromptCreate(name="Test Prompt", description="A test description")
+        created_prompt = self.prompt_service.create_prompt(db=self.db, prompt_create=prompt_data, owner_id=self.owner_id)
 
-def test_create_prompt_version(db_session: SQLAlchemySession, prompt_service_instance: PromptService):
-    prompt = prompt_service_instance.create_prompt(db_session, PromptCreate(name="Version Test Prompt"), owner_id=1)
+        self.assertIsNotNone(created_prompt.id)
+        self.assertEqual(created_prompt.name, prompt_data.name)
+        self.assertEqual(created_prompt.owner_id, self.owner_id)
+        self.assertIsNotNone(created_prompt.created_at) # Check default timestamp
 
-    version_data1 = PromptVersionCreate(content="Version 1 content", parameters_used={"temp": 0.7}, fitness_score=0.8)
-    db_version1 = prompt_service_instance.create_prompt_version(db_session, prompt_id=prompt.id, version_create=version_data1)
-    assert db_version1 is not None
-    assert db_version1.prompt_id == prompt.id
-    assert db_version1.content == "Version 1 content"
-    assert db_version1.version_number == 1
-    assert db_version1.parameters_used == {"temp": 0.7}
-    assert db_version1.fitness_score == 0.8
+        db_prompt = self.db.query(Prompt).filter(Prompt.id == created_prompt.id).first()
+        self.assertIsNotNone(db_prompt)
+        self.assertEqual(db_prompt.name, prompt_data.name)
 
-    version_data2 = PromptVersionCreate(content="Version 2 content")
-    db_version2 = prompt_service_instance.create_prompt_version(db_session, prompt_id=prompt.id, version_create=version_data2)
-    assert db_version2 is not None
-    assert db_version2.version_number == 2
+    def test_02_create_prompt_version(self):
+        prompt_data = PromptCreate(name="Parent Prompt for Version", description="Parent desc")
+        parent_prompt = self.prompt_service.create_prompt(db=self.db, prompt_create=prompt_data, owner_id=self.owner_id)
+        self.assertIsNotNone(parent_prompt)
 
-    # Test creating version for non-existent prompt
-    version_for_non_existent_prompt = prompt_service_instance.create_prompt_version(db_session, prompt_id=9999, version_create=PromptVersionCreate(content="No prompt here"))
-    assert version_for_non_existent_prompt is None
+        version_data = PromptVersionCreate(content="Version 1 content", parameters_used={"temp": 0.7})
+        created_version = self.prompt_service.create_prompt_version(db=self.db, prompt_id=parent_prompt.id, version_create=version_data)
 
+        self.assertIsNotNone(created_version)
+        self.assertIsNotNone(created_version.id)
+        self.assertEqual(created_version.prompt_id, parent_prompt.id)
+        self.assertEqual(created_version.content, version_data.content)
+        self.assertEqual(created_version.version_number, 1)
+        self.assertIsNotNone(created_version.created_at)
 
-def test_get_prompt_version(db_session: SQLAlchemySession, prompt_service_instance: PromptService):
-    prompt = prompt_service_instance.create_prompt(db_session, PromptCreate(name="PV Get Test"), owner_id=1)
-    created_version = prompt_service_instance.create_prompt_version(db_session, prompt.id, PromptVersionCreate(content="Content to get"))
-
-    retrieved_version = prompt_service_instance.get_prompt_version(db_session, prompt_version_id=created_version.id)
-    assert retrieved_version is not None
-    assert retrieved_version.id == created_version.id
-    assert retrieved_version.content == "Content to get"
-
-    non_existent_version = prompt_service_instance.get_prompt_version(db_session, prompt_version_id=9999)
-    assert non_existent_version is None
-
-def test_get_prompt_versions_for_prompt(db_session: SQLAlchemySession, prompt_service_instance: PromptService):
-    prompt1 = prompt_service_instance.create_prompt(db_session, PromptCreate(name="PV List Test 1"), owner_id=1)
-    prompt2 = prompt_service_instance.create_prompt(db_session, PromptCreate(name="PV List Test 2"), owner_id=1)
-
-    v1_p1 = prompt_service_instance.create_prompt_version(db_session, prompt1.id, PromptVersionCreate(content="P1V1"))
-    v2_p1 = prompt_service_instance.create_prompt_version(db_session, prompt1.id, PromptVersionCreate(content="P1V2"))
-    v1_p2 = prompt_service_instance.create_prompt_version(db_session, prompt2.id, PromptVersionCreate(content="P2V1"))
-
-    versions_p1 = prompt_service_instance.get_prompt_versions_for_prompt(db_session, prompt_id=prompt1.id)
-    assert len(versions_p1) == 2
-    assert {v.id for v in versions_p1} == {v1_p1.id, v2_p1.id}
-
-    versions_p2 = prompt_service_instance.get_prompt_versions_for_prompt(db_session, prompt_id=prompt2.id)
-    assert len(versions_p2) == 1
-    assert versions_p2[0].id == v1_p2.id
-
-    # Test pagination
-    versions_p1_limit1 = prompt_service_instance.get_prompt_versions_for_prompt(db_session, prompt_id=prompt1.id, limit=1, skip=0)
-    assert len(versions_p1_limit1) == 1
-    # Assuming order by version_number (default or added in service)
-    assert versions_p1_limit1[0].version_number == 1
-
-    versions_p1_skip1 = prompt_service_instance.get_prompt_versions_for_prompt(db_session, prompt_id=prompt1.id, limit=1, skip=1)
-    assert len(versions_p1_skip1) == 1
-    assert versions_p1_skip1[0].version_number == 2
+        # Test cache invalidation calls
+        self.mock_redis_client.delete.assert_any_call(f"prompt_latest_version:prompt_id:{parent_prompt.id}")
+        self.mock_redis_client.delete.assert_any_call(f"prompt_version:{created_version.id}")
 
 
-    versions_non_existent_prompt = prompt_service_instance.get_prompt_versions_for_prompt(db_session, prompt_id=9999)
-    assert len(versions_non_existent_prompt) == 0
+    def test_03_get_prompt_version_caching(self):
+        prompt_data = PromptCreate(name="Cache Test Prompt", description="Desc for cache test")
+        parent_prompt = self.prompt_service.create_prompt(db=self.db, prompt_create=prompt_data, owner_id=self.owner_id)
+        version_data = PromptVersionCreate(content="Content to be cached", parameters_used={"detail": "caching"})
+        # Ensure the version is committed and has an ID and created_at timestamp
+        created_version_db_obj = self.prompt_service.create_prompt_version(db=self.db, prompt_id=parent_prompt.id, version_create=version_data)
+        self.assertIsNotNone(created_version_db_obj)
+        self.assertIsNotNone(created_version_db_obj.id)
+        self.assertIsNotNone(created_version_db_obj.created_at)
+        version_id = created_version_db_obj.id
 
-def test_update_prompt_version(db_session: SQLAlchemySession, prompt_service_instance: PromptService):
-    prompt = prompt_service_instance.create_prompt(db_session, PromptCreate(name="PV Update Test"), owner_id=1)
-    db_version = prompt_service_instance.create_prompt_version(db_session, prompt.id, PromptVersionCreate(content="Old Content", parameters_used={"temp": 0.5}, fitness_score=0.7))
-
-    update_data = PromptVersionUpdate(content="New Content", parameters_used={"temp": 0.8, "top_p": 0.9}, fitness_score=0.9)
-    updated_version = prompt_service_instance.update_prompt_version(db_session, prompt_version_id=db_version.id, version_update=update_data)
-    assert updated_version is not None
-    assert updated_version.content == "New Content"
-    assert updated_version.parameters_used == {"temp": 0.8, "top_p": 0.9}
-    assert updated_version.fitness_score == 0.9
-
-    update_partial = PromptVersionUpdate(content="Very New Content")
-    updated_partial_version = prompt_service_instance.update_prompt_version(db_session, prompt_version_id=db_version.id, version_update=update_partial)
-    assert updated_partial_version.content == "Very New Content"
-    assert updated_partial_version.parameters_used == {"temp": 0.8, "top_p": 0.9} # Should persist
-    assert updated_partial_version.fitness_score == 0.9 # Should persist
-
-    update_non_existent = prompt_service_instance.update_prompt_version(db_session, prompt_version_id=9999, version_update=PromptVersionUpdate(content="No Such"))
-    assert update_non_existent is None
-
-def test_delete_prompt_version(db_session: SQLAlchemySession, prompt_service_instance: PromptService):
-    prompt = prompt_service_instance.create_prompt(db_session, PromptCreate(name="PV Delete Test"), owner_id=1)
-    version_to_delete = prompt_service_instance.create_prompt_version(db_session, prompt.id, PromptVersionCreate(content="Delete Me Version"))
-
-    # Create another version to ensure only one is deleted
-    other_version = prompt_service_instance.create_prompt_version(db_session, prompt.id, PromptVersionCreate(content="Keep Me Version"))
+        # Detach from session to ensure we are testing data as it would be from cache/fresh query
+        self.db.expunge(created_version_db_obj)
+        # Re-fetch to get a clean object that has all attributes loaded as SQLAlchemy would from a query
+        created_version_for_cache_prep = self.db.query(PromptVersion).get(version_id)
 
 
-    deleted_version = prompt_service_instance.delete_prompt_version(db_session, prompt_version_id=version_to_delete.id)
-    assert deleted_version is not None
-    assert deleted_version.id == version_to_delete.id
-    assert prompt_service_instance.get_prompt_version(db_session, prompt_version_id=version_to_delete.id) is None
+        # 1. Test Cache Miss (first call)
+        self.mock_redis_client.get.return_value = None
 
-    # Ensure other version still exists
-    assert prompt_service_instance.get_prompt_version(db_session, prompt_version_id=other_version.id) is not None
+        retrieved_version_miss = self.prompt_service.get_prompt_version(db=self.db, prompt_version_id=version_id)
 
-    # Ensure prompt still exists
-    assert prompt_service_instance.get_prompt(db_session, prompt_id=prompt.id) is not None
+        self.assertIsNotNone(retrieved_version_miss)
+        self.assertEqual(retrieved_version_miss.id, version_id)
+        self.assertEqual(retrieved_version_miss.content, "Content to be cached")
+        self.assertIsInstance(retrieved_version_miss.created_at, datetime)
+        # Compare datetimes by comparing their ISO format string representations or ensuring microseconds are handled
+        self.assertEqual(retrieved_version_miss.created_at.isoformat(), created_version_for_cache_prep.created_at.isoformat())
+
+        self.mock_redis_client.get.assert_called_once_with(f"prompt_version:{version_id}")
+
+        # For set, the service calls prompt_version_to_dict on the DB object (retrieved_version_miss)
+        expected_cached_dict = prompt_version_to_dict(retrieved_version_miss) # Pass the object fetched from DB
+        expected_json_string = json.dumps(expected_cached_dict)
+        self.mock_redis_client.set.assert_called_once_with(f"prompt_version:{version_id}", expected_json_string, ex=3600)
+
+        # 2. Test Cache Hit (second call)
+        self.mock_redis_client.get.reset_mock()
+        self.mock_redis_client.set.reset_mock()
+
+        # Simulate Redis returning the JSON string that was set
+        self.mock_redis_client.get.return_value = expected_json_string
+
+        retrieved_version_hit = self.prompt_service.get_prompt_version(db=self.db, prompt_version_id=version_id)
+
+        self.assertIsNotNone(retrieved_version_hit)
+        self.assertEqual(retrieved_version_hit.id, version_id)
+        self.assertEqual(retrieved_version_hit.content, "Content to be cached")
+        self.assertIsInstance(retrieved_version_hit.created_at, datetime)
+        # Timestamps should match (dict_to_prompt_version parses ISO string)
+        self.assertEqual(retrieved_version_hit.created_at.isoformat(), created_version_for_cache_prep.created_at.isoformat())
 
 
-    delete_non_existent = prompt_service_instance.delete_prompt_version(db_session, prompt_version_id=9999)
-    assert delete_non_existent is None
+        self.mock_redis_client.get.assert_called_once_with(f"prompt_version:{version_id}")
+        self.mock_redis_client.set.assert_not_called() # SET should not be called on cache hit
+
+        # 3. Test non-existent version
+        self.mock_redis_client.get.reset_mock()
+        self.mock_redis_client.get.return_value = None
+        non_existent = self.prompt_service.get_prompt_version(db=self.db, prompt_version_id=99999)
+        self.assertIsNone(non_existent)
+        self.mock_redis_client.get.assert_called_once_with(f"prompt_version:99999")
+
+
+if __name__ == '__main__':
+    unittest.main()

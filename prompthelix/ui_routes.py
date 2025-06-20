@@ -87,6 +87,13 @@ def list_available_agents() -> List[dict[str, str]]: # Updated type hint
                 print(f"Error processing module {module_name}: {e}") # Proper logging recommended
     return sorted(agents_info, key=lambda x: x['id']) # Return unique (by id), sorted list of dicts
 
+
+@router.get("/ui/", response_class=HTMLResponse, name="ui_index")
+@router.get("/ui/index", response_class=HTMLResponse, name="ui_index_alt") # Optional: alternative path
+async def ui_index_page(request: Request):
+    """Serves the UI index page."""
+    return templates.TemplateResponse("index.html", {"request": request})
+
 @router.get("/ui/prompts", name="list_prompts_ui")
 async def list_prompts_ui(request: Request, db: Session = Depends(get_db), new_version_id: Optional[int] = Query(None)):
     db_prompts = crud.get_prompts(db)

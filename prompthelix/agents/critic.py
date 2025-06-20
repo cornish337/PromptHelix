@@ -25,6 +25,7 @@ class PromptCriticAgent(BaseAgent):
                 critique rules. Defaults to "knowledge/best_practices_rules.json".
         """
         super().__init__(agent_id=self.agent_id, message_bus=message_bus)
+        self.logger = logger  # Expose module logger as instance attribute for tests
         self.knowledge_file_path = knowledge_file_path
         self.rules = []  # Renamed from self.critique_rules
         self.load_knowledge()

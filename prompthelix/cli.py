@@ -10,7 +10,13 @@ import sys
 import os
 import unittest
 import logging # Added for logging configuration
-import openai # Added for openai.RateLimitError
+try:
+    import openai  # Used for catching openai.RateLimitError during GA runs
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
+    class _DummyRateLimitError(Exception):
+        pass
+
+    openai = type("openai", (), {"RateLimitError": _DummyRateLimitError})()
 import json # For parsing settings overrides
 
 logger = logging.getLogger(__name__)
@@ -54,6 +60,8 @@ def main_cli():
     run_parser.add_argument("--parallel-workers", type=int, default=None, help="Number of parallel workers for fitness evaluation. 1 for serial execution. Default: None (uses os.cpu_count() or similar).")
     run_parser.add_argument("--population-size", type=int, help="Population size for the GA.")
     run_parser.add_argument("--elitism-count", type=int, help="Elitism count for the GA.")
+    run_parser.add_argument("--population-path", type=str,
+                            help="File path to load/save GA population state.")
     run_parser.add_argument("--output-file", type=str, help="File path to save the best prompt.")
     run_parser.add_argument("--agent-settings", type=str, help="JSON string or file path to override agent configurations.")
     run_parser.add_argument("--llm-settings", type=str, help="JSON string or file path to override LLM utility settings.")
@@ -213,6 +221,7 @@ def main_cli():
                     initial_prompt_str=initial_prompt_str,
                     agent_settings_override=agent_settings_override,
                     llm_settings_override=llm_settings_override,
+                    population_path=args.population_path,
                     parallel_workers=args.parallel_workers, # Pass the new argument
                     return_best=True
                 )

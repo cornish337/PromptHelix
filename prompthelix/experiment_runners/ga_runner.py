@@ -37,13 +37,15 @@ class GeneticAlgorithmRunner(BaseExperimentRunner):
     Runs a genetic algorithm experiment for a specified number of generations.
     """
 
-    def __init__(self, population_manager: PopulationManager, num_generations: int):
+    def __init__(self, population_manager: PopulationManager, num_generations: int, save_frequency: int = 0):
         """
         Initializes the GeneticAlgorithmRunner.
 
         Args:
             population_manager: A pre-configured PopulationManager instance.
             num_generations: The total number of generations to run.
+            save_frequency: How often (in generations) to save the population.
+                            0 means disabled.
         """
         if not isinstance(population_manager, PopulationManager):
             raise TypeError("population_manager must be an instance of PopulationManager.")
@@ -52,9 +54,11 @@ class GeneticAlgorithmRunner(BaseExperimentRunner):
 
         self.population_manager = population_manager
         self.num_generations = num_generations
+        self.save_frequency = save_frequency
         self.current_generation = 0 # Track current generation internally
         logger.info(
             f"GeneticAlgorithmRunner initialized for {num_generations} generations "
+            f"with save frequency {save_frequency}, "
             f"with PopulationManager (ID: {id(population_manager)})"
         )
         ph_globals.active_ga_runner = self
@@ -116,6 +120,18 @@ class GeneticAlgorithmRunner(BaseExperimentRunner):
                     success_criteria=success_criteria,
                     target_style=target_style
                 )
+
+                # Periodic saving of the population
+                if self.save_frequency > 0 and \
+                   self.population_manager.population_path and \
+                   self.population_manager.generation_number > 0 and \
+                   self.population_manager.generation_number % self.save_frequency == 0:
+                    try:
+                        self.population_manager.save_population(self.population_manager.population_path)
+                        logger.info(f"Periodically saved population at generation {self.population_manager.generation_number} to {self.population_manager.population_path}")
+                    except Exception as e:
+                        logger.error(f"Error during periodic save of population at generation {self.population_manager.generation_number}: {e}", exc_info=True)
+
 
                 # If evolve_population itself detected a stop, it would set status to STOPPED
                 if self.population_manager.status == "STOPPED":

@@ -10,6 +10,7 @@
 <body>
     <nav>
         <ul>
+            <li><a href="{{ url_for('ui_index') }}">Home</a></li>
             <li><a href="{{ url_for('list_prompts_ui') }}">All Prompts</a></li>
             <li><a href="{{ url_for('create_prompt_ui_form') }}">Create New Prompt</a></li>
             <li><a href="{{ url_for('run_experiment_ui_form') }}">Run New Experiment</a></li>

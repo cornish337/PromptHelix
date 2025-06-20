@@ -53,6 +53,14 @@ The application requires certain environment variables to be set, especially for
 *   `GOOGLE_API_KEY`: Your API key for Google AI services.
 *   `DATABASE_URL`: The connection string for your database (e.g., `postgresql://user:password@host:port/database` for PostgreSQL, or `sqlite:///./prompthelix.db` for SQLite).
 
+**Agent Overrides:**
+
+Environment variables can also override default agent settings. Use the pattern `<AGENTNAME>_<SETTING>` where `AGENTNAME` is the agent class name without the `Agent` suffix. Example overrides include:
+
+* `PROMPTARCHITECT_DEFAULT_LLM_MODEL`
+* `METALEARNER_PERSIST_KNOWLEDGE_ON_UPDATE`
+* `RESULTSEVALUATOR_FITNESS_SCORE_WEIGHTS` (as a JSON string)
+
 **Setting Environment Variables:**
 
 You can set these variables in a few ways:
@@ -88,7 +96,7 @@ You can set these variables in a few ways:
 1.  **Clone the repository:**
     ```bash
     git clone <repository_url> # Replace <repository_url> with the actual URL later if known, otherwise leave as placeholder
-    cd prompthelix
+    cd PromptHelix
     ```
 2.  **Create and activate a virtual environment:**
     ```bash
@@ -104,8 +112,11 @@ You can set these variables in a few ways:
     ```bash
     pip install -r requirements.txt
     ```
+    `setup.py` reads this same file to populate `install_requires`, keeping
+    dependency definitions in a single place and reducing drift.
 4.  **Initialize the database:**
     If using SQLite (the default for development), the database (`prompthelix.db`) will be automatically created and initialized on the first run via `init_db()` in `main.py`. For production, see the "Deployment" section for database setup and migrations.
+    This SQLite database file is not included in the repository and will be created automatically when you run the application.
 5.  **Run the Web UI (Development Server):**
     ```bash
     uvicorn prompthelix.main:app --reload
@@ -223,7 +234,16 @@ Execute the following command from the root of the project:
 python -m prompthelix.cli run ga [options]
 ```
 
-This command runs the Genetic Algorithm. It supports various options to customize the GA run, including providing an initial seed prompt, setting GA parameters (generations, population size), overriding agent and LLM configurations, and specifying an output file for the best prompt.
+This command runs the Genetic Algorithm. It supports various options to customize the GA run, including providing an initial seed prompt, setting GA parameters (generations, population size), overriding agent and LLM configurations, specifying an output file for the best prompt, and defining where the population should be persisted.
+
+* `--parallel-workers <integer>`: Number of parallel workers used for fitness evaluation. Set to `1` for serial execution. By default, all available CPU cores are used.
+
+Example:
+```bash
+python -m prompthelix.cli run ga --parallel-workers 4
+```
+
+If you pass a value via the `--prompt` option, the text you supply becomes the first chromosome of the initial generation. This allows you to start the GA from a known prompt rather than generating all prompts randomly.
 
 For a detailed list of all `run ga` options and usage examples, please refer to the [CLI Documentation in `prompthelix/docs/README.md`](prompthelix/docs/README.md#run-command).
 
@@ -248,11 +268,14 @@ PromptHelix also provides an API endpoint to trigger the genetic algorithm.
     ```
 
 2.  **Access the GA endpoint**:
-    Once the server is running, you can trigger the genetic algorithm by sending a GET request to the `/api/experiments/run-ga` endpoint. For example, using `curl`:
+
+    Once the server is running, trigger the genetic algorithm by sending a **POST** request to the `/api/experiments/run-ga` endpoint. Example command:
     ```bash
-    curl http://127.0.0.1:8000/api/experiments/run-ga
+    curl -X POST http://127.0.0.1:8000/api/experiments/run-ga \
+         -H "Content-Type: application/json" \
+         -d '{"task_description":"Example","keywords":["demo"],"execution_mode":"TEST"}'
     ```
-    Or you can open `http://127.0.0.1:8000/api/experiments/run-ga` in your web browser.
+
 
 3.  **Try the Prompt Manager UI**:
     The Prompt Manager UI, for adding and viewing prompts, can be accessed as described in the "Setup and Run the Web UI" section.

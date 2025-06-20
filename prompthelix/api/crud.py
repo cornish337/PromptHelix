@@ -18,9 +18,10 @@ from prompthelix import schemas # This will make all schemas available under sch
 # Import Services
 from prompthelix.services import user_service, performance_service # user and perf services might not be used here yet
 from prompthelix.services.prompt_service import PromptService
+from prompthelix.redis_client import redis_client # Added
 
 # Instantiate services that are used
-prompt_service_instance = PromptService()
+prompt_service_instance = PromptService(redis_client=redis_client) # Updated
 
 # --- Prompt CRUD Functions (delegating to PromptService) ---
 
