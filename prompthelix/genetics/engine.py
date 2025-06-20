@@ -818,19 +818,19 @@ class PopulationManager:
             agents_used (list[str] | None, optional): A list of agent IDs used in the process.
                                                      Defaults to None, resulting in an empty list.
         """
-        if not isinstance(genetic_operators, GeneticOperators):
+        # Allow duck-typed objects for easier testing/mocking
+        required_go_methods = ("selection", "crossover", "mutate")
+        if not all(hasattr(genetic_operators, m) for m in required_go_methods):
             raise TypeError(
-                "genetic_operators must be an instance of GeneticOperators."
+                "genetic_operators must implement selection, crossover and mutate"
             )
-        if not isinstance(fitness_evaluator, FitnessEvaluator):
-            raise TypeError(
-                "fitness_evaluator must be an instance of FitnessEvaluator."
-            )
-        from prompthelix.agents.architect import PromptArchitectAgent
 
-        if not isinstance(prompt_architect_agent, PromptArchitectAgent):
+        if not hasattr(fitness_evaluator, "evaluate"):
+            raise TypeError("fitness_evaluator must implement an evaluate method")
+
+        if not hasattr(prompt_architect_agent, "process_request"):
             raise TypeError(
-                "prompt_architect_agent must be an instance of PromptArchitectAgent."
+                "prompt_architect_agent must implement a process_request method"
             )
         if population_size <= 0:
             raise ValueError("Population size must be positive.")
