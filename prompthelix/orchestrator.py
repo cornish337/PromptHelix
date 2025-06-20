@@ -150,7 +150,8 @@ def main_ga_loop(
 
     fitness_eval = FitnessEvaluator(
         results_evaluator_agent=results_evaluator,
-        execution_mode=execution_mode
+        execution_mode=execution_mode,
+        llm_settings=current_llm_settings,
     )
     # TODO: FitnessEvaluator needs to be updated to accept and use llm_settings.
 
@@ -162,6 +163,7 @@ def main_ga_loop(
         elitism_count=elitism_count,
         parallel_workers=parallel_workers,
         population_path=actual_population_path, # Use determined path
+        initial_prompt_str=initial_prompt_str,
         message_bus=message_bus, # Added
         agents_used=agent_names # Pass the collected agent names/IDs
         # TODO: Pass agent_settings_override or specific agent configs if PopulationManager
