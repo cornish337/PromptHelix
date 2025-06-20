@@ -112,6 +112,8 @@ You can set these variables in a few ways:
     ```bash
     pip install -r requirements.txt
     ```
+    `setup.py` reads this same file to populate `install_requires`, keeping
+    dependency definitions in a single place and reducing drift.
 4.  **Initialize the database:**
     If using SQLite (the default for development), the database (`prompthelix.db`) will be automatically created and initialized on the first run via `init_db()` in `main.py`. For production, see the "Deployment" section for database setup and migrations.
 5.  **Run the Web UI (Development Server):**
