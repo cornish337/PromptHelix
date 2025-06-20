@@ -240,6 +240,8 @@ Example:
 python -m prompthelix.cli run ga --parallel-workers 4
 ```
 
+If you pass a value via the `--prompt` option, the text you supply becomes the first chromosome of the initial generation. This allows you to start the GA from a known prompt rather than generating all prompts randomly.
+
 For a detailed list of all `run ga` options and usage examples, please refer to the [CLI Documentation in `prompthelix/docs/README.md`](prompthelix/docs/README.md#run-command).
 
 ### Checking LLM Connectivity
