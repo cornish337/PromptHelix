@@ -96,7 +96,7 @@ You can set these variables in a few ways:
 1.  **Clone the repository:**
     ```bash
     git clone <repository_url> # Replace <repository_url> with the actual URL later if known, otherwise leave as placeholder
-    cd prompthelix
+    cd PromptHelix
     ```
 2.  **Create and activate a virtual environment:**
     ```bash
@@ -112,8 +112,11 @@ You can set these variables in a few ways:
     ```bash
     pip install -r requirements.txt
     ```
+    `setup.py` reads this same file to populate `install_requires`, keeping
+    dependency definitions in a single place and reducing drift.
 4.  **Initialize the database:**
     If using SQLite (the default for development), the database (`prompthelix.db`) will be automatically created and initialized on the first run via `init_db()` in `main.py`. For production, see the "Deployment" section for database setup and migrations.
+    This SQLite database file is not included in the repository and will be created automatically when you run the application.
 5.  **Run the Web UI (Development Server):**
     ```bash
     uvicorn prompthelix.main:app --reload
