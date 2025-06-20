@@ -2,42 +2,67 @@ import logging
 import asyncio
 import inspect
 import json
-from datetime import datetime # Added
-from typing import TYPE_CHECKING, Optional, Dict, Set, Any # Added TYPE_CHECKING, Optional, Dict, Set, Any
+from datetime import datetime  # Added
+from typing import (
+    TYPE_CHECKING,
+    Optional,
+    Dict,
+    Set,
+    Any,
+)  # Added TYPE_CHECKING, Optional, Dict, Set, Any
 from sqlalchemy.orm import Session as DbSession
 from prompthelix.models import ConversationLog
 
-if TYPE_CHECKING: # Added
-    from prompthelix.websocket_manager import ConnectionManager # For type hinting
+if TYPE_CHECKING:  # Added
+    from prompthelix.websocket_manager import ConnectionManager  # For type hinting
 
 # Configure basic logging for the message bus
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
+
 
 class MessageBus:
     """
     A simple message bus for inter-agent communication.
     """
-    def __init__(self, db_session_factory=None, connection_manager: Optional['ConnectionManager'] = None): # Modified
-        self._registry: Dict[str, Any] = {} # Added type hint
-        self._subscriptions: Dict[str, Set[str]] = {} # Added type hint
-        self._queue: asyncio.Queue = asyncio.Queue() # Added type hint
-        self._task: Optional[asyncio.Task] = None # Added type hint
-        self._running: bool = False # Added type hint
+
+    def __init__(
+        self,
+        db_session_factory=None,
+        connection_manager: Optional["ConnectionManager"] = None,
+    ):  # Modified
+        self._registry: Dict[str, Any] = {}  # Added type hint
+        self._subscriptions: Dict[str, Set[str]] = {}  # Added type hint
+        self._queue: asyncio.Queue = asyncio.Queue()  # Added type hint
+        self._task: Optional[asyncio.Task] = None  # Added type hint
+        self._running: bool = False  # Added type hint
         self.db_session_factory = db_session_factory
-        self.connection_manager = connection_manager # Added
+        self.connection_manager = connection_manager  # Added
         logger.info("MessageBus initialized.")
 
-    async def _broadcast_log_async(self, log_data: dict): # Added method
+    async def _broadcast_log_async(self, log_data: dict):  # Added method
         """Helper to broadcast log data asynchronously via WebSocket."""
         if self.connection_manager:
             try:
-                await self.connection_manager.broadcast_json({"type": "new_conversation_log", "data": log_data})
+                await self.connection_manager.broadcast_json(
+                    {"type": "new_conversation_log", "data": log_data}
+                )
                 logger.debug("Log data broadcasted via WebSocket.")
             except Exception as e:
-                logger.error(f"Error broadcasting log data via WebSocket: {e}", exc_info=True)
+                logger.error(
+                    f"Error broadcasting log data via WebSocket: {e}", exc_info=True
+                )
 
-    def _log_message_to_db(self, session_id: str, sender_id: str, recipient_id: Optional[str], message_type: str, content_payload: dict): # recipient_id can be Optional
+    def _log_message_to_db(
+        self,
+        session_id: str,
+        sender_id: str,
+        recipient_id: Optional[str],
+        message_type: str,
+        content_payload: dict,
+    ):  # recipient_id can be Optional
         db_logged_successfully = False
         # Safely serialize content payload for storage/broadcast
         try:
@@ -90,9 +115,16 @@ class MessageBus:
             }
             try:
                 loop = asyncio.get_running_loop()
-                loop.create_task(self._broadcast_log_async(log_data))
+                if loop.is_running():
+                    loop.create_task(self._broadcast_log_async(log_data))
+                else:
+                    loop.run_until_complete(self._broadcast_log_async(log_data))
             except RuntimeError:
-                asyncio.run(self._broadcast_log_async(log_data))
+                loop = asyncio.new_event_loop()
+                try:
+                    loop.run_until_complete(self._broadcast_log_async(log_data))
+                finally:
+                    loop.close()
 
     def register(self, agent_id: str, agent_instance):
         """Registers an agent instance with the message bus.
@@ -117,7 +149,9 @@ class MessageBus:
             del self._registry[agent_id]
             logger.info(f"Agent '{agent_id}' unregistered from the message bus.")
         else:
-            logger.warning(f"Attempted to unregister agent ID '{agent_id}', which was not found.")
+            logger.warning(
+                f"Attempted to unregister agent ID '{agent_id}', which was not found."
+            )
 
     def subscribe(self, agent_id: str, message_type: str):
         """Subscribes an agent to a specific message type for broadcast."""
@@ -131,7 +165,9 @@ class MessageBus:
         """Removes an agent subscription for a message type."""
         if message_type in self._subscriptions:
             self._subscriptions[message_type].discard(agent_id)
-            logger.info(f"Agent '{agent_id}' unsubscribed from '{message_type}' messages.")
+            logger.info(
+                f"Agent '{agent_id}' unsubscribed from '{message_type}' messages."
+            )
 
     def start(self):
         """Starts the async queue processing loop if not already running."""
@@ -151,19 +187,21 @@ class MessageBus:
 
     async def _deliver(self, agent, message):
         """Internal helper to deliver a message to an agent, awaiting if coroutine."""
-        if hasattr(agent, 'receive_message') and callable(agent.receive_message):
+        if hasattr(agent, "receive_message") and callable(agent.receive_message):
             if inspect.iscoroutinefunction(agent.receive_message):
                 await agent.receive_message(message)
             else:
                 agent.receive_message(message)
         else:
-            logger.error(f"Agent '{getattr(agent, 'agent_id', 'unknown')}' lacks a callable 'receive_message' method.")
+            logger.error(
+                f"Agent '{getattr(agent, 'agent_id', 'unknown')}' lacks a callable 'receive_message' method."
+            )
 
     async def _process_queue(self):
         """Background task that processes broadcast messages."""
         while self._running:
             message = await self._queue.get()
-            msg_type = message.get('message_type')
+            msg_type = message.get("message_type")
             recipients = self._subscriptions.get(msg_type, set()).copy()
             for agent_id in recipients:
                 agent = self._registry.get(agent_id)
@@ -171,9 +209,14 @@ class MessageBus:
                     try:
                         await self._deliver(agent, message)
                     except Exception as e:
-                        logger.error(f"Error delivering broadcast to agent '{agent_id}': {e}", exc_info=True)
+                        logger.error(
+                            f"Error delivering broadcast to agent '{agent_id}': {e}",
+                            exc_info=True,
+                        )
                 else:
-                    logger.warning(f"Subscribed agent '{agent_id}' not registered. Skipping.")
+                    logger.warning(
+                        f"Subscribed agent '{agent_id}' not registered. Skipping."
+                    )
 
     def dispatch_message(self, message: dict):
         """
@@ -188,97 +231,123 @@ class MessageBus:
         Args:
             message (dict): The message to dispatch.
         """
-        if not all(key in message for key in ['sender_id', 'recipient_id', 'message_type', 'payload']):
-            logger.error(f"Invalid message structure: {message}. Missing required keys.")
-            return {"status": "error", "error": "Invalid message structure, missing keys."}
+        if not all(
+            key in message
+            for key in ["sender_id", "recipient_id", "message_type", "payload"]
+        ):
+            logger.error(
+                f"Invalid message structure: {message}. Missing required keys."
+            )
+            return {
+                "status": "error",
+                "error": "Invalid message structure, missing keys.",
+            }
 
-        recipient_id = message.get('recipient_id')
-        sender_id = message.get('sender_id')
-        message_type = message.get('message_type')
+        recipient_id = message.get("recipient_id")
+        sender_id = message.get("sender_id")
+        message_type = message.get("message_type")
         # Ensure recipient_id is a string, even if it's None from the message, for logging consistency.
         # However, _log_message_to_db now accepts Optional[str] for recipient_id.
         # So direct pass-through is fine.
 
-        logger.info(f"Attempting to dispatch message of type '{message_type}' from '{sender_id}' to '{recipient_id}'.")
+        logger.info(
+            f"Attempting to dispatch message of type '{message_type}' from '{sender_id}' to '{recipient_id}'."
+        )
 
         recipient_agent = self._registry.get(recipient_id)
         response = None
 
         try:
             if recipient_agent:
-                if hasattr(recipient_agent, 'receive_message') and callable(recipient_agent.receive_message):
+                if hasattr(recipient_agent, "receive_message") and callable(
+                    recipient_agent.receive_message
+                ):
                     response = recipient_agent.receive_message(message)
-                    logger.info(f"Message dispatched and received by '{recipient_id}'. Agent response: {response}")
+                    logger.info(
+                        f"Message dispatched and received by '{recipient_id}'. Agent response: {response}"
+                    )
                 else:
                     error_msg = f"Recipient agent '{recipient_id}' does not have a callable 'receive_message' method."
                     logger.error(error_msg)
                     response = {"status": "error", "error": error_msg}
             else:
                 error_msg = f"Recipient agent '{recipient_id}' not found."
-                logger.warning(f"Recipient agent '{recipient_id}' not found in registry. Message from '{sender_id}' of type '{message_type}' could not be delivered.")
+                logger.warning(
+                    f"Recipient agent '{recipient_id}' not found in registry. Message from '{sender_id}' of type '{message_type}' could not be delivered."
+                )
                 response = {"status": "error", "error": error_msg}
         except Exception as e:
             error_msg = f"Error delivering message to agent '{recipient_id}': {str(e)}"
-            logger.error(f"Error delivering message to agent '{recipient_id}': {e}", exc_info=True)
+            logger.error(
+                f"Error delivering message to agent '{recipient_id}': {e}",
+                exc_info=True,
+            )
             response = {"status": "error", "error": error_msg}
         finally:
             # Log the message interaction
-            payload_data = message.get('payload', {})
-            session_id_val = payload_data.get('session_id')
+            payload_data = message.get("payload", {})
+            session_id_val = payload_data.get("session_id")
 
             if isinstance(session_id_val, (str, int, float)):
                 session_id_str = str(session_id_val)
             elif session_id_val is None:
-                session_id_str = 'unknown_session_dispatch_none' # Specific placeholder
-            else: # For complex types like dicts or lists
-                session_id_str = 'unknown_session_dispatch_complex_type' # Ensure this aligns with expectations
+                session_id_str = "unknown_session_dispatch_none"  # Specific placeholder
+            else:  # For complex types like dicts or lists
+                session_id_str = "unknown_session_dispatch_complex_type"  # Ensure this aligns with expectations
 
             # recipient_id for logging can be None if it's a broadcast or system message not targeting a specific agent directly in this context
             # However, dispatch_message implies a specific recipient. If recipient_id is None here, it's unusual.
             # For now, we pass recipient_id as is.
             self._log_message_to_db(
-                session_id=session_id_str, # This needs to be robust
+                session_id=session_id_str,  # This needs to be robust
                 sender_id=sender_id,
                 recipient_id=recipient_id,
                 message_type=message_type,
-                content_payload=payload_data # Log the original payload
+                content_payload=payload_data,  # Log the original payload
             )
         return response
 
-    async def broadcast_message(self, message_type: str, payload: dict, sender_id: str = "system"):
+    async def broadcast_message(
+        self, message_type: str, payload: dict, sender_id: str = "system"
+    ):
         """Places a broadcast message onto the internal queue and logs it."""
         message = {
             "sender_id": sender_id,
-            "recipient_id": None, # Broadcasts don't have a single recipient at this stage
+            "recipient_id": None,  # Broadcasts don't have a single recipient at this stage
             "message_type": message_type,
             "payload": payload,
         }
         await self._queue.put(message)
-        self.start() # Ensure the queue processor is running
+        self.start()  # Ensure the queue processor is running
 
         # Log the broadcast attempt
-        session_id_val = payload.get('session_id')
-        if isinstance(session_id_val, (str, int, float)): # Ensure session_id is a simple type or correctly stringified
+        session_id_val = payload.get("session_id")
+        if isinstance(
+            session_id_val, (str, int, float)
+        ):  # Ensure session_id is a simple type or correctly stringified
             session_id_str = str(session_id_val)
         elif session_id_val is None:
-            session_id_str = 'unknown_broadcast_session_none' # Specific placeholder
-        else: # For complex types
-            session_id_str = 'unknown_broadcast_session_complex_type' # Ensure this aligns
+            session_id_str = "unknown_broadcast_session_none"  # Specific placeholder
+        else:  # For complex types
+            session_id_str = (
+                "unknown_broadcast_session_complex_type"  # Ensure this aligns
+            )
 
         self._log_message_to_db(
-            session_id=session_id_str, # This needs to be robust
+            session_id=session_id_str,  # This needs to be robust
             sender_id=sender_id,
-            recipient_id="BROADCAST", # Explicitly mark broadcast recipient for logs
+            recipient_id="BROADCAST",  # Explicitly mark broadcast recipient for logs
             message_type=message_type,
-            content_payload=payload
+            content_payload=payload,
         )
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     # Example Usage (simple test within the file)
     class MockAgent:
         def __init__(self, agent_id, message_bus=None):
             self.agent_id = agent_id
-            self.message_bus = message_bus # Agents should have a reference to the bus to send messages
+            self.message_bus = message_bus  # Agents should have a reference to the bus to send messages
 
         def send_message(self, recipient_id, message_type, payload):
             if self.message_bus:
@@ -286,14 +355,18 @@ if __name__ == '__main__':
                     "sender_id": self.agent_id,
                     "recipient_id": recipient_id,
                     "message_type": message_type,
-                    "payload": payload
+                    "payload": payload,
                 }
                 self.message_bus.dispatch_message(msg)
             else:
-                print(f"{self.agent_id}: Message bus not available. Cannot send message.")
+                print(
+                    f"{self.agent_id}: Message bus not available. Cannot send message."
+                )
 
         def receive_message(self, message: dict):
-            logger.info(f"Agent '{self.agent_id}' received message: {message['message_type']} from '{message['sender_id']}' with payload: {message['payload']}")
+            logger.info(
+                f"Agent '{self.agent_id}' received message: {message['message_type']} from '{message['sender_id']}' with payload: {message['payload']}"
+            )
 
     # Test
     bus = MessageBus()
@@ -304,19 +377,33 @@ if __name__ == '__main__':
     bus.register(agent_B.agent_id, agent_B)
 
     # Agent A sends a message to Agent B
-    agent_A.send_message(recipient_id="AgentB", message_type="test_ping", payload={"data": "Hello from A"})
+    agent_A.send_message(
+        recipient_id="AgentB",
+        message_type="test_ping",
+        payload={"data": "Hello from A"},
+    )
 
     # Agent B sends a message to a non-existent agent
-    agent_B.send_message(recipient_id="AgentC", message_type="test_echo", payload={"data": "Hello from B to C"})
+    agent_B.send_message(
+        recipient_id="AgentC",
+        message_type="test_echo",
+        payload={"data": "Hello from B to C"},
+    )
 
     # Test unregister
     bus.unregister("AgentA")
-    agent_B.send_message(recipient_id="AgentA", message_type="farewell", payload={"data": "Goodbye from B"})
+    agent_B.send_message(
+        recipient_id="AgentA",
+        message_type="farewell",
+        payload={"data": "Goodbye from B"},
+    )
 
     # Broadcast demonstration
     async def demo_broadcast():
         bus.subscribe(agent_B.agent_id, "broadcast_test")
-        await bus.broadcast_message("broadcast_test", {"info": "Hello subscribers"}, sender_id="AgentA")
+        await bus.broadcast_message(
+            "broadcast_test", {"info": "Hello subscribers"}, sender_id="AgentA"
+        )
         await asyncio.sleep(0.1)
         await bus.stop()
 
