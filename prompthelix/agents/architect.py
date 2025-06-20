@@ -155,37 +155,27 @@ class PromptArchitectAgent(BaseAgent):
         print(f"{self.agent_id} - Parsing requirements using LLM: Task='{task_desc}', Keywords='{keywords}', Constraints='{constraints}'")
 
         prompt = f"""
-        Parse the following task requirements into a structured format.
+        Parse the following task requirements into JSON with keys 'task_description', 'keywords', and 'constraints'.
         Task Description: "{task_desc}"
         Keywords: {keywords}
         Constraints: {constraints}
 
-        Output a JSON-like structure with keys: 'task_description', 'parsed_keywords', 'parsed_constraints'.
-        For example:
-        {{
-            "task_description": "Summarize a long article.",
-            "parsed_keywords": ["summary", "article"],
-            "parsed_constraints": {{ "max_length": 200 }}
-        }}
+        Respond ONLY with valid JSON.
         """
         try:
             response = call_llm_api(prompt, provider=self.llm_provider, model=self.llm_model)
             # Basic parsing of a stringified JSON-like response (placeholder)
             # In a robust implementation, ensure the LLM is prompted for valid JSON
-            # and use json.loads() here.
-            # For now, we'll simulate a structured response based on the LLM text.
-            # This is a simplification.
             logger.info(f"Agent '{self.agent_id}' - LLM response for parsing: {response}")
-            # Simulate parsing the LLM's text response into a dict
-            # This is highly dependent on the LLM's output format and reliability
-            # For this placeholder, we'll just return a structured dict based on input + simulated LLM enhancement
-            parsed_reqs = {
-                "task_description": task_desc, # Or response.get("task_description") if LLM returns structured JSON
-                "keywords": keywords + ["llm_added_keyword"], # Simulate LLM adding keywords
-                "constraints": constraints,
-                "llm_raw_response_parsing": response
+            data = json.loads(response)
+            if not isinstance(data, dict):
+                raise ValueError("LLM response for requirements is not a JSON object")
+
+            return {
+                "task_description": data.get("task_description", task_desc if task_desc else "Default task description"),
+                "keywords": data.get("keywords", keywords),
+                "constraints": data.get("constraints", constraints),
             }
-            return parsed_reqs
         except Exception as e:
             logger.error(f"Agent '{self.agent_id}': Error calling LLM for parsing requirements: {e}", exc_info=True)
             # Fallback to simpler parsing if LLM call fails
@@ -217,14 +207,16 @@ class PromptArchitectAgent(BaseAgent):
         """
         try:
             llm_response = call_llm_api(prompt, provider=self.llm_provider, model=self.llm_model)
-            # Ensure the response is a valid template name
-            selected_template_name = llm_response.strip()
+            data = json.loads(llm_response)
+            if not isinstance(data, dict):
+                raise ValueError("LLM response for template selection is not a JSON object")
+
+            selected_template_name = data.get("template") or data.get("template_name")
             if selected_template_name in self.templates:
                 logger.info(f"Agent '{self.agent_id}' - LLM selected template: {selected_template_name}")
                 return selected_template_name
             else:
                 logger.warning(f"Agent '{self.agent_id}' - LLM returned invalid template '{selected_template_name}'. Falling back.")
-                # Fallback logic (same as original)
                 return self._fallback_select_template(parsed_requirements)
         except Exception as e:
             logger.error(f"Agent '{self.agent_id}': Error calling LLM for template selection: {e}", exc_info=True)
@@ -287,13 +279,13 @@ class PromptArchitectAgent(BaseAgent):
             llm_response = call_llm_api(prompt, provider=self.llm_provider, model=self.llm_model)
             logger.info(f"Agent '{self.agent_id}' - LLM response for gene population: {llm_response}")
 
-            # This is a major simplification. LLM would ideally return a JSON list of strings.
-            # For now, let's assume it returns a multi-line string that we can split.
-            # A more robust solution would be to ask the LLM for JSON and parse it.
-            genes = [line.strip() for line in llm_response.split('\n') if line.strip()]
+            data = json.loads(llm_response)
+            if not isinstance(data, dict):
+                raise ValueError("LLM response for gene population is not a JSON object")
 
-            if not genes: # Fallback if LLM response is not parsable into lines
-                raise ValueError("LLM returned empty or unparsable gene list.")
+            genes = data.get("genes")
+            if not isinstance(genes, list) or not genes:
+                raise ValueError("LLM returned invalid gene list")
 
             logger.info(f"Agent '{self.agent_id}' - LLM populated genes: {genes}")
             return genes
