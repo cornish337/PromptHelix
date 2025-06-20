@@ -610,5 +610,171 @@ class TestMetaLearnerAgent(unittest.TestCase):
         mock_call_llm_api.assert_called_once() # Called by _identify_system_patterns
         mock_fallback.assert_called_once()
 
+    # --- Tests for analyze_generation method ---
+
+    def test_analyze_generation_logging(self):
+        """Test that analyze_generation logs summaries of individuals."""
+        agent = MetaLearnerAgent(knowledge_file_path=self.default_test_file_path)
+        agent.persist_on_update = False # Avoid saving for this test
+        generation_data = [
+            {"prompt_id": "p1", "fitness_score": 0.8, "critic_score": 0.9, "prompt_text": "text1"},
+            {"prompt_id": "p2", "fitness_score": 0.7, "prompt_text": "text2"}, # Missing critic_score
+        ]
+        agent.analyze_generation(generation_data)
+
+        self.assertEqual(len(agent.data_log), 2)
+        self.assertEqual(agent.data_log[0]["prompt_id"], "p1")
+        self.assertEqual(agent.data_log[0]["fitness_score"], 0.8)
+        self.assertEqual(agent.data_log[0]["critic_score"], 0.9)
+        self.assertEqual(agent.data_log[1]["prompt_id"], "p2")
+        self.assertEqual(agent.data_log[1]["fitness_score"], 0.7)
+        self.assertNotIn("critic_score", agent.data_log[1]) # Check that missing scores are not logged as None
+
+    def test_analyze_generation_critic_heuristic_positive_trend(self):
+        """Test CriticAgent heuristic detects a positive trend."""
+        agent = MetaLearnerAgent(knowledge_file_path=self.default_test_file_path)
+        agent.persist_on_update = False
+        generation_data = [
+            {"prompt_id": "p1", "fitness_score": 0.9, "critic_score": 0.95, "prompt_text": "pt1"}, # Top
+            {"prompt_id": "p2", "fitness_score": 0.85, "critic_score": 0.9, "prompt_text": "pt2"}, # Top
+            {"prompt_id": "p3", "fitness_score": 0.7, "critic_score": 0.7, "prompt_text": "pt3"},
+            {"prompt_id": "p4", "fitness_score": 0.6, "critic_score": 0.65, "prompt_text": "pt4"},
+            {"prompt_id": "p5", "fitness_score": 0.3, "critic_score": 0.5, "prompt_text": "pt5"}, # Bottom
+            {"prompt_id": "p6", "fitness_score": 0.2, "critic_score": 0.4, "prompt_text": "pt6"}  # Bottom
+        ] # AvgTopCritic = (0.95+0.9)/2 = 0.925, AvgBottomCritic = (0.5+0.4)/2 = 0.45. Diff = 0.475 > 0.2
+
+        agent.analyze_generation(generation_data)
+        self.assertEqual(agent.knowledge_base["agent_effectiveness_signals"]["CriticAgent_score_vs_fitness_trend"], "positive")
+
+    def test_analyze_generation_critic_heuristic_negative_trend(self):
+        """Test CriticAgent heuristic detects a negative trend."""
+        agent = MetaLearnerAgent(knowledge_file_path=self.default_test_file_path)
+        agent.persist_on_update = False
+        generation_data = [
+            {"prompt_id": "p1", "fitness_score": 0.9, "critic_score": 0.4, "prompt_text": "pt1"}, # Top
+            {"prompt_id": "p2", "fitness_score": 0.85, "critic_score": 0.5, "prompt_text": "pt2"}, # Top
+            {"prompt_id": "p3", "fitness_score": 0.7, "critic_score": 0.7, "prompt_text": "pt3"},
+            {"prompt_id": "p4", "fitness_score": 0.6, "critic_score": 0.65, "prompt_text": "pt4"},
+            {"prompt_id": "p5", "fitness_score": 0.3, "critic_score": 0.9, "prompt_text": "pt5"}, # Bottom
+            {"prompt_id": "p6", "fitness_score": 0.2, "critic_score": 0.95, "prompt_text": "pt6"}  # Bottom
+        ] # AvgTopCritic = 0.45, AvgBottomCritic = 0.925. Diff = -0.475. Bottom > Top + 0.2
+        agent.analyze_generation(generation_data)
+        self.assertEqual(agent.knowledge_base["agent_effectiveness_signals"]["CriticAgent_score_vs_fitness_trend"], "negative")
+
+    def test_analyze_generation_critic_heuristic_neutral_trend(self):
+        """Test CriticAgent heuristic detects a neutral trend."""
+        agent = MetaLearnerAgent(knowledge_file_path=self.default_test_file_path)
+        agent.persist_on_update = False
+        generation_data = [
+            {"prompt_id": "p1", "fitness_score": 0.9, "critic_score": 0.8, "prompt_text": "pt1"},
+            {"prompt_id": "p2", "fitness_score": 0.8, "critic_score": 0.75, "prompt_text": "pt2"},
+            {"prompt_id": "p3", "fitness_score": 0.3, "critic_score": 0.7, "prompt_text": "pt3"},
+            {"prompt_id": "p4", "fitness_score": 0.2, "critic_score": 0.65, "prompt_text": "pt4"}
+        ] # AvgTop (0.8) vs AvgBottom (0.65). Diff = 0.15, not > 0.2
+        agent.analyze_generation(generation_data)
+        self.assertEqual(agent.knowledge_base["agent_effectiveness_signals"]["CriticAgent_score_vs_fitness_trend"], "neutral")
+
+    def test_analyze_generation_critic_heuristic_insufficient_data(self):
+        """Test CriticAgent heuristic with insufficient data."""
+        agent = MetaLearnerAgent(knowledge_file_path=self.default_test_file_path)
+        agent.persist_on_update = False
+        initial_trend = agent.knowledge_base["agent_effectiveness_signals"]["CriticAgent_score_vs_fitness_trend"]
+        generation_data = [
+            {"prompt_id": "p1", "fitness_score": 0.9, "critic_score": 0.8, "prompt_text": "pt1"},
+            {"prompt_id": "p2", "fitness_score": 0.8, "critic_score": 0.75, "prompt_text": "pt2"} # Only 2 relevant individuals
+        ]
+        with self.assertLogs(level='WARNING') as log_watcher:
+            agent.analyze_generation(generation_data)
+        self.assertEqual(agent.knowledge_base["agent_effectiveness_signals"]["CriticAgent_score_vs_fitness_trend"], initial_trend)
+        self.assertTrue(any("Not enough relevant individuals" in msg for msg in log_watcher.output))
+
+
+    def test_analyze_generation_diversity_heuristic_low_diversity(self):
+        """Test diversity heuristic increases mutation rate for low diversity."""
+        agent = MetaLearnerAgent(knowledge_file_path=self.default_test_file_path)
+        agent.persist_on_update = False
+        agent.knowledge_base["ga_parameter_adjustment_suggestions"]["mutation_rate_factor"] = 1.0 # Ensure starting point
+
+        # 10 individuals, only 1 unique prompt_text (1/10 = 0.1, which is not < 0.1, so need more identical)
+        # Let's make it 2 unique out of 20, so 2/20 = 0.1. Still not < 0.1.
+        # Let's make it 1 unique out of 11. 1/11 ~ 0.09 < 0.1
+        generation_data = [{"prompt_id": f"p{i}", "prompt_text": "same_prompt", "fitness_score": 0.5} for i in range(10)]
+        generation_data.append({"prompt_id": "px", "prompt_text": "another_prompt", "fitness_score": 0.5}) # 2 unique
+        generation_data.append({"prompt_id": "py", "prompt_text": "same_prompt", "fitness_score": 0.5}) # 12 total, 2 unique. 2/12 = 0.16. Not low enough.
+
+        # Reset for clearer test: 1 unique out of 11 (0.09 < 0.1 threshold)
+        generation_data_low_diversity = [{"prompt_id": f"p{i}", "prompt_text": "the_only_prompt", "fitness_score": 0.5} for i in range(11)]
+
+        agent.analyze_generation(generation_data_low_diversity)
+        self.assertAlmostEqual(agent.knowledge_base["ga_parameter_adjustment_suggestions"]["mutation_rate_factor"], 1.2)
+
+    def test_analyze_generation_diversity_heuristic_sufficient_diversity(self):
+        """Test diversity heuristic does not increase mutation rate for sufficient diversity."""
+        agent = MetaLearnerAgent(knowledge_file_path=self.default_test_file_path)
+        agent.persist_on_update = False
+        agent.knowledge_base["ga_parameter_adjustment_suggestions"]["mutation_rate_factor"] = 1.0
+        # 10 individuals, 5 unique prompts (5/10 = 0.5 > 0.1 threshold)
+        generation_data = [{"prompt_id": f"p{i}", "prompt_text": f"text_{i}", "fitness_score": 0.5} for i in range(5)]
+        generation_data.extend([{"prompt_id": f"p{i+5}", "prompt_text": f"text_{i}", "fitness_score": 0.5} for i in range(5)]) # some duplicates
+
+        agent.analyze_generation(generation_data)
+        self.assertAlmostEqual(agent.knowledge_base["ga_parameter_adjustment_suggestions"]["mutation_rate_factor"], 1.0)
+
+    def test_analyze_generation_mutation_rate_bounded(self):
+        """Test that mutation_rate_factor does not exceed its upper bound."""
+        agent = MetaLearnerAgent(knowledge_file_path=self.default_test_file_path)
+        agent.persist_on_update = False
+        # Start near max to hit ceiling quickly
+        agent.knowledge_base["ga_parameter_adjustment_suggestions"]["mutation_rate_factor"] = 1.4
+
+        generation_data_low_diversity = [{"prompt_id": f"p{i}", "prompt_text": "same_prompt", "fitness_score": 0.5} for i in range(20)] # Low diversity
+
+        # First call: 1.4 * 1.2 = 1.68, capped at 1.5
+        agent.analyze_generation(generation_data_low_diversity)
+        self.assertAlmostEqual(agent.knowledge_base["ga_parameter_adjustment_suggestions"]["mutation_rate_factor"], 1.5)
+
+        # Second call: should remain 1.5
+        agent.analyze_generation(generation_data_low_diversity)
+        self.assertAlmostEqual(agent.knowledge_base["ga_parameter_adjustment_suggestions"]["mutation_rate_factor"], 1.5)
+
+    def test_analyze_generation_empty_data(self):
+        """Test analyze_generation with empty generation_data."""
+        agent = MetaLearnerAgent(knowledge_file_path=self.default_test_file_path)
+        agent.persist_on_update = False
+        initial_kb = json.loads(json.dumps(agent.knowledge_base)) # Deep copy
+        initial_log_len = len(agent.data_log)
+
+        with self.assertLogs(level='WARNING') as log_watcher:
+            agent.analyze_generation([])
+
+        self.assertEqual(agent.knowledge_base, initial_kb) # Knowledge base should not change
+        self.assertEqual(len(agent.data_log), initial_log_len) # Data log should not change
+        self.assertTrue(any("analyze_generation called with empty generation_data" in msg for msg in log_watcher.output))
+
+    def test_analyze_generation_diversity_uses_genes_then_prompt_id_fallback(self):
+        """Test diversity heuristic fallback for prompt representation."""
+        agent = MetaLearnerAgent(knowledge_file_path=self.default_test_file_path)
+        agent.persist_on_update = False
+        agent.knowledge_base["ga_parameter_adjustment_suggestions"]["mutation_rate_factor"] = 1.0
+
+        # Case 1: 'genes' field available
+        gen_data_genes = [
+            {"prompt_id": "g1", "genes": ["geneA", "geneB"], "fitness_score": 0.5}
+        ] * 11 # Low diversity based on genes
+        agent.analyze_generation(gen_data_genes)
+        self.assertAlmostEqual(agent.knowledge_base["ga_parameter_adjustment_suggestions"]["mutation_rate_factor"], 1.2, "Failed for 'genes' field.")
+
+        # Reset factor
+        agent.knowledge_base["ga_parameter_adjustment_suggestions"]["mutation_rate_factor"] = 1.0
+
+        # Case 2: No 'prompt_text' or 'genes', fallback to 'prompt_id'
+        gen_data_ids = [
+            {"prompt_id": "unique_id_1", "fitness_score": 0.5} # All unique IDs means high diversity
+        ] * 11 # But if all IDs were same, it would be low. Let's make them same.
+        gen_data_ids_low_diversity = [{"prompt_id": "same_id", "fitness_score": 0.5}] * 11
+        agent.analyze_generation(gen_data_ids_low_diversity)
+        self.assertAlmostEqual(agent.knowledge_base["ga_parameter_adjustment_suggestions"]["mutation_rate_factor"], 1.2, "Failed for 'prompt_id' fallback.")
+
+
 if __name__ == '__main__':
     unittest.main()

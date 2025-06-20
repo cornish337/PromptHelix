@@ -298,6 +298,123 @@ class TestResultsEvaluatorAgent(unittest.TestCase):
         self.assertEqual(metrics['llm_assessment_feedback'], "Excellent work.")
         self.assertEqual(len(errors), 0)
 
+    # --- Tests for the new evaluate_prompt method ---
+
+    def test_evaluate_prompt_success(self):
+        """Test evaluate_prompt with successful calculation of a weighted score."""
+        mock_metric_one = MagicMock(return_value=0.5)
+        mock_metric_two = MagicMock(return_value=1.0)
+
+        settings = {"metric_weights": {"metric_one": 0.6, "metric_two": 0.4}}
+        # Need to re-init agent or set settings and then call relevant parts of __init__
+        # For simplicity, re-initialize with settings.
+        agent = ResultsEvaluatorAgent(settings=settings)
+        agent.metric_functions = {"metric_one": mock_metric_one, "metric_two": mock_metric_two}
+
+        prompt_text = "Test prompt for evaluation."
+        output_text = "Test output for evaluation."
+        result = agent.evaluate_prompt(prompt=prompt_text, output=output_text)
+
+        expected_score = (0.5 * 0.6 + 1.0 * 0.4) / (0.6 + 0.4) # Should be 0.7
+        self.assertAlmostEqual(result["score"], expected_score)
+        self.assertEqual(result["details"], {"metric_one": 0.5, "metric_two": 1.0})
+
+        mock_metric_one.assert_called_once_with(output_text, prompt_text)
+        mock_metric_two.assert_called_once_with(output_text, prompt_text)
+
+    def test_evaluate_prompt_zero_total_weight(self):
+        """Test evaluate_prompt when total_weight is zero (e.g., no weights or all zero)."""
+        mock_metric_one = MagicMock(return_value=0.8)
+
+        # Case 1: metric_weights is empty
+        agent1 = ResultsEvaluatorAgent(settings={"metric_weights": {}})
+        agent1.metric_functions = {"metric_one": mock_metric_one}
+        with self.assertLogs(agent1.logger.name, level='WARNING') as cm1:
+            result1 = agent1.evaluate_prompt("prompt", "output")
+        self.assertEqual(result1["score"], 0.0)
+        self.assertIn("No metric weights defined.", cm1.output[0]) # First warning
+        self.assertIn("Total weight for metrics is zero.", cm1.output[1]) # Second warning
+
+        # Case 2: metric_weights has zero weights
+        agent2 = ResultsEvaluatorAgent(settings={"metric_weights": {"metric_one": 0.0}})
+        agent2.metric_functions = {"metric_one": mock_metric_one}
+        with self.assertLogs(agent2.logger.name, level='WARNING') as cm2: # agent2.logger
+            result2 = agent2.evaluate_prompt("prompt", "output")
+        self.assertEqual(result2["score"], 0.0)
+        # Only one warning expected here as metric_weights is not empty
+        self.assertTrue(any("Total weight for metrics is zero." in log_msg for log_msg in cm2.output))
+
+
+    def test_evaluate_prompt_missing_weights_for_some_metrics(self):
+        """Test evaluate_prompt when some metrics have weights and others don't."""
+        mock_metric_one = MagicMock(return_value=0.5) # Has weight
+        mock_metric_two = MagicMock(return_value=1.0) # No weight, so effectively 0
+
+        settings = {"metric_weights": {"metric_one": 1.0}} # Only metric_one has weight
+        agent = ResultsEvaluatorAgent(settings=settings)
+        agent.metric_functions = {"metric_one": mock_metric_one, "metric_two": mock_metric_two}
+
+        result = agent.evaluate_prompt("prompt", "output")
+
+        # score = (0.5 * 1.0 + 1.0 * 0.0) / (1.0 + 0.0) = 0.5
+        self.assertAlmostEqual(result["score"], 0.5)
+        self.assertEqual(result["details"], {"metric_one": 0.5, "metric_two": 1.0})
+
+    def test_evaluate_prompt_no_metric_functions_loaded(self):
+        """Test evaluate_prompt when self.metric_functions is empty."""
+        agent = ResultsEvaluatorAgent(settings={}) # Default init
+        agent.metric_functions = {} # Explicitly empty
+
+        with self.assertLogs(agent.logger.name, level='WARNING') as cm:
+            result = agent.evaluate_prompt("prompt", "output")
+
+        self.assertEqual(result["score"], 0.0)
+        self.assertEqual(result["details"], {"error": "No metric functions loaded."})
+        self.assertIn("No metric functions loaded for evaluate_prompt.", cm.output[0])
+
+    def test_evaluate_prompt_metric_function_error(self):
+        """Test evaluate_prompt when a metric function raises an exception."""
+        mock_metric_ok = MagicMock(return_value=0.8)
+        mock_metric_bad = MagicMock(side_effect=Exception("Calculation failed!"))
+
+        settings = {"metric_weights": {"metric_ok": 0.5, "metric_bad": 0.5}}
+        agent = ResultsEvaluatorAgent(settings=settings)
+        agent.metric_functions = {"metric_ok": mock_metric_ok, "metric_bad": mock_metric_bad}
+
+        # Temporarily enable ERROR logs for this agent's logger to capture the specific error
+        logging.disable(logging.NOTSET)
+        current_level = agent.logger.level
+        agent.logger.setLevel(logging.DEBUG) # So error logs are processed
+
+        with self.assertLogs(agent.logger.name, level='ERROR') as cm:
+            result = agent.evaluate_prompt("prompt", "output")
+
+        agent.logger.setLevel(current_level) # Restore original level
+        logging.disable(logging.CRITICAL) # Re-disable for other tests
+
+        # score = (0.8 * 0.5 + 0.0 * 0.5) / (0.5 + 0.5) = 0.4
+        self.assertAlmostEqual(result["score"], 0.4)
+        self.assertEqual(result["details"], {"metric_ok": 0.8, "metric_bad": 0.0})
+        self.assertTrue(any("Error calculating metric 'metric_bad': Exception('Calculation failed!')" in log_msg for log_msg in cm.output))
+
+    def test_evaluate_prompt_negative_weights(self):
+        """Test evaluate_prompt when metric_weights contain negative values."""
+        mock_metric_one = MagicMock(return_value=0.5)
+        mock_metric_two = MagicMock(return_value=1.0)
+
+        settings = {"metric_weights": {"metric_one": 0.8, "metric_two": -0.2}} # metric_two has negative weight
+        agent = ResultsEvaluatorAgent(settings=settings)
+        agent.metric_functions = {"metric_one": mock_metric_one, "metric_two": mock_metric_two}
+
+        with self.assertLogs(agent.logger.name, level='WARNING') as cm:
+            result = agent.evaluate_prompt("prompt", "output")
+
+        # Negative weight for metric_two should be treated as 0.
+        # score = (0.5 * 0.8 + 1.0 * 0.0) / (0.8 + 0.0) = 0.4 / 0.8 = 0.5
+        self.assertAlmostEqual(result["score"], 0.5)
+        self.assertEqual(result["details"], {"metric_one": 0.5, "metric_two": 1.0})
+        self.assertTrue(any("Negative weight -0.2 for metric 'metric_two' encountered. Using 0 instead." in log_msg for log_msg in cm.output))
+
 
 if __name__ == '__main__':
     unittest.main()

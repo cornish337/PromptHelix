@@ -67,12 +67,106 @@ class MetaLearnerAgent(BaseAgent):
             "statistical_prompt_metric_trends": [], # Trends derived from statistical analysis of prompt_metric_stats
             "legacy_successful_patterns": [],
             "legacy_common_pitfalls": {},
-            "legacy_performance_trends": []
+            "legacy_performance_trends": [],
+            # New keys for this subtask
+            "agent_effectiveness_signals": {"CriticAgent_score_vs_fitness_trend": "neutral"},
+            "ga_parameter_adjustment_suggestions": {"mutation_rate_factor": 1.0, "population_size_factor": 1.0}
         }
         self.knowledge_base = self._default_knowledge_base_structure.copy() # Ensures all keys are present
         self.data_log = [] # Stores raw data entries for later analysis
 
         self.load_knowledge() # Load knowledge at initialization
+
+    def analyze_generation(self, generation_data: list):
+        """
+        Analyzes a generation of prompt individuals to extract insights
+        and suggest GA parameter adjustments.
+
+        Args:
+            generation_data (list): A list of dictionaries, where each dictionary
+                                    represents an individual in the generation.
+                                    Expected keys: 'prompt_id' (any),
+                                                   'fitness_score' (float),
+                                                   'critic_score' (float, optional),
+                                                   'prompt_text' (str, for diversity).
+        """
+        if not generation_data:
+            logger.warning(f"Agent '{self.agent_id}': analyze_generation called with empty generation_data.")
+            return
+
+        # --- 1. Logging ---
+        for individual in generation_data:
+            log_entry = {
+                "type": "generation_individual_summary",
+                "prompt_id": individual.get("prompt_id"),
+                "fitness": individual.get("fitness_score"),
+                "critic_score": individual.get("critic_score")
+            }
+            self.data_log.append(log_entry)
+        logger.info(f"Agent '{self.agent_id}': Logged {len(generation_data)} individuals from current generation.")
+
+        # --- 2. CriticAgent Heuristic ---
+        # Ensure 'agent_effectiveness_signals' and its sub-key exist
+        if "agent_effectiveness_signals" not in self.knowledge_base:
+            self.knowledge_base["agent_effectiveness_signals"] = self._default_knowledge_base_structure["agent_effectiveness_signals"].copy()
+
+        relevant_individuals = [
+            ind for ind in generation_data
+            if ind.get("fitness_score") is not None and ind.get("critic_score") is not None
+        ]
+
+        if len(relevant_individuals) >= 4: # Need enough data for meaningful top/bottom comparison
+            relevant_individuals.sort(key=lambda x: x["fitness_score"], reverse=True)
+            population_size = len(relevant_individuals)
+            top_25_percent_index = max(1, population_size // 4) # At least 1 individual
+
+            top_individuals = relevant_individuals[:top_25_percent_index]
+            bottom_individuals = relevant_individuals[-top_25_percent_index:]
+
+            avg_critic_top = sum(ind["critic_score"] for ind in top_individuals) / len(top_individuals) if top_individuals else 0
+            avg_critic_bottom = sum(ind["critic_score"] for ind in bottom_individuals) / len(bottom_individuals) if bottom_individuals else 0
+
+            critic_fitness_correlation_threshold = 0.2 # Configurable: how much higher avg critic score for top should be
+
+            if avg_critic_top > avg_critic_bottom + critic_fitness_correlation_threshold:
+                self.knowledge_base['agent_effectiveness_signals']['CriticAgent_score_vs_fitness_trend'] = "positive"
+                logger.info(f"Agent '{self.agent_id}': CriticAgent trend set to 'positive'. AvgCriticTop: {avg_critic_top:.2f}, AvgCriticBottom: {avg_critic_bottom:.2f}")
+            elif avg_critic_bottom > avg_critic_top + critic_fitness_correlation_threshold:
+                self.knowledge_base['agent_effectiveness_signals']['CriticAgent_score_vs_fitness_trend'] = "negative"
+                logger.info(f"Agent '{self.agent_id}': CriticAgent trend set to 'negative'. AvgCriticTop: {avg_critic_top:.2f}, AvgCriticBottom: {avg_critic_bottom:.2f}")
+            else:
+                self.knowledge_base['agent_effectiveness_signals']['CriticAgent_score_vs_fitness_trend'] = "neutral"
+                logger.info(f"Agent '{self.agent_id}': CriticAgent trend set to 'neutral'. AvgCriticTop: {avg_critic_top:.2f}, AvgCriticBottom: {avg_critic_bottom:.2f}")
+        else:
+            logger.warning(f"Agent '{self.agent_id}': Not enough relevant individuals ({len(relevant_individuals)}) with fitness and critic scores to apply CriticAgent heuristic.")
+
+        # --- 3. Diversity Heuristic ---
+        # Ensure 'ga_parameter_adjustment_suggestions' and its sub-key exist
+        if "ga_parameter_adjustment_suggestions" not in self.knowledge_base:
+             self.knowledge_base["ga_parameter_adjustment_suggestions"] = self._default_knowledge_base_structure["ga_parameter_adjustment_suggestions"].copy()
+
+        # Use 'prompt_text' for diversity. Fallback to 'prompt_id' if 'prompt_text' is not available.
+        prompt_representations = [ind.get('prompt_text', str(ind.get('prompt_id', ''))) for ind in generation_data]
+        unique_prompts = set(prompt_representations)
+        num_unique_prompts = len(unique_prompts)
+        population_size_for_diversity = len(generation_data)
+
+        diversity_threshold_ratio = 0.1 # Configurable: e.g. unique prompts < 10% of population
+
+        if population_size_for_diversity > 0 and (num_unique_prompts / population_size_for_diversity) < diversity_threshold_ratio:
+            current_mutation_factor = self.knowledge_base['ga_parameter_adjustment_suggestions'].get('mutation_rate_factor', 1.0)
+            new_mutation_factor = min(1.5, current_mutation_factor * 1.2) # Increase by 20%, max 1.5
+            self.knowledge_base['ga_parameter_adjustment_suggestions']['mutation_rate_factor'] = new_mutation_factor
+            logger.info(f"Agent '{self.agent_id}': Low diversity detected ({num_unique_prompts}/{population_size_for_diversity}). Increased mutation_rate_factor to {new_mutation_factor:.2f}.")
+        else:
+            # Optionally, slowly revert mutation factor if diversity is high, or do nothing.
+            # For now, only increasing on low diversity.
+            logger.info(f"Agent '{self.agent_id}': Sufficient diversity ({num_unique_prompts}/{population_size_for_diversity}). No change to mutation_rate_factor based on this heuristic.")
+
+        # --- Save knowledge if updated ---
+        if self.persist_on_update:
+            self.save_knowledge()
+
 
     def save_knowledge(self):
         """

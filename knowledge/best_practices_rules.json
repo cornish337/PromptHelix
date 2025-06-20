@@ -1,0 +1,20 @@
+[
+  {
+    "name": "UseActiveVoice",
+    "pattern": "is\\s+\\w+ed\\b|was\\s+\\w+ed\\b",
+    "feedback": "Consider using active voice for clarity.",
+    "penalty": 1
+  },
+  {
+    "name": "UseExamples",
+    "pattern": "(?i)^(?!.*(e\\.g\\.|for example|for instance)).*$",
+    "feedback": "Consider adding examples to make the prompt more understandable.",
+    "penalty": 1
+  },
+  {
+    "name": "AvoidVagueTerms",
+    "pattern": "(?i)\\b(things|stuff|basically|actually|really|very|somehow)\\b",
+    "feedback": "Avoid vague terms to be more precise.",
+    "penalty": 1
+  }
+]

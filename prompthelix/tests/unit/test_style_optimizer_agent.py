@@ -141,5 +141,73 @@ class TestStyleOptimizerAgent(unittest.TestCase):
         result_none = self.optimizer.process_request(request_data_none)
         self.assertIsNone(result_none, "Should return None for None input.")
 
+    # --- Tests for the new optimize method ---
+
+    @patch('prompthelix.agents.style_optimizer.call_llm_api')
+    def test_optimize_real_mode(self, mock_call_llm_api):
+        """Test optimize method in 'REAL' LLM mode."""
+        mock_call_llm_api.return_value = "Optimized: Be concise and clear."
+
+        settings = {"llm_mode": "REAL", "default_llm_provider": "test_provider", "default_llm_model": "test_model"}
+        agent = StyleOptimizerAgent(settings=settings)
+
+        original_prompt = "Make this prompt better now."
+        tone = "professional"
+        expected_llm_template = f"Rephrase the following prompt to be more {tone}: {original_prompt}"
+
+        result = agent.optimize(original_prompt, tone=tone)
+
+        self.assertEqual(result, "Optimized: Be concise and clear.")
+        mock_call_llm_api.assert_called_once_with(
+            prompt_text=expected_llm_template,
+            provider="test_provider",
+            model="test_model"
+        )
+
+    def test_optimize_placeholder_mode(self):
+        """Test optimize method in non-REAL (e.g., 'PLACEHOLDER') LLM mode."""
+        settings = {"llm_mode": "PLACEHOLDER"} # Explicitly set to non-REAL
+        agent = StyleOptimizerAgent(settings=settings)
+
+        original_prompt = "Make this prompt better now."
+        tone = "friendly"
+        expected_output = f"{original_prompt} [Styled: Placeholder]"
+
+        result = agent.optimize(original_prompt, tone=tone)
+        self.assertEqual(result, expected_output)
+
+    def test_optimize_default_mode_is_placeholder(self):
+        """Test optimize method defaults to placeholder behavior if llm_mode is not set."""
+        # Agent initialized with no settings or settings missing llm_mode
+        agent_no_settings = StyleOptimizerAgent(settings=None) # self.optimizer from setUp could also be used if settings are known
+        original_prompt = "Another prompt"
+        tone = "direct"
+        expected_output = f"{original_prompt} [Styled: Placeholder]"
+        result = agent_no_settings.optimize(original_prompt, tone=tone)
+        self.assertEqual(result, expected_output)
+
+        agent_empty_settings = StyleOptimizerAgent(settings={})
+        result_empty_settings = agent_empty_settings.optimize(original_prompt, tone=tone)
+        self.assertEqual(result_empty_settings, expected_output)
+
+
+    @patch('prompthelix.agents.style_optimizer.call_llm_api')
+    def test_optimize_real_mode_llm_api_error(self, mock_call_llm_api):
+        """Test optimize method in 'REAL' mode when call_llm_api raises an error."""
+        mock_call_llm_api.side_effect = Exception("LLM API failed")
+
+        settings = {"llm_mode": "REAL", "default_llm_provider": "test_provider", "default_llm_model": "test_model"}
+        agent = StyleOptimizerAgent(settings=settings)
+
+        original_prompt = "A prompt that will cause an error."
+        tone = "urgent"
+        expected_output = f"{original_prompt} [Styled: Placeholder - Error]"
+
+        result = agent.optimize(original_prompt, tone=tone)
+
+        self.assertEqual(result, expected_output)
+        mock_call_llm_api.assert_called_once()
+
+
 if __name__ == '__main__':
     unittest.main()

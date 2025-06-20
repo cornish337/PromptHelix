@@ -1,6 +1,7 @@
 from prompthelix.agents.base import BaseAgent
 from prompthelix.genetics.engine import PromptChromosome
 from prompthelix.utils.llm_utils import call_llm_api
+from prompthelix.evaluation import metrics as ph_metrics # Added import
 import random  # For placeholder metric generation
 import json  # For parsing LLM responses
 import logging
@@ -71,7 +72,29 @@ class ResultsEvaluatorAgent(BaseAgent):
         # Prepare for loading and storing metric configurations
         self.evaluation_metrics_config = {}
         self.db = None  # call_llm_api will handle DB if needed
-        self.load_knowledge()
+        self.load_knowledge() # Loads general evaluator config, not metric functions directly
+
+        # --- New attributes for evaluate_prompt ---
+        self.metric_functions = {}
+        metric_names_to_load = [
+            "calculate_exact_match",
+            "calculate_keyword_overlap",
+            "calculate_bleu_score", # Placeholder, but compatible signature
+            "calculate_output_length" # Ignores second arg, compatible
+        ]
+        for func_name in metric_names_to_load:
+            func_obj = getattr(ph_metrics, func_name, None)
+            if func_obj:
+                # Use a simplified key, e.g., "exact_match" from "calculate_exact_match"
+                metric_key = func_name.replace("calculate_", "")
+                self.metric_functions[metric_key] = func_obj
+                logger.info(f"Agent '{self.agent_id}': Successfully loaded metric function '{func_name}' as '{metric_key}'.")
+            else:
+                logger.warning(f"Agent '{self.agent_id}': Failed to load metric function '{func_name}' from ph_metrics module.")
+
+        self.metric_weights = self.settings.get("metric_weights", {})
+        logger.info(f"Agent '{self.agent_id}': Metric weights loaded: {self.metric_weights}")
+        # --- End of new attributes ---
 
 
     def _get_fallback_llm_metrics(self, errors: list = None, status_message: str = 'fallback_due_to_error') -> dict:
@@ -483,3 +506,57 @@ Example:
 
         return result
 
+    def evaluate_prompt(self, prompt: str, output: str) -> dict:
+        """
+        Evaluates a given prompt's output using a set of predefined programmatic metrics.
+
+        Args:
+            prompt (str): The prompt string (used as reference/expected output for some metrics).
+            output (str): The LLM output string to evaluate.
+
+        Returns:
+            dict: A dictionary containing the overall 'score' and 'details' of each metric.
+        """
+        results = {}
+        if not self.metric_functions:
+            logger.warning(f"Agent '{self.agent_id}': No metric functions loaded for evaluate_prompt. Returning zero score.")
+            return {"score": 0.0, "details": {"error": "No metric functions loaded."}}
+
+        logger.info(f"Agent '{self.agent_id}': Evaluating prompt output. Output: '{output[:100]}...', Prompt: '{prompt[:100]}...'")
+
+        for metric_name, metric_func in self.metric_functions.items():
+            try:
+                # Call metric_func(generated_output, expected_output_or_context)
+                # Here, 'output' is generated_output, 'prompt' is expected_output_or_context
+                metric_value = metric_func(output, prompt)
+                results[metric_name] = metric_value
+                logger.debug(f"Agent '{self.agent_id}': Metric '{metric_name}' result: {metric_value}")
+            except Exception as e:
+                logger.error(f"Agent '{self.agent_id}': Error calculating metric '{metric_name}': {e}", exc_info=True)
+                results[metric_name] = 0.0 # Default to 0 on error for that metric
+
+        total_score = 0.0
+        total_weight = 0.0
+
+        if not self.metric_weights:
+            logger.warning(f"Agent '{self.agent_id}': No metric weights defined. Individual metric scores calculated but overall score will be 0 or based on default weight of 0.")
+
+        for metric_name, metric_value in results.items():
+            weight = self.metric_weights.get(metric_name, 0.0) # Default weight 0 if not specified
+            if weight < 0: # Ensure weights are not negative
+                logger.warning(f"Agent '{self.agent_id}': Negative weight {weight} for metric '{metric_name}' encountered. Using 0 instead.")
+                weight = 0.0
+
+            total_score += metric_value * weight
+            total_weight += weight
+            logger.debug(f"Agent '{self.agent_id}': Metric '{metric_name}' value: {metric_value}, weight: {weight}, current total_score: {total_score}, current total_weight: {total_weight}")
+
+
+        if total_weight == 0:
+            logger.warning(f"Agent '{self.agent_id}': Total weight for metrics is zero. Final score will be 0.0. This may be due to missing or all-zero weights.")
+            final_score = 0.0
+        else:
+            final_score = total_score / total_weight
+
+        logger.info(f"Agent '{self.agent_id}': Prompt evaluation complete. Final Score: {final_score:.4f}, Details: {results}")
+        return {"score": round(final_score, 4), "details": results}
