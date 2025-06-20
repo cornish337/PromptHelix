@@ -115,16 +115,9 @@ class MessageBus:
             }
             try:
                 loop = asyncio.get_running_loop()
-                if loop.is_running():
-                    loop.create_task(self._broadcast_log_async(log_data))
-                else:
-                    loop.run_until_complete(self._broadcast_log_async(log_data))
+                asyncio.create_task(self._broadcast_log_async(log_data))
             except RuntimeError:
-                loop = asyncio.new_event_loop()
-                try:
-                    loop.run_until_complete(self._broadcast_log_async(log_data))
-                finally:
-                    loop.close()
+                asyncio.run(self._broadcast_log_async(log_data))
 
     def register(self, agent_id: str, agent_instance):
         """Registers an agent instance with the message bus.
