@@ -11,7 +11,8 @@ from fastapi.staticfiles import StaticFiles
 from prompthelix.templating import templates # Import templates object
 from prompthelix.api import routes as api_routes
 from prompthelix.ui_routes import router as ui_router # Import the UI router
-from prompthelix.websocket_manager import ConnectionManager
+# from prompthelix.websocket_manager import ConnectionManager # No longer imported directly for instantiation
+from prompthelix.globals import websocket_manager # Import the global instance
 from prompthelix.database import init_db
 
 # Call init_db to create database tables on startup
@@ -20,7 +21,7 @@ init_db()
 
 # Initialize FastAPI application
 app = FastAPI()
-websocket_manager = ConnectionManager() # Renamed and confirmed module level
+# websocket_manager = ConnectionManager() # websocket_manager is now imported from globals
 
 # Mount static files
 # templates object is now imported, no need to initialize here
