@@ -39,8 +39,15 @@ class MessageBus:
 
     def _log_message_to_db(self, session_id: str, sender_id: str, recipient_id: Optional[str], message_type: str, content_payload: dict): # recipient_id can be Optional
         db_logged_successfully = False
+        # Safely serialize content payload for storage/broadcast
+        try:
+            serialized_content = json.dumps(content_payload, default=str)
+        except Exception as e:
+            logger.error(f"Failed to serialize content payload: {e}", exc_info=True)
+            serialized_content = json.dumps(str(content_payload))
+
         if self.db_session_factory:
-            db: Optional[DbSession] = None # type hint
+            db: Optional[DbSession] = None  # type hint
             try:
                 db = self.db_session_factory()
                 log_entry = ConversationLog(
@@ -48,12 +55,14 @@ class MessageBus:
                     sender_id=sender_id,
                     recipient_id=recipient_id,
                     message_type=message_type,
-                    content=json.dumps(content_payload)
+                    content=serialized_content,
                 )
                 db.add(log_entry)
                 db.commit()
                 db_logged_successfully = True
-                logger.debug(f"Message from {sender_id} to {recipient_id} logged to DB. Session: {session_id}, Type: {message_type}")
+                logger.debug(
+                    f"Message from {sender_id} to {recipient_id} logged to DB. Session: {session_id}, Type: {message_type}"
+                )
             except Exception as e:
                 logger.error(f"Failed to log message to DB: {e}", exc_info=True)
                 if db:
@@ -64,16 +73,26 @@ class MessageBus:
 
         # WebSocket broadcast logic
         if self.connection_manager:
+            # Use the serialized content for broadcasting to ensure JSON safety
+            try:
+                broadcast_content = json.loads(serialized_content)
+            except Exception:
+                broadcast_content = serialized_content
+
             log_data = {
                 "session_id": session_id,
                 "sender_id": sender_id,
                 "recipient_id": recipient_id,
                 "message_type": message_type,
-                "content": content_payload, # content_payload is already a dict
+                "content": broadcast_content,
                 "timestamp": datetime.utcnow().isoformat(),
-                "db_logged": db_logged_successfully
+                "db_logged": db_logged_successfully,
             }
-            asyncio.create_task(self._broadcast_log_async(log_data))
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(self._broadcast_log_async(log_data))
+            except RuntimeError:
+                asyncio.run(self._broadcast_log_async(log_data))
 
     def register(self, agent_id: str, agent_instance):
         """Registers an agent instance with the message bus.
