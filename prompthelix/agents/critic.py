@@ -28,6 +28,7 @@ class PromptCriticAgent(BaseAgent):
         self.logger = logger  # Expose module logger as instance attribute for tests
         self.knowledge_file_path = knowledge_file_path
         self.rules = []  # Renamed from self.critique_rules
+        self.critique_rules = self.rules  # Backwards compatibility
         self.load_knowledge()
 
     def load_knowledge(self):
@@ -42,10 +43,12 @@ class PromptCriticAgent(BaseAgent):
             effective_path = self.knowledge_file_path
             with open(effective_path, 'r') as f:
                 self.rules = json.load(f)
+            self.critique_rules = self.rules
             logger.info(f"Agent '{self.agent_id}': Rules loaded successfully from '{effective_path}'.")
         except FileNotFoundError:
             logger.error(f"Agent '{self.agent_id}': Knowledge file '{effective_path}' not found. No rules will be applied.")
             self.rules = []
+            self.critique_rules = self.rules
         except json.JSONDecodeError as e:
             logger.error(
                 f"Agent '{self.agent_id}': Error decoding JSON from '{effective_path}': {e}. No rules will be applied.",
@@ -56,6 +59,7 @@ class PromptCriticAgent(BaseAgent):
                 exc_info=True,
             )
             self.rules = []
+            self.critique_rules = self.rules
         except Exception as e:
             logger.error(
                 f"Agent '{self.agent_id}': Failed to load rules from '{effective_path}': {e}. No rules will be applied.",
@@ -66,6 +70,7 @@ class PromptCriticAgent(BaseAgent):
                 exc_info=True,
             )
             self.rules = []
+            self.critique_rules = self.rules
 
     def process_request(self, request_data: dict) -> dict:
         """Handle a direct critique request."""
