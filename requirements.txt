@@ -16,3 +16,4 @@ google-generativeai
 python-dotenv
 passlib==1.7.4
 textstat==0.7.3
+bcrypt
