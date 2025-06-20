@@ -214,6 +214,12 @@ class GAStatusResponse(BaseModel):
     # Fields from PopulationManager often included in status broadcasts
     is_paused: Optional[bool] = None
     should_stop: Optional[bool] = None
+    # New fitness statistics
+    fitness_min: Optional[float] = None
+    fitness_max: Optional[float] = None
+    fitness_mean: Optional[float] = None
+    fitness_median: Optional[float] = None
+    fitness_std_dev: Optional[float] = None
 
 # --- GA Experiment History Schemas ---
 class GAExperimentRunBase(BaseModel):

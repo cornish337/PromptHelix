@@ -911,6 +911,10 @@ class PopulationManager:
             return
 
         fittest = self.get_fittest_individual()
+        fitness_scores = []
+        if self.population:
+            fitness_scores = [c.fitness_score for c in self.population if hasattr(c, 'fitness_score')]
+
         payload = {
             "status": self.status,
             "generation": self.generation_number,
@@ -922,6 +926,12 @@ class PopulationManager:
             "fittest_chromosome_string": (
                 fittest.to_prompt_string() if fittest else None
             ),
+            # Fitness trends and population statistics
+            "fitness_min": min(fitness_scores) if fitness_scores else None,
+            "fitness_max": max(fitness_scores) if fitness_scores else None,
+            "fitness_mean": statistics.mean(fitness_scores) if fitness_scores else None,
+            "fitness_median": statistics.median(fitness_scores) if fitness_scores else None,
+            "fitness_std_dev": statistics.stdev(fitness_scores) if len(fitness_scores) > 1 else (0.0 if fitness_scores else None),
         }
         if additional_data:
             payload.update(additional_data)
