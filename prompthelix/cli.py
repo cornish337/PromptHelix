@@ -62,6 +62,12 @@ def main_cli():
     run_parser.add_argument("--elitism-count", type=int, help="Elitism count for the GA.")
     run_parser.add_argument("--population-path", type=str,
                             help="File path to load/save GA population state.")
+    run_parser.add_argument(
+        "--population-file",
+        type=str,
+        dest="population_path",
+        help="Alias for --population-path. File to load/save GA population state.",
+    )
     run_parser.add_argument("--output-file", type=str, help="File path to save the best prompt.")
     run_parser.add_argument("--agent-settings", type=str, help="JSON string or file path to override agent configurations.")
     run_parser.add_argument("--llm-settings", type=str, help="JSON string or file path to override LLM utility settings.")
