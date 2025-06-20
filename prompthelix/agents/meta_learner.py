@@ -98,9 +98,11 @@ class MetaLearnerAgent(BaseAgent):
             log_entry = {
                 "type": "generation_individual_summary",
                 "prompt_id": individual.get("prompt_id"),
-                "fitness": individual.get("fitness_score"),
-                "critic_score": individual.get("critic_score")
+                "fitness_score": individual.get("fitness_score"),
+                "critic_score": individual.get("critic_score"),
             }
+            # Remove keys with None values to keep logging concise
+            log_entry = {k: v for k, v in log_entry.items() if v is not None}
             self.data_log.append(log_entry)
         logger.info(f"Agent '{self.agent_id}': Logged {len(generation_data)} individuals from current generation.")
 

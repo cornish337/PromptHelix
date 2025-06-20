@@ -27,14 +27,15 @@ class WebSocketLogHandler(logging.Handler):
             # Use asyncio.create_task to run the async broadcast_json method
             # import asyncio # No longer imported locally
             try:
-                loop = asyncio.get_running_loop()
-                if loop.is_running():
-                    asyncio.create_task(self.connection_manager.broadcast_json(log_data))
-                else:
-                    # Fallback or log differently if no loop is running (e.g., during test collection)
-                    print(f"LOGGING_HANDLER_NO_LOOP (loop not running): {log_data['data']['message'][:100]}...") # Print truncated message
-            except RuntimeError: # Catches "no running event loop"
+                # Directly create the task; create_task itself will raise
+                # RuntimeError if no event loop is running.
+                asyncio.create_task(
+                    self.connection_manager.broadcast_json(log_data)
+                )
+            except RuntimeError:  # Catches "no running event loop"
                 # Fallback or log differently if get_running_loop() itself fails
-                print(f"LOGGING_HANDLER_NO_LOOP (RuntimeError): {log_data['data']['message'][:100]}...") # Print truncated message
+                print(
+                    f"LOGGING_HANDLER_NO_LOOP (RuntimeError): {log_data['data']['message'][:100]}..."
+                )  # Print truncated message
         except Exception:
             self.handleError(record)

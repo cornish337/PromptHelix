@@ -1,4 +1,6 @@
+
 import pytest
+from prompthelix.tests.conftest import *  # re-export fixtures for root tests
 
 @pytest.fixture(autouse=True)
 def mock_llm_api(monkeypatch):
@@ -18,4 +20,5 @@ def mock_llm_api(monkeypatch):
     ]
     for mod in modules:
         monkeypatch.setattr(f"{mod}.call_llm_api", _mock_call, raising=False)
+
 
