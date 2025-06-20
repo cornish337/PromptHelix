@@ -13,6 +13,8 @@
             <p>GA Status: <span id="ga-status">Idle</span></p>
             <p>Current Generation: <span id="ga-generation">-</span></p>
             <p>Best Fitness: <span id="ga-best-fitness">-</span></p>
+            <p>Agents Used: <span id="ga-agents-used">-</span></p>
+            <p>Fittest Chromosome: <pre id="ga-fittest-chromosome">-</pre></p>
             <!-- Placeholder for charts -->
             <div id="ga-charts-placeholder" class="mt-2">
                 Chart will appear here.
@@ -45,6 +47,8 @@
         const gaStatus = document.getElementById('ga-status');
         const gaGeneration = document.getElementById('ga-generation');
         const gaBestFitness = document.getElementById('ga-best-fitness');
+        const gaAgentsUsed = document.getElementById('ga-agents-used'); // Added
+        const gaFittestChromosome = document.getElementById('ga-fittest-chromosome'); // Added
         const logsContainer = document.getElementById('logs-container');
         const agentMetricsData = document.getElementById('agent-metrics-data');
 
@@ -109,7 +113,18 @@
                 // Placeholder for GA updates
                 gaStatus.textContent = message.data.status || 'N/A';
                 gaGeneration.textContent = message.data.generation || '-';
-                gaBestFitness.textContent = message.data.best_fitness || '-';
+                gaBestFitness.textContent = message.data.best_fitness ? parseFloat(message.data.best_fitness).toFixed(4) : '-';
+
+                // Update Agents Used
+                if (message.data.agents_used && Array.isArray(message.data.agents_used)) {
+                    gaAgentsUsed.textContent = message.data.agents_used.join(', ') || 'N/A';
+                } else {
+                    gaAgentsUsed.textContent = 'N/A';
+                }
+
+                // Update Fittest Chromosome
+                gaFittestChromosome.textContent = message.data.fittest_chromosome_string || 'N/A';
+
                 console.log("GA Update:", message.data);
             } else if (message.type === 'agent_metric_update' && message.data) {
                 const metricsData = message.data;
