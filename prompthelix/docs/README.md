@@ -97,6 +97,7 @@ The following options are available when running the Genetic Algorithm (`python 
     *   *JSON Format*: The JSON should be a dictionary where keys are agent class names (e.g., "PromptArchitectAgent") and values are dictionaries of settings for that agent. Example: `'{"PromptArchitectAgent": {"default_llm_model": "gpt-4o-mini"}}'`
 *   `--llm-settings <json_string_or_filepath>`: (Optional) Override default LLM utility settings (e.g., timeouts, API keys if applicable). This can be a direct JSON string or a path to a JSON file.
     *   *JSON Format*: The JSON should be a dictionary of LLM parameters. Example: `'{"default_timeout": 120, "temperature": 0.8}'`
+*   `--population-path <filepath>`: (Optional) Path to load or save the GA population. Defaults to the configuration value if omitted.
 *   `--execution-mode <TEST|REAL>`: (Optional) Set the execution mode. `TEST` mode uses mock LLM calls and is faster. `REAL` mode makes actual calls to configured LLM providers. Defaults to `TEST`.
 
 **Examples for `run ga`:**

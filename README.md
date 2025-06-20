@@ -231,7 +231,7 @@ Execute the following command from the root of the project:
 python -m prompthelix.cli run ga [options]
 ```
 
-This command runs the Genetic Algorithm. It supports various options to customize the GA run, including providing an initial seed prompt, setting GA parameters (generations, population size), overriding agent and LLM configurations, and specifying an output file for the best prompt.
+This command runs the Genetic Algorithm. It supports various options to customize the GA run, including providing an initial seed prompt, setting GA parameters (generations, population size), overriding agent and LLM configurations, specifying an output file for the best prompt, and defining where the population should be persisted.
 
 * `--parallel-workers <integer>`: Number of parallel workers used for fitness evaluation. Set to `1` for serial execution. By default, all available CPU cores are used.
 
