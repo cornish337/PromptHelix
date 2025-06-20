@@ -41,11 +41,11 @@ class ResultsEvaluatorAgent(BaseAgent):
 
         # Core LLM and fitness settings
         global_defaults = AGENT_SETTINGS.get("ResultsEvaluatorAgent", {})
-        llm_provider_default = global_defaults.get("default_llm_provider", "openai")
-        eval_model_default = global_defaults.get("evaluation_llm_model", "gpt-3.5-turbo")
+        llm_provider_default = global_defaults.get("default_llm_provider", FALLBACK_LLM_PROVIDER) # Use module fallback
+        eval_model_default = global_defaults.get("evaluation_llm_model", FALLBACK_EVAL_MODEL) # Use module fallback
         fitness_default = global_defaults.get(
             "fitness_score_weights",
-            {"constraint_adherence": 0.5, "llm_quality_assessment": 0.5},
+            FALLBACK_FITNESS_WEIGHTS, # Use module fallback
         )
 
         self.llm_provider = self.settings.get("default_llm_provider", llm_provider_default)
@@ -156,17 +156,9 @@ class ResultsEvaluatorAgent(BaseAgent):
                 f"Agent '{self.agent_id}': Error decoding JSON from '{self.knowledge_file_path}': {e}. Using default config.",
                 exc_info=True,
             )
-            logging.error(
-                f"Agent '{self.agent_id}': Error decoding JSON from '{self.knowledge_file_path}': {e}. Using default config.",
-                exc_info=True,
-            )
             self.evaluation_metrics_config = self._get_default_metrics_config()
         except Exception as e:
             logger.error(
-                f"Agent '{self.agent_id}': Failed to load metrics config from '{self.knowledge_file_path}': {e}. Using default config.",
-                exc_info=True,
-            )
-            logging.error(
                 f"Agent '{self.agent_id}': Failed to load metrics config from '{self.knowledge_file_path}': {e}. Using default config.",
                 exc_info=True,
             )
