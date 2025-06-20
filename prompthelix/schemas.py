@@ -197,3 +197,20 @@ class ConversationSession(BaseModel):
     message_count: int
     first_message_at: datetime
     last_message_at: datetime
+
+# --- GA Status Schema ---
+class GAStatusResponse(BaseModel):
+    status: str
+    generation: int
+    population_size: int
+    best_fitness: Optional[float] = None
+    fittest_individual_id: Optional[str] = None # Using str for UUID representation
+    fittest_chromosome_string: Optional[str] = None
+    agents_used: Optional[List[str]] = []
+    # Fields from GeneticAlgorithmRunner.get_status()
+    runner_current_generation: Optional[int] = None
+    runner_target_generations: Optional[int] = None
+    runner_population_manager_id: Optional[int] = None
+    # Fields from PopulationManager often included in status broadcasts
+    is_paused: Optional[bool] = None
+    should_stop: Optional[bool] = None

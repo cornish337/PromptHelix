@@ -15,6 +15,11 @@
             <p>Best Fitness: <span id="ga-best-fitness">-</span></p>
             <p>Agents Used: <span id="ga-agents-used">-</span></p>
             <p>Fittest Chromosome: <pre id="ga-fittest-chromosome">-</pre></p>
+            <div class="mt-4 flex space-x-2">
+                <button id="ga-pause-btn" class="bg-yellow-500 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded disabled:opacity-50">Pause</button>
+                <button id="ga-resume-btn" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded disabled:opacity-50">Resume</button>
+                <button id="ga-cancel-btn" class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded disabled:opacity-50">Cancel</button>
+            </div>
             <!-- Placeholder for charts -->
             <div id="ga-charts-placeholder" class="mt-2">
                 Chart will appear here.
@@ -69,6 +74,59 @@
         const debugLogsContainer = document.getElementById('debug-logs-container'); // Add this
         const toggleDebugLogs = document.getElementById('toggle-debug-logs'); // Add this
 
+        const gaPauseBtn = document.getElementById('ga-pause-btn');
+        const gaResumeBtn = document.getElementById('ga-resume-btn');
+        const gaCancelBtn = document.getElementById('ga-cancel-btn');
+
+        function updateGaControlButtons(gaStatusString) {
+            const status = gaStatusString ? gaStatusString.toUpperCase() : 'IDLE';
+            if (!gaPauseBtn || !gaResumeBtn || !gaCancelBtn) return; // Buttons not found
+
+            // Default states
+            gaPauseBtn.disabled = true;
+            gaResumeBtn.disabled = true;
+            gaCancelBtn.disabled = true;
+
+            if (status === 'RUNNING') {
+                gaPauseBtn.disabled = false;
+                gaCancelBtn.disabled = false;
+            } else if (status === 'PAUSED') {
+                gaResumeBtn.disabled = false;
+                gaCancelBtn.disabled = false;
+            } else if (status === 'INITIALIZING' || status === 'STOPPING') {
+                // All buttons disabled while initializing or stopping
+                gaCancelBtn.disabled = false; // Allow cancelling if stuck in initializing/stopping
+            }
+            // For IDLE, COMPLETED, STOPPED, ERROR, all remain disabled (default)
+        }
+
+        async function fetchInitialGaStatus() {
+            try {
+                const response = await fetch('/api/ga/status');
+                if (response.ok) {
+                    const statusData = await response.json();
+                    console.log('Initial GA Status:', statusData);
+                    // Update UI elements based on this initial status
+                    gaStatus.textContent = statusData.status || 'N/A';
+                    gaGeneration.textContent = statusData.generation || '-';
+                    gaBestFitness.textContent = statusData.best_fitness ? parseFloat(statusData.best_fitness).toFixed(4) : '-';
+                    if (statusData.agents_used && Array.isArray(statusData.agents_used)) {
+                        gaAgentsUsed.textContent = statusData.agents_used.join(', ') || 'N/A';
+                    } else {
+                        gaAgentsUsed.textContent = 'N/A';
+                    }
+                    gaFittestChromosome.textContent = statusData.fittest_chromosome_string || 'N/A';
+
+                    updateGaControlButtons(statusData.status);
+                } else {
+                    console.error('Failed to fetch initial GA status:', response.status);
+                    updateGaControlButtons('IDLE'); // Assume idle if status fetch fails
+                }
+            } catch (error) {
+                console.error('Error fetching initial GA status:', error);
+                updateGaControlButtons('IDLE'); // Assume idle on error
+            }
+        }
 
         // Determine WebSocket protocol
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -187,6 +245,7 @@
                 // Update Fittest Chromosome
                 gaFittestChromosome.textContent = message.data.fittest_chromosome_string || 'N/A';
 
+                updateGaControlButtons(message.data.status); // Update button states based on WS message
                 console.log("GA Update:", message.data);
             } else if (message.type === 'agent_metric_update' && message.data) {
                 const metricsData = message.data;
@@ -246,6 +305,51 @@
             logsContainer.appendChild(closeEntry);
             logsContainer.scrollTop = logsContainer.scrollHeight;
         };
+
+        // Event Listeners for GA Control Buttons
+        if (gaPauseBtn) {
+            gaPauseBtn.addEventListener('click', async () => {
+                try {
+                    const response = await fetch('/api/ga/pause', { method: 'POST' });
+                    const result = await response.json();
+                    console.log('Pause response:', result);
+                    // Optionally, show a small notification here e.g. using a toast library
+                    // UI will update via WebSocket 'ga_update' message
+                } catch (error) {
+                    console.error('Error pausing GA:', error);
+                    // Show error notification
+                }
+            });
+        }
+
+        if (gaResumeBtn) {
+            gaResumeBtn.addEventListener('click', async () => {
+                try {
+                    const response = await fetch('/api/ga/resume', { method: 'POST' });
+                    const result = await response.json();
+                    console.log('Resume response:', result);
+                } catch (error) {
+                    console.error('Error resuming GA:', error);
+                }
+            });
+        }
+
+        if (gaCancelBtn) {
+            gaCancelBtn.addEventListener('click', async () => {
+                try {
+                    const response = await fetch('/api/ga/cancel', { method: 'POST' });
+                    const result = await response.json();
+                    console.log('Cancel response:', result);
+                } catch (error) {
+                    console.error('Error cancelling GA:', error);
+                }
+            });
+        }
+
+        // Set initial state for buttons and fetch initial status
+        updateGaControlButtons('IDLE'); // Set to default disabled state initially
+        fetchInitialGaStatus(); // Fetch current status on load
+
     });
 </script>
 {% endblock %}
