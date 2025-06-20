@@ -96,7 +96,7 @@ You can set these variables in a few ways:
 1.  **Clone the repository:**
     ```bash
     git clone <repository_url> # Replace <repository_url> with the actual URL later if known, otherwise leave as placeholder
-    cd prompthelix
+    cd PromptHelix
     ```
 2.  **Create and activate a virtual environment:**
     ```bash
