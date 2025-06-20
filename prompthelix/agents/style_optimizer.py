@@ -9,10 +9,9 @@ from typing import Optional, Dict # Added for type hinting
 
 logger = logging.getLogger(__name__)
 
-# Default values from global AGENT_SETTINGS or hardcoded fallbacks
-DEFAULT_OPTIMIZER_SETTINGS = AGENT_SETTINGS.get("StyleOptimizerAgent", {})
-FALLBACK_LLM_PROVIDER = DEFAULT_OPTIMIZER_SETTINGS.get("default_llm_provider", "openai")
-FALLBACK_LLM_MODEL = DEFAULT_OPTIMIZER_SETTINGS.get("default_llm_model", "gpt-3.5-turbo")
+# Default knowledge filename if nothing else is provided
+FALLBACK_LLM_PROVIDER = "openai"
+FALLBACK_LLM_MODEL = "gpt-3.5-turbo"
 FALLBACK_KNOWLEDGE_FILE = "style_optimizer_rules.json"
 
 
@@ -36,8 +35,12 @@ class StyleOptimizerAgent(BaseAgent):
         """
         super().__init__(agent_id="StyleOptimizer", message_bus=message_bus, settings=settings)
 
-        self.llm_provider = self.settings.get("default_llm_provider", FALLBACK_LLM_PROVIDER)
-        self.llm_model = self.settings.get("default_llm_model", FALLBACK_LLM_MODEL)
+        global_defaults = AGENT_SETTINGS.get("StyleOptimizerAgent", {})
+        llm_provider_default = global_defaults.get("default_llm_provider", "openai")
+        llm_model_default = global_defaults.get("default_llm_model", "gpt-3.5-turbo")
+
+        self.llm_provider = self.settings.get("default_llm_provider", llm_provider_default)
+        self.llm_model = self.settings.get("default_llm_model", llm_model_default)
 
         _knowledge_file = self.settings.get("knowledge_file_path", knowledge_file_path)
         if _knowledge_file:
@@ -342,9 +345,11 @@ Rewritten Prompt Segments (JSON list of strings):
                         if gene_str and gene_str[-1] not in ".!?":
                             modified_genes[i] = gene_str + "."
             else:
-                # If LLM failed and no rule-based style exists, return original genes
-                logger.warning(f"Agent '{self.agent_id}': LLM failed for style '{target_style}' and no rule-based fallback exists. Returning original genes.")
-                modified_genes = list(original_genes_str_list)
+                # If LLM failed and no rule-based style exists, return the original chromosome unchanged
+                logger.warning(
+                    f"Agent '{self.agent_id}': LLM failed for style '{target_style}' and no rule-based fallback exists. Returning original genes."
+                )
+                return original_chromosome
 
             # Apply placeholder adjustments after rule-based changes or if LLM failed and no rules applied
             modified_genes = self._tone_analysis_adjustment(modified_genes, target_style)

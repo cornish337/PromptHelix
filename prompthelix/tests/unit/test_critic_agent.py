@@ -96,7 +96,7 @@ class TestPromptCriticAgentNew(unittest.TestCase):
     def test_process_prompt_one_violation(self):
         """Test process_prompt with a prompt that violates one rule."""
         self.critic.rules = MOCK_RULES_CONTENT
-        prompt = "This prompt is tested." # Violates TestActiveVoice
+        prompt = "This prompt is tested with an example."  # Violates TestActiveVoice only
         result = self.critic.process_prompt(prompt)
         self.assertEqual(result["score"], 9) # 10 - 1
         self.assertIn("Mock: Use active voice.", result["feedback"])

@@ -22,6 +22,7 @@ from typing import List, Optional, Dict
 from prompthelix.enums import ExecutionMode
 from prompthelix.utils.config_utils import update_settings # Assuming a utility for deep merging configs
 from prompthelix import config as global_config # To access global default settings
+from prompthelix.config import settings # Added import
 
 logger = logging.getLogger(__name__)
 
@@ -35,9 +36,10 @@ def main_ga_loop(
     initial_prompt_str: Optional[str] = None,
     agent_settings_override: Optional[Dict] = None,
     llm_settings_override: Optional[Dict] = None,
-    parallel_workers: Optional[int] = None, # New parameter
+    parallel_workers: Optional[int] = None,
     return_best: bool = True,
-    population_path: Optional[str] = None
+    population_path: Optional[str] = None,
+    save_frequency_override: Optional[int] = None
 ):
     """
     Main orchestration loop for running the PromptHelix Genetic Algorithm.
@@ -52,8 +54,10 @@ def main_ga_loop(
         initial_prompt_str: Optional initial prompt string to seed population.
         agent_settings_override: Optional dictionary to override agent settings.
         llm_settings_override: Optional dictionary to override LLM utility settings.
+        parallel_workers: Number of parallel workers for fitness evaluation.
         return_best: If True, return the best chromosome at the end.
-        population_path: Optional path for loading/saving population JSON.
+        population_path: Optional path for loading/saving population. If None, uses config default.
+        save_frequency_override: Optional override for population save frequency. If None, uses config default.
     """
     logger.info("--- main_ga_loop started ---")
     logger.info(f"Task Description: {task_desc}")
@@ -70,6 +74,17 @@ def main_ga_loop(
         logger.info(f"Parallel Workers specified: {parallel_workers}")
     else:
         logger.info("Parallel Workers: Using default (None).")
+    if population_path is not None:
+        logger.info(f"Population path override provided: {population_path}")
+    if save_frequency_override is not None:
+        logger.info(f"Save frequency override provided: {save_frequency_override}")
+
+    # Determine actual persistence settings
+    actual_population_path = population_path if population_path is not None else settings.DEFAULT_POPULATION_PERSISTENCE_PATH
+    actual_save_frequency = save_frequency_override if save_frequency_override is not None else settings.DEFAULT_SAVE_POPULATION_FREQUENCY
+
+    logger.info(f"Effective Population Persistence Path: {actual_population_path}")
+    logger.info(f"Effective Save Population Frequency: Every {actual_save_frequency} generations (0 means periodic saving disabled)")
 
     # 0. Instantiate Message Bus
     logger.debug("Initializing Message Bus...")
@@ -135,26 +150,30 @@ def main_ga_loop(
 
     fitness_eval = FitnessEvaluator(
         results_evaluator_agent=results_evaluator,
-        execution_mode=execution_mode
+        execution_mode=execution_mode,
+        llm_settings=current_llm_settings,
     )
     # TODO: FitnessEvaluator needs to be updated to accept and use llm_settings.
 
     pop_manager = PopulationManager(
         genetic_operators=genetic_ops,
         fitness_evaluator=fitness_eval,
-        prompt_architect_agent=prompt_architect, # Architect is used for initial prompt generation
+        prompt_architect_agent=prompt_architect,  # Architect is used for initial prompt generation
         population_size=population_size,
         elitism_count=elitism_count,
-        parallel_workers=parallel_workers, # Pass the new parameter
-        population_path=population_path,
-        message_bus=message_bus, # Added
-        agents_used=agent_names # Pass the collected agent names/IDs
+        population_path=actual_population_path,  # Use determined path
+        initial_prompt_str=initial_prompt_str,
+        parallel_workers=parallel_workers,
+        message_bus=message_bus,  # Added
+        agents_used=agent_names,  # Pass the collected agent names/IDs
+
+
         # TODO: Pass agent_settings_override or specific agent configs if PopulationManager
         # is responsible for creating/configuring more agents during its operations.
         # For now, agents are configured above.
     )
-    # TODO: PopulationManager needs to be updated to accept and use initial_prompt_str.
-    #       Actually, initial_prompt_str is passed to initialize_population and also handled by PopulationManager's __init__
+    # PopulationManager accepts `initial_prompt_str` and uses it when initializing
+    # the population.
     logger.debug("GA components initialized.")
 
     # 3. Use GA Parameters (already logged)
@@ -169,7 +188,7 @@ def main_ga_loop(
     # 4. Initialize Population
     if not pop_manager.population:
         logger.info("--- Initializing Population ---")
-        # PopulationManager will now use initial_prompt_str if provided (once updated)
+        # PopulationManager uses initial_prompt_str if provided
         pop_manager.initialize_population(
             initial_task_description=task_desc, # This might be redundant if initial_prompt_str is primary
             initial_keywords=keywords
@@ -207,7 +226,8 @@ def main_ga_loop(
 
     runner = GeneticAlgorithmRunner(
         population_manager=pop_manager,
-        num_generations=num_generations
+        num_generations=num_generations,
+        save_frequency=actual_save_frequency # Pass determined save frequency
     )
 
     # evaluation_task_desc and evaluation_success_criteria are defined earlier in main_ga_loop
@@ -267,8 +287,16 @@ def main_ga_loop(
             pop_manager.status
         )
 
-    if population_path:
-        pop_manager.save_population(population_path)
+    # Save the final population if a path is provided (regardless of periodic saving)
+    # This ensures the final state is always saved if a path is specified.
+    if actual_population_path:
+        logger.info(f"Orchestrator: Attempting to save final population to {actual_population_path}")
+        try:
+            pop_manager.save_population(actual_population_path)
+            logger.info(f"Orchestrator: Final population successfully saved to {actual_population_path}.")
+        except Exception as e:
+            logger.error(f"Orchestrator: Failed to save final population to {actual_population_path}. Error: {e}", exc_info=True)
+
 
     if return_best:
         return final_fittest_overall
@@ -433,8 +461,12 @@ if __name__ == "__main__":
         num_generations=example_gens,
         population_size=example_pop,
         elitism_count=example_elitism,
-        execution_mode=ExecutionMode.TEST, # Added for the example call
-        parallel_workers=None, # Example: use default for this specific call
+        execution_mode=ExecutionMode.TEST,
+        parallel_workers=None,
+        population_path=None, # Example: Use default path from config
+        # population_path="custom_ga_run_population.json", # Example: Override path
+        save_frequency_override=None, # Example: Use default frequency from config
+        # save_frequency_override=3, # Example: Override save frequency to every 3 generations
         return_best=True
     )
     if best_chromosome:

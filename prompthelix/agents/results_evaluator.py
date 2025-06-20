@@ -12,14 +12,10 @@ from typing import Optional, Dict # Added for type hinting
 
 logger = logging.getLogger(__name__)
 
-# Default values from global AGENT_SETTINGS or hardcoded fallbacks
-DEFAULT_EVALUATOR_SETTINGS = AGENT_SETTINGS.get("ResultsEvaluatorAgent", {})
-FALLBACK_LLM_PROVIDER = DEFAULT_EVALUATOR_SETTINGS.get("default_llm_provider", "openai")
-FALLBACK_EVAL_MODEL = DEFAULT_EVALUATOR_SETTINGS.get("evaluation_llm_model", "gpt-3.5-turbo")
-FALLBACK_FITNESS_WEIGHTS = DEFAULT_EVALUATOR_SETTINGS.get(
-    "fitness_score_weights",
-    {"constraint_adherence": 0.5, "llm_quality_assessment": 0.5}
-)
+# Default knowledge filename if nothing else is provided
+FALLBACK_LLM_PROVIDER = "openai"
+FALLBACK_EVAL_MODEL = "gpt-4"
+FALLBACK_FITNESS_WEIGHTS = {"constraint_adherence": 0.5, "llm_quality_assessment": 0.5}
 FALLBACK_KNOWLEDGE_FILE = "results_evaluator_config.json"
 
 
@@ -44,9 +40,17 @@ class ResultsEvaluatorAgent(BaseAgent):
         super().__init__(agent_id="ResultsEvaluator", message_bus=message_bus, settings=settings)
 
         # Core LLM and fitness settings
-        self.llm_provider = self.settings.get("default_llm_provider", FALLBACK_LLM_PROVIDER)
-        self.evaluation_llm_model = self.settings.get("evaluation_llm_model", FALLBACK_EVAL_MODEL)
-        self.fitness_score_weights = self.settings.get("fitness_score_weights", FALLBACK_FITNESS_WEIGHTS)
+        global_defaults = AGENT_SETTINGS.get("ResultsEvaluatorAgent", {})
+        llm_provider_default = global_defaults.get("default_llm_provider", "openai")
+        eval_model_default = global_defaults.get("evaluation_llm_model", "gpt-3.5-turbo")
+        fitness_default = global_defaults.get(
+            "fitness_score_weights",
+            {"constraint_adherence": 0.5, "llm_quality_assessment": 0.5},
+        )
+
+        self.llm_provider = self.settings.get("default_llm_provider", llm_provider_default)
+        self.evaluation_llm_model = self.settings.get("evaluation_llm_model", eval_model_default)
+        self.fitness_score_weights = self.settings.get("fitness_score_weights", fitness_default)
 
         # Determine knowledge file path, preferring explicit arg, then settings, then fallback
         _kfp = knowledge_file_path or self.settings.get("knowledge_file_path")

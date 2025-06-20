@@ -21,8 +21,11 @@ COPY ./prompthelix/main.py ./prompthelix/main.py
 EXPOSE 8000
 
 # Define environment variable
-ENV MODULE_NAME prompthelix.main
-ENV VARIABLE_NAME app
+#ENV MODULE_NAME prompthelix.main
+#ENV VARIABLE_NAME app
+ENV MODULE_NAME=prompthelix.main
+ENV VARIABLE_NAME=app
+
 
 # Run app.py when the container launches
 # Ensure the command correctly points to the FastAPI app instance in prompthelix/main.py

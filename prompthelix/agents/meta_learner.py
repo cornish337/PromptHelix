@@ -9,9 +9,7 @@ from prompthelix.config import AGENT_SETTINGS, KNOWLEDGE_DIR # Import new config
 
 logger = logging.getLogger(__name__)
 
-# Default provider from config if specific agent setting is not found
-# However, agent-specific settings should ideally cover this.
-FALLBACK_LLM_PROVIDER = AGENT_SETTINGS.get("MetaLearnerAgent", {}).get("default_llm_provider", "openai")
+# Default file name and persist flag; other defaults are resolved during initialization
 DEFAULT_KNOWLEDGE_FILENAME = AGENT_SETTINGS.get("MetaLearnerAgent", {}).get("knowledge_file_path", "meta_learner_knowledge_fallback.json")
 PERSIST_ON_UPDATE_DEFAULT = AGENT_SETTINGS.get("MetaLearnerAgent", {}).get("persist_knowledge_on_update", True)
 
@@ -37,8 +35,9 @@ class MetaLearnerAgent(BaseAgent):
         super().__init__(agent_id="MetaLearner", message_bus=message_bus)
 
         agent_config = AGENT_SETTINGS.get(self.agent_id, {})
-        self.llm_provider = agent_config.get("default_llm_provider", FALLBACK_LLM_PROVIDER)
-        self.llm_model = agent_config.get("default_llm_model") # Used by call_llm_api if no model is passed
+        llm_provider_default = agent_config.get("default_llm_provider", "openai")
+        self.llm_provider = llm_provider_default
+        self.llm_model = agent_config.get("default_llm_model")  # Used by call_llm_api if no model is passed
 
         _knowledge_filename = knowledge_file_path if knowledge_file_path else agent_config.get("knowledge_file_path", DEFAULT_KNOWLEDGE_FILENAME)
         # Ensure KNOWLEDGE_DIR exists for storing the knowledge file
@@ -99,9 +98,11 @@ class MetaLearnerAgent(BaseAgent):
             log_entry = {
                 "type": "generation_individual_summary",
                 "prompt_id": individual.get("prompt_id"),
-                "fitness": individual.get("fitness_score"),
-                "critic_score": individual.get("critic_score")
+                "fitness_score": individual.get("fitness_score"),
+                "critic_score": individual.get("critic_score"),
             }
+            # Remove keys with None values to keep logging concise
+            log_entry = {k: v for k, v in log_entry.items() if v is not None}
             self.data_log.append(log_entry)
         logger.info(f"Agent '{self.agent_id}': Logged {len(generation_data)} individuals from current generation.")
 
@@ -292,16 +293,18 @@ class MetaLearnerAgent(BaseAgent):
         fitness_score = eval_data.get("fitness_score")
 
         if not isinstance(prompt_chromosome, PromptChromosome) or fitness_score is None:
-            print(f"{self.agent_id} - Error: Invalid evaluation data received for LLM analysis.")
+            logger.error(f"{self.agent_id} - Error: Invalid evaluation data received for LLM analysis.")
             self._fallback_analyze_evaluation_data(eval_data) # Use fallback
             return
 
-        print(f"{self.agent_id} - LLM Analyzing evaluation data: Fitness={fitness_score}, Prompt: {prompt_chromosome.genes}")
+        logger.info(
+            f"{self.agent_id} - LLM Analyzing evaluation data: Fitness={fitness_score}, Prompt: {prompt_chromosome.genes}"
+        )
         
         # For LLM analysis, we might send a batch of recent high/low performing prompts later.
         # For now, let's analyze one by one, focusing on high performers.
         if fitness_score < 0.5: # Don't waste LLM time on clearly bad prompts for this specific analysis
-            print(f"{self.agent_id} - Skipping LLM analysis for low fitness score: {fitness_score}")
+            logger.info(f"{self.agent_id} - Skipping LLM analysis for low fitness score: {fitness_score}")
             self._fallback_analyze_evaluation_data(eval_data)
             return
 
@@ -330,11 +333,13 @@ If no clear patterns are identifiable, return an empty list.
                     }
                     self._update_knowledge_base("successful_prompt_features", pattern_data)
             else:
-                print(f"{self.agent_id} - LLM did not identify specific success features for this prompt. Using fallback.")
+                logger.info(
+                    f"{self.agent_id} - LLM did not identify specific success features for this prompt. Using fallback."
+                )
                 self._fallback_analyze_evaluation_data(eval_data)
 
         except Exception as e:
-            print(f"{self.agent_id} - Error during LLM evaluation analysis: {e}. Using fallback.")
+            logger.error(f"{self.agent_id} - Error during LLM evaluation analysis: {e}. Using fallback.")
             self._fallback_analyze_evaluation_data(eval_data)
 
     def _fallback_analyze_evaluation_data(self, eval_data: dict):
@@ -438,7 +443,7 @@ If no clear themes emerge, return an empty list.
         Identifies broader system patterns using LLM based on aggregated learned data.
         Updates self.knowledge_base["llm_identified_trends"].
         """
-        print(f"{self.agent_id} - LLM Identifying system patterns...")
+        logger.info(f"{self.agent_id} - LLM Identifying system patterns...")
 
         # --- LLM-based analysis of aggregated qualitative data ---
         logger.info(f"Agent '{self.agent_id}': Identifying system patterns using LLM on qualitative data.")
@@ -543,7 +548,7 @@ If no clear patterns emerge, return an empty list.
                     return [str(item) for item in parsed_list] # Ensure all items are strings
             return [] # Not a list or not found
         except json.JSONDecodeError:
-            print(f"{self.agent_id} - Failed to parse LLM response as JSON list: {response_str}")
+            logger.warning(f"{self.agent_id} - Failed to parse LLM response as JSON list: {response_str}")
             # Fallback: if not JSON, try splitting by newline if it looks like a list
             if "\n" in response_str and len(response_str.split("\n")) > 1:
                 return [line.strip("-* ") for line in response_str.split("\n") if line.strip()]
@@ -562,12 +567,14 @@ If no clear patterns emerge, return an empty list.
         if kb_key in self.knowledge_base:
             if isinstance(self.knowledge_base[kb_key], list):
                 self.knowledge_base[kb_key].append(data_item)
-                print(f"{self.agent_id} - Knowledge base '{kb_key}' updated with: {data_item}")
+                logger.debug(f"{self.agent_id} - Knowledge base '{kb_key}' updated with: {data_item}")
             else:
                 # For dict-like legacy KBs, updates are done directly in fallback methods.
-                print(f"{self.agent_id} - Warning: Update logic for non-list KB type '{kb_key}' not handled here. Data: {data_item}")
+                logger.warning(
+                    f"{self.agent_id} - Warning: Update logic for non-list KB type '{kb_key}' not handled here. Data: {data_item}"
+                )
         else:
-            print(f"{self.agent_id} - Warning: Unknown knowledge base category '{kb_key}'.")
+            logger.warning(f"{self.agent_id} - Warning: Unknown knowledge base category '{kb_key}'.")
 
     def _generate_recommendations(self) -> list:
         """

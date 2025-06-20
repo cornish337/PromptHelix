@@ -14,7 +14,7 @@ class TestMessageBusBroadcasting(unittest.TestCase):
         self.mock_connection_manager = AsyncMock() # Use AsyncMock if its methods are async
         self.mock_connection_manager.broadcast_json = AsyncMock()
 
-    @patch('asyncio.create_task') # Patch asyncio.create_task
+    @patch('asyncio.create_task')  # Patch asyncio.create_task
     def test_log_message_to_db_with_connection_manager_creates_broadcast_task(self, mock_create_task):
         bus = MessageBus(
             db_session_factory=self.mock_db_session_factory,
@@ -26,13 +26,17 @@ class TestMessageBusBroadcasting(unittest.TestCase):
         self.mock_db_session_factory.return_value = mock_session
 
         test_payload = {"key": "value"}
-        bus._log_message_to_db(
-            session_id="test_session",
-            sender_id="sender_agent",
-            recipient_id="recipient_agent",
-            message_type="test_type",
-            content_payload=test_payload
-        )
+
+        async def runner():
+            bus._log_message_to_db(
+                session_id="test_session",
+                sender_id="sender_agent",
+                recipient_id="recipient_agent",
+                message_type="test_type",
+                content_payload=test_payload
+            )
+
+        asyncio.run(runner())
 
         # Assert that asyncio.create_task was called
         mock_create_task.assert_called_once()

@@ -1,4 +1,17 @@
+from pathlib import Path
 from setuptools import setup, find_packages
+
+
+def parse_requirements(path: str) -> list[str]:
+    """Read requirements from the given file."""
+    lines = Path(path).read_text().splitlines()
+    reqs = []
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        reqs.append(line)
+    return reqs
 
 setup(
     name="prompthelix",
@@ -11,19 +24,7 @@ setup(
     url="https://github.com/yourusername/prompthelix", # Replace with your actual URL
     license="MIT",
     packages=find_packages(),
-    install_requires=[
-        "fastapi",
-        "uvicorn[standard]",
-        "sqlalchemy",
-        "psycopg2-binary", # For PostgreSQL
-        "pydantic==2.7.1",
-        "celery",
-        "redis",
-        "openai",
-        "httpx",
-        "anthropic",
-        "google-generativeai",
-    ],
+    install_requires=parse_requirements("requirements.txt"),
     classifiers=[
         "Development Status :: 3 - Alpha", # Or "4 - Beta", "5 - Production/Stable"
         "Intended Audience :: Developers",

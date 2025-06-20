@@ -337,6 +337,197 @@ class TestGeneticAlgorithmRunner(unittest.TestCase):
         # Restore global logging disable level
         logging.disable(original_global_disable_level)
 
+    # --- Tests for Periodic Saving ---
+
+    @patch('prompthelix.experiment_runners.ga_runner.logger')
+    def test_periodic_save_triggered_correctly(self, mock_logger):
+        self.mock_pop_manager.population_path = "test/path/pop.json"
+        self.mock_pop_manager.should_stop = False
+        self.mock_pop_manager.status = "RUNNING"
+        self.mock_pop_manager.generation_number = 0 # Initial state
+
+        num_generations_to_run = 5
+        save_freq = 2
+
+        # Local generation counter for the side effect
+        current_generation_in_test = 0
+
+        def fake_evolve_population(*args, **kwargs):
+            nonlocal current_generation_in_test
+            current_generation_in_test += 1
+            self.mock_pop_manager.generation_number = current_generation_in_test
+            if current_generation_in_test >= num_generations_to_run:
+                self.mock_pop_manager.should_stop = True # Signal runner to stop after this evolution
+
+        self.mock_pop_manager.evolve_population.side_effect = fake_evolve_population
+
+        runner = GeneticAlgorithmRunner(
+            population_manager=self.mock_pop_manager,
+            num_generations=num_generations_to_run,
+            save_frequency=save_freq
+        )
+
+        runner.run(task_description="test task for periodic save")
+
+        # Expected calls at generation 2 and 4
+        self.assertEqual(self.mock_pop_manager.save_population.call_count, 2)
+        self.mock_pop_manager.save_population.assert_any_call("test/path/pop.json")
+
+        # Check that logger.info was called for periodic saving
+        # Example: f"Periodically saved population at generation {self.population_manager.generation_number} to {self.population_manager.population_path}"
+        self.assertTrue(any("Periodically saved population at generation 2" in str(c[0][0]) for c in mock_logger.info.call_args_list))
+        self.assertTrue(any("Periodically saved population at generation 4" in str(c[0][0]) for c in mock_logger.info.call_args_list))
+
+
+    @patch('prompthelix.experiment_runners.ga_runner.logger')
+    def test_periodic_save_not_triggered_when_frequency_is_zero(self, mock_logger):
+        self.mock_pop_manager.population_path = "test/path/pop.json"
+        self.mock_pop_manager.should_stop = False
+        self.mock_pop_manager.status = "RUNNING"
+        self.mock_pop_manager.generation_number = 0
+
+        num_generations_to_run = 3
+        save_freq = 0 # Save disabled
+
+        current_generation_in_test = 0
+        def fake_evolve_population(*args, **kwargs):
+            nonlocal current_generation_in_test
+            current_generation_in_test += 1
+            self.mock_pop_manager.generation_number = current_generation_in_test
+            if current_generation_in_test >= num_generations_to_run:
+                self.mock_pop_manager.should_stop = True
+
+        self.mock_pop_manager.evolve_population.side_effect = fake_evolve_population
+
+        runner = GeneticAlgorithmRunner(
+            population_manager=self.mock_pop_manager,
+            num_generations=num_generations_to_run,
+            save_frequency=save_freq
+        )
+        runner.run(task_description="test task no save freq 0")
+
+        self.mock_pop_manager.save_population.assert_not_called()
+
+    @patch('prompthelix.experiment_runners.ga_runner.logger')
+    def test_periodic_save_not_triggered_when_no_population_path(self, mock_logger):
+        self.mock_pop_manager.population_path = None # No path
+        self.mock_pop_manager.should_stop = False
+        self.mock_pop_manager.status = "RUNNING"
+        self.mock_pop_manager.generation_number = 0
+
+        num_generations_to_run = 3
+        save_freq = 1 # Save enabled, but no path
+
+        current_generation_in_test = 0
+        def fake_evolve_population(*args, **kwargs):
+            nonlocal current_generation_in_test
+            current_generation_in_test += 1
+            self.mock_pop_manager.generation_number = current_generation_in_test
+            if current_generation_in_test >= num_generations_to_run:
+                self.mock_pop_manager.should_stop = True
+
+        self.mock_pop_manager.evolve_population.side_effect = fake_evolve_population
+
+        runner = GeneticAlgorithmRunner(
+            population_manager=self.mock_pop_manager,
+            num_generations=num_generations_to_run,
+            save_frequency=save_freq
+        )
+        runner.run(task_description="test task no save path")
+
+        self.mock_pop_manager.save_population.assert_not_called()
+
+    @patch('prompthelix.experiment_runners.ga_runner.logger')
+    def test_periodic_save_not_triggered_at_generation_zero(self, mock_logger):
+        # This test verifies that save is not called for generation 0.
+        # If num_generations_to_run is 1 and save_freq is 1,
+        # evolve_population will be called, self.mock_pop_manager.generation_number becomes 1.
+        # So save_population SHOULD be called.
+        # The condition is `self.population_manager.generation_number > 0`.
+        # If evolve_population is called once, generation_number becomes 1, so it should save.
+
+        self.mock_pop_manager.population_path = "test/path/pop.json"
+        self.mock_pop_manager.should_stop = False
+        self.mock_pop_manager.status = "RUNNING"
+        self.mock_pop_manager.generation_number = 0 # Initial state
+
+        num_generations_to_run = 1 # Run for only one generation
+        save_freq = 1 # Save frequency is 1
+
+        current_generation_in_test = 0
+        def fake_evolve_population(*args, **kwargs):
+            nonlocal current_generation_in_test
+            current_generation_in_test += 1 # generation_number becomes 1
+            self.mock_pop_manager.generation_number = current_generation_in_test
+            if current_generation_in_test >= num_generations_to_run:
+                 self.mock_pop_manager.should_stop = True
+
+        self.mock_pop_manager.evolve_population.side_effect = fake_evolve_population
+
+        runner = GeneticAlgorithmRunner(
+            population_manager=self.mock_pop_manager,
+            num_generations=num_generations_to_run,
+            save_frequency=save_freq
+        )
+        runner.run(task_description="test task gen zero")
+
+        # save_population should be called once at generation 1
+        self.assertEqual(self.mock_pop_manager.save_population.call_count, 1)
+        self.mock_pop_manager.save_population.assert_called_with("test/path/pop.json")
+        self.assertTrue(any("Periodically saved population at generation 1" in str(c[0][0]) for c in mock_logger.info.call_args_list))
+
+
+    @patch('prompthelix.experiment_runners.ga_runner.logger')
+    def test_periodic_save_handles_exception_during_save_operation(self, mock_logger):
+        self.mock_pop_manager.population_path = "test/path/pop.json"
+        self.mock_pop_manager.should_stop = False
+        self.mock_pop_manager.status = "RUNNING"
+        self.mock_pop_manager.generation_number = 0
+
+        num_generations_to_run = 2
+        save_freq = 1 # Try to save at generation 1 and 2
+
+        # Simulate save_population raising an error only on the first attempt (gen 1)
+        save_call_count = 0
+        def fake_save_population_with_error(*args, **kwargs):
+            nonlocal save_call_count
+            save_call_count += 1
+            if save_call_count == 1: # Error on first call (generation 1)
+                raise IOError("Disk full!")
+            # Succeed on second call (generation 2)
+
+        self.mock_pop_manager.save_population.side_effect = fake_save_population_with_error
+
+        current_generation_in_test = 0
+        def fake_evolve_population(*args, **kwargs):
+            nonlocal current_generation_in_test
+            current_generation_in_test += 1
+            self.mock_pop_manager.generation_number = current_generation_in_test
+            if current_generation_in_test >= num_generations_to_run:
+                self.mock_pop_manager.should_stop = True
+
+        self.mock_pop_manager.evolve_population.side_effect = fake_evolve_population
+
+        runner = GeneticAlgorithmRunner(
+            population_manager=self.mock_pop_manager,
+            num_generations=num_generations_to_run,
+            save_frequency=save_freq
+        )
+
+        # The runner should not crash, it should log the error and continue.
+        runner.run(task_description="test task save exception")
+
+        # save_population was attempted twice (at gen 1 and gen 2)
+        self.assertEqual(self.mock_pop_manager.save_population.call_count, 2)
+
+        # Check that logger.error was called for the failed save
+        # Example: f"Error during periodic save of population at generation {self.population_manager.generation_number}: {e}"
+        self.assertTrue(any("Error during periodic save of population at generation 1" in str(c[0][0]) for c in mock_logger.error.call_args_list))
+        self.assertTrue(any("Disk full!" in str(c[0][0]) for c in mock_logger.error.call_args_list))
+
+        # Check that the successful save at generation 2 was logged via logger.info
+        self.assertTrue(any("Periodically saved population at generation 2" in str(c[0][0]) for c in mock_logger.info.call_args_list))
+
 
 if __name__ == '__main__':
     unittest.main()

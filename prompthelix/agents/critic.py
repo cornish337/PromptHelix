@@ -25,8 +25,10 @@ class PromptCriticAgent(BaseAgent):
                 critique rules. Defaults to "knowledge/best_practices_rules.json".
         """
         super().__init__(agent_id=self.agent_id, message_bus=message_bus)
+        self.logger = logger  # Expose module logger as instance attribute for tests
         self.knowledge_file_path = knowledge_file_path
         self.rules = []  # Renamed from self.critique_rules
+        self.critique_rules = self.rules  # Backwards compatibility
         self.load_knowledge()
 
     def load_knowledge(self):
@@ -41,10 +43,12 @@ class PromptCriticAgent(BaseAgent):
             effective_path = self.knowledge_file_path
             with open(effective_path, 'r') as f:
                 self.rules = json.load(f)
+            self.critique_rules = self.rules
             logger.info(f"Agent '{self.agent_id}': Rules loaded successfully from '{effective_path}'.")
         except FileNotFoundError:
             logger.error(f"Agent '{self.agent_id}': Knowledge file '{effective_path}' not found. No rules will be applied.")
             self.rules = []
+            self.critique_rules = self.rules
         except json.JSONDecodeError as e:
             logger.error(
                 f"Agent '{self.agent_id}': Error decoding JSON from '{effective_path}': {e}. No rules will be applied.",
@@ -55,6 +59,7 @@ class PromptCriticAgent(BaseAgent):
                 exc_info=True,
             )
             self.rules = []
+            self.critique_rules = self.rules
         except Exception as e:
             logger.error(
                 f"Agent '{self.agent_id}': Failed to load rules from '{effective_path}': {e}. No rules will be applied.",
@@ -65,6 +70,7 @@ class PromptCriticAgent(BaseAgent):
                 exc_info=True,
             )
             self.rules = []
+            self.critique_rules = self.rules
 
     def process_request(self, request_data: dict) -> dict:
         """Handle a direct critique request."""
@@ -101,14 +107,30 @@ class PromptCriticAgent(BaseAgent):
             return {"score": score, "feedback": ["Warning: No rules loaded for critique."]}
 
         for rule in self.rules:
+            pattern = rule.get("pattern")
+            if not pattern:
+                logger.error(
+                    f"Agent '{self.agent_id}': Invalid rule structure for rule '{rule.get('name', 'Unnamed')}'. Missing key: 'pattern'. Skipping rule."
+                )
+                continue
             try:
-                if re.search(rule["pattern"], prompt):
-                    issues.append(rule["feedback"])
-                    score -= rule.get("penalty", 1)
+                regex = re.compile(pattern)
             except re.error as e:
-                logger.error(f"Agent '{self.agent_id}': Regex error in rule '{rule.get('name', 'Unnamed')}': {e}. Skipping rule.")
-            except KeyError as e:
-                logger.error(f"Agent '{self.agent_id}': Invalid rule structure for rule '{rule.get('name', 'Unnamed')}'. Missing key: {e}. Skipping rule.")
+                logger.error(
+                    f"Agent '{self.agent_id}': Regex error in rule '{rule.get('name', 'Unnamed')}': {e}. Skipping rule."
+                )
+                continue
+
+            if regex.search(prompt):
+                penalty = rule.get("penalty", 1)
+                feedback = rule.get("feedback")
+                if feedback is not None:
+                    issues.append(feedback)
+                else:
+                    logger.error(
+                        f"Agent '{self.agent_id}': Invalid rule structure for rule '{rule.get('name', 'Unnamed')}'. Missing key: 'feedback'."
+                    )
+                score -= penalty
 
 
         final_score = max(score, 0)

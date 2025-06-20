@@ -1,6 +1,6 @@
 import logging
-import html # Import the html module
-import asyncio # Moved import to module level
+import html  # Import the html module
+import asyncio  # Moved import to module level
 from prompthelix.websocket_manager import ConnectionManager
 
 class WebSocketLogHandler(logging.Handler):
@@ -18,23 +18,28 @@ class WebSocketLogHandler(logging.Handler):
                 "data": {
                     "timestamp": record.created,
                     "level": record.levelname,
-                    "message": escaped_log_entry, # Use the escaped message
+                    "message": escaped_log_entry,  # Use the escaped message
                     "module": record.module,
                     "funcName": record.funcName,
                     "lineno": record.lineno,
                 }
             }
-            # Use asyncio.create_task to run the async broadcast_json method
-            # import asyncio # No longer imported locally
+            # Schedule async broadcast; handle cases where no loop is running
             try:
                 loop = asyncio.get_running_loop()
                 if loop.is_running():
                     asyncio.create_task(self.connection_manager.broadcast_json(log_data))
                 else:
-                    # Fallback or log differently if no loop is running (e.g., during test collection)
-                    print(f"LOGGING_HANDLER_NO_LOOP (loop not running): {log_data['data']['message'][:100]}...") # Print truncated message
-            except RuntimeError: # Catches "no running event loop"
-                # Fallback or log differently if get_running_loop() itself fails
-                print(f"LOGGING_HANDLER_NO_LOOP (RuntimeError): {log_data['data']['message'][:100]}...") # Print truncated message
+                    # Fallback if loop exists but isn't running (e.g., during test collection)
+                    print(
+                        f"LOGGING_HANDLER_NO_LOOP (loop not running): "
+                        f"{log_data['data']['message'][:100]}..."
+                    )
+            except RuntimeError:
+                # Fallback if get_running_loop() fails entirely
+                print(
+                    f"LOGGING_HANDLER_NO_LOOP (RuntimeError): "
+                    f"{log_data['data']['message'][:100]}..."
+                )
         except Exception:
             self.handleError(record)

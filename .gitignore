@@ -4,6 +4,8 @@ __pycache__/
 *$py.class
 old_prompthelix.db
 prompthelix.db
+prompthelix.db
+test_prompthelix.db
 
 # C extensions
 *.so
@@ -173,6 +175,3 @@ cython_debug/
 .ruff_cache/
 
 # PyPI configuration file
-.pypirc
-prompthelix.db
-prompthelix.db
