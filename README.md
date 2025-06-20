@@ -329,3 +329,18 @@ python -m prompthelix.cli test --path tests/unit/test_architect_agent.py
 
 The output will show the progress of the tests and a summary of the results.
 
+
+#### Interactive Tests
+
+Some tests require manual input or clicking through the UI. These live in
+`prompthelix/tests/interactive`. Because they pause for user interaction,
+they are not executed in automated CI runs.
+
+Run them explicitly with pytest or the CLI, for example:
+
+```bash
+python -m prompthelix.cli test --path prompthelix/tests/interactive -s
+```
+
+The `-s` flag ensures that prompts appear in your terminal so you can respond.
+
