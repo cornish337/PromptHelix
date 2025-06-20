@@ -95,6 +95,23 @@
         const gaResumeBtn = document.getElementById('ga-resume-btn');
         const gaCancelBtn = document.getElementById('ga-cancel-btn');
 
+        // Function to handle GA data updates from WebSocket
+        function handleGaDataUpdate(data) {
+            gaStatus.textContent = data.status || 'N/A';
+            updateStatusBadge(gaStatus.textContent);
+            gaGeneration.textContent = data.generation || '-';
+            gaBestFitness.textContent = data.best_fitness ? parseFloat(data.best_fitness).toFixed(4) : '-';
+
+            if (data.agents_used && Array.isArray(data.agents_used)) {
+                gaAgentsUsed.textContent = data.agents_used.join(', ') || 'N/A';
+            } else {
+                gaAgentsUsed.textContent = 'N/A';
+            }
+            gaFittestChromosome.textContent = data.fittest_chromosome_string || 'N/A';
+            updateGaControlButtons(data.status);
+            console.log("GA Data Processed for event type, data:", data); // Modified console log
+        }
+
         function updateStatusBadge(statusText) {
             const statusElement = document.getElementById('ga-status');
             if (!statusElement) return;
@@ -290,25 +307,8 @@
                     debugLogsContainer.appendChild(logEntry);
                     debugLogsContainer.scrollTop = debugLogsContainer.scrollHeight; // Auto-scroll
                 }
-            } else if (message.type === 'ga_update' && message.data) {
-                // Placeholder for GA updates
-                gaStatus.textContent = message.data.status || 'N/A'; // Set text first
-                updateStatusBadge(gaStatus.textContent); // Then update badge based on the new text
-                gaGeneration.textContent = message.data.generation || '-';
-                gaBestFitness.textContent = message.data.best_fitness ? parseFloat(message.data.best_fitness).toFixed(4) : '-';
-
-                // Update Agents Used
-                if (message.data.agents_used && Array.isArray(message.data.agents_used)) {
-                    gaAgentsUsed.textContent = message.data.agents_used.join(', ') || 'N/A';
-                } else {
-                    gaAgentsUsed.textContent = 'N/A';
-                }
-
-                // Update Fittest Chromosome
-                gaFittestChromosome.textContent = message.data.fittest_chromosome_string || 'N/A';
-
-                updateGaControlButtons(message.data.status); // Update button states based on WS message
-                console.log("GA Update:", message.data);
+            } else if ((message.type === 'ga_update' || message.type === 'ga_evaluation_complete' || message.type === 'ga_generation_complete' || message.type === 'ga_status_update') && message.data) {
+                handleGaDataUpdate(message.data);
             } else if (message.type === 'agent_metric_update' && message.data) {
                 const metricsData = message.data;
                 const agentId = metricsData.agent_id;
