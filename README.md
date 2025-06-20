@@ -114,6 +114,7 @@ You can set these variables in a few ways:
     ```
 4.  **Initialize the database:**
     If using SQLite (the default for development), the database (`prompthelix.db`) will be automatically created and initialized on the first run via `init_db()` in `main.py`. For production, see the "Deployment" section for database setup and migrations.
+    This SQLite database file is not included in the repository and will be created automatically when you run the application.
 5.  **Run the Web UI (Development Server):**
     ```bash
     uvicorn prompthelix.main:app --reload
