@@ -48,19 +48,34 @@ def create_user_route(user_data: schemas.UserCreate, db: DbSession = Depends(get
 
 @router.post("/auth/token", response_model=schemas.Token, tags=["Authentication"], summary="User login", description="Authenticates a user and returns an access token.")
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: DbSession = Depends(get_db)):
+    print(f"Attempting login for username: {form_data.username}")
     user = user_service.get_user_by_username(db, username=form_data.username)
-    if not user or not user_service.verify_password(form_data.password, user.hashed_password):
+    if not user:
+        print(f"User not found: {form_data.username}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    print(f"User found: {form_data.username}. Attempting password verification.")
+    password_verified = user_service.verify_password(form_data.password, user.hashed_password)
+    print(f"Password verification result for {form_data.username}: {password_verified}")
+    if not password_verified:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     from prompthelix.config import settings
+    session_duration = settings.DEFAULT_SESSION_EXPIRE_MINUTES
+    print(f"Authentication successful for {form_data.username}. Attempting session creation for user ID {user.id} with duration {session_duration} minutes.")
     session = user_service.create_session(
         db,
         user_id=user.id,
-        expires_delta_minutes=settings.DEFAULT_SESSION_EXPIRE_MINUTES,
+        expires_delta_minutes=session_duration,
     )
+    print(f"Session created successfully for user ID {user.id}. Session token (first 8 chars): {session.session_token[:8]}...")
     return {"access_token": session.session_token, "token_type": "bearer"}
 
 @router.post("/auth/logout", tags=["Authentication"], summary="User logout", description="Logs out the current user by invalidating their session token.")
