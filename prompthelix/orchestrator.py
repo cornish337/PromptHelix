@@ -126,6 +126,9 @@ def main_ga_loop(
     message_bus.register(style_optimizer.agent_id, style_optimizer)
     logger.debug("Agents initialized and registered.")
 
+    agent_names = [prompt_architect.agent_id, results_evaluator.agent_id, style_optimizer.agent_id]
+    logger.info(f"Collected agent names/IDs: {agent_names}")
+
     # 2. Instantiate GA Components
     logger.debug("Initializing GA components...")
     # Pass style_optimizer_config to GeneticOperators if it needs settings
@@ -145,7 +148,8 @@ def main_ga_loop(
         elitism_count=elitism_count,
         parallel_workers=parallel_workers, # Pass the new parameter
         population_path=population_path,
-        message_bus=message_bus # Added
+        message_bus=message_bus, # Added
+        agents_used=agent_names # Pass the collected agent names/IDs
         # TODO: Pass agent_settings_override or specific agent configs if PopulationManager
         # is responsible for creating/configuring more agents during its operations.
         # For now, agents are configured above.

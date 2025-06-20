@@ -637,7 +637,8 @@ class PopulationManager:
                  initial_prompt_str: str | None = None, # New parameter
                  parallel_workers: Optional[int] = None,
                  evaluation_timeout: Optional[int] = 60,
-                 message_bus: Optional['MessageBus'] = None): # Added message_bus
+                 message_bus: Optional['MessageBus'] = None, # Added message_bus
+                 agents_used: list[str] | None = None):
         """
         Initializes the PopulationManager.
 
@@ -653,6 +654,8 @@ class PopulationManager:
                 from this file on initialization.
             initial_prompt_str (str | None, optional): An initial prompt string to seed
                 one chromosome in the population. Defaults to None.
+            agents_used (list[str] | None, optional): A list of agent IDs used in the process.
+                                                     Defaults to None, resulting in an empty list.
         """
         if not isinstance(genetic_operators, GeneticOperators):
             raise TypeError("genetic_operators must be an instance of GeneticOperators.")
@@ -680,6 +683,7 @@ class PopulationManager:
         self.parallel_workers = parallel_workers
         self.evaluation_timeout = evaluation_timeout
         self.message_bus = message_bus # Added
+        self.agents_used: list[str] = agents_used if agents_used is not None else [] # Added
 
         self.population: list[PromptChromosome] = []
         self.generation_number: int = 0
@@ -1045,3 +1049,18 @@ class PopulationManager:
             logger.info(f"PopulationManager: Loaded {len(self.population)} individuals from {file_path}. Generation set to {self.generation_number}. Population size set to {self.population_size}.")
         except Exception as e:
             logger.error(f"Error loading population from {file_path}: {e}", exc_info=True)
+
+    def get_ga_status(self) -> dict:
+        """
+        Returns the current status of the genetic algorithm process.
+        """
+        fittest_individual = self.get_fittest_individual()
+        return {
+            'status': self.status,
+            'generation': self.generation_number,
+            'population_size': len(self.population) if self.population else 0,
+            'best_fitness': fittest_individual.fitness_score if fittest_individual else None,
+            'fittest_individual_id': fittest_individual.id if fittest_individual else None,
+            'fittest_chromosome_string': fittest_individual.to_prompt_string() if fittest_individual else "",
+            'agents_used': self.agents_used
+        }
