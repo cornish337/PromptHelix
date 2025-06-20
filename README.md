@@ -313,12 +313,18 @@ PromptHelix also provides an API endpoint to trigger the genetic algorithm.
 
 ### Running Tests
 
-You can run all automated tests (unit and integration tests) using the PromptHelix CLI. This command will discover and execute all tests located within the `prompthelix/tests` directory and its subdirectories.
+You can run all automated tests (unit and integration tests) using the PromptHelix CLI. By default, the command discovers every test in the `prompthelix/tests` directory and its subdirectories.
 
 Execute the following command from the root of the project:
 
 ```bash
 python -m prompthelix.cli test
+```
+
+To limit discovery to a particular directory or file, pass the `--path` option:
+
+```bash
+python -m prompthelix.cli test --path tests/unit/test_architect_agent.py
 ```
 
 The output will show the progress of the tests and a summary of the results.

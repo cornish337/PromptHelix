@@ -29,6 +29,24 @@ def test_cli_test_command(monkeypatch, capsys):
     assert "CLI: Running all tests..." in captured
 
 
+def test_cli_test_command_custom_path(monkeypatch, capsys):
+    mock_loader = MagicMock()
+    mock_runner = MagicMock()
+    mock_result = MagicMock()
+    mock_result.wasSuccessful.return_value = True
+    mock_runner.run.return_value = mock_result
+    monkeypatch.setattr(
+        cli,
+        "unittest",
+        SimpleNamespace(TestLoader=lambda: mock_loader, TextTestRunner=lambda verbosity: mock_runner),
+    )
+    mock_loader.discover.return_value = "suite"
+    exit_code = run_cli(["test", "--path", "tests/unit"], monkeypatch)
+    captured = capsys.readouterr().out
+    assert exit_code == 0
+    mock_loader.discover.assert_called_with(start_dir="tests/unit")
+
+
 def test_cli_run_command(monkeypatch, capsys):
     mock_loop = MagicMock(return_value=SimpleNamespace(fitness_score=1.0, to_prompt_string=lambda: "best"))
     monkeypatch.setattr("prompthelix.orchestrator.main_ga_loop", mock_loop)
