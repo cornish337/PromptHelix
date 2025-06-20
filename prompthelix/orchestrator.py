@@ -2,9 +2,7 @@ from prompthelix.message_bus import MessageBus
 import logging
 import time # Added
 from prompthelix.database import SessionLocal # Added
-from prompthelix.websocket_manager import ConnectionManager
-
-websocket_manager = ConnectionManager()
+from prompthelix.globals import websocket_manager  # Use the global connection manager
 from prompthelix.agents.architect import PromptArchitectAgent
 from prompthelix.agents.results_evaluator import ResultsEvaluatorAgent
 from prompthelix.agents.style_optimizer import StyleOptimizerAgent
