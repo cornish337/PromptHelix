@@ -4,7 +4,7 @@ import time # For time.sleep
 
 # Adjust imports based on your project structure
 from prompthelix.orchestrator import main_ga_loop
-from prompthelix.genetics.engine import PopulationManager, PromptChromosome, GeneticOperators, FitnessEvaluator
+from prompthelix.genetics.engine import PopulationManager, PromptChromosome, GeneticOperators, FitnessEvaluator # PopulationManager might be mostly mocked now
 from prompthelix.agents.architect import PromptArchitectAgent # Assuming a concrete or mockable agent
 from prompthelix.agents.results_evaluator import ResultsEvaluatorAgent
 from prompthelix.agents.style_optimizer import StyleOptimizerAgent
@@ -69,107 +69,93 @@ class TestOrchestratorGAControl(unittest.TestCase):
 
 
         # This is the PopulationManager instance that will be returned by the patched constructor
-        self.controlled_pop_manager = PopulationManager(
-            genetic_operators=self.mock_genetic_ops,
-            fitness_evaluator=self.fitness_evaluator,
-            prompt_architect_agent=self.mock_architect_agent,
-            population_size=5,
-            elitism_count=1,
-            message_bus=self.message_bus,
-            parallel_workers=None
-        )
-        # Pre-seed population
+        # It's now a MagicMock to allow direct control and assertion of its methods.
+        self.controlled_pop_manager = MagicMock(spec=PopulationManager)
+
+        # Initialize attributes that PopulationManager instance would have,
+        # and that GeneticAlgorithmRunner or main_ga_loop might interact with.
         self.controlled_pop_manager.population = [PromptChromosome(genes=[f"chromo{i}"]) for i in range(5)]
         for chromo in self.controlled_pop_manager.population:
-            chromo.fitness_score = 0.1
+            chromo.fitness_score = 0.1 # Default fitness
         self.controlled_pop_manager.generation_number = 0
+        self.controlled_pop_manager.is_paused = False
+        self.controlled_pop_manager.should_stop = False
+        self.controlled_pop_manager.status = "IDLE"
+        self.controlled_pop_manager.message_bus = self.message_bus # Runner might use this via PM
+        # Ensure methods that return values are configured if the runner uses them directly
+        self.controlled_pop_manager.get_fittest_individual.return_value = self.controlled_pop_manager.population[0]
 
 
-    @patch('prompthelix.orchestrator.PopulationManager')
-    @patch('time.sleep', return_value=None)
-    def test_main_ga_loop_pause_and_resume(self, mock_time_sleep, MockOrchestratorPopulationManager):
-        # Configure the patched PopulationManager in orchestrator.py to return our controlled instance
-        MockOrchestratorPopulationManager.return_value = self.controlled_pop_manager
+    @patch('prompthelix.orchestrator.PopulationManager', new_callable=MagicMock)
+    # No longer patching time.sleep for the orchestrator's pause loop here
+    def test_main_ga_loop_pause_and_resume(self, MockPmConstructorInOrchestrator):
+        # Configure the patched PopulationManager constructor in orchestrator.py
+        # to return our MagicMock instance.
+        MockPmConstructorInOrchestrator.return_value = self.controlled_pop_manager
 
-        # Start the controlled_pop_manager in a paused state
-        self.controlled_pop_manager.pause_evolution()
-        self.mock_connection_manager_for_bus.broadcast_json.reset_mock()
+        # Reset relevant mock states for this test
+        self.controlled_pop_manager.reset_mock() # Resets call counts, etc. on the mock itself
+        # Re-initialize attributes on the mock PM for this test run
+        self.controlled_pop_manager.generation_number = 0
+        self.controlled_pop_manager.is_paused = False
+        self.controlled_pop_manager.should_stop = False
+        self.controlled_pop_manager.status = "IDLE"
+        # Ensure evolve_population is a fresh mock for this test's side effect
+        self.controlled_pop_manager.evolve_population = MagicMock()
+        # Ensure broadcast_ga_update is also part of the main mock or a fresh sub-mock
+        self.controlled_pop_manager.broadcast_ga_update = MagicMock()
+        # Ensure control methods are fresh mocks if we assert calls on them
+        self.controlled_pop_manager.pause_evolution = MagicMock(side_effect=lambda: setattr(self.controlled_pop_manager, 'is_paused', True) or setattr(self.controlled_pop_manager, 'status', "PAUSED"))
+        self.controlled_pop_manager.resume_evolution = MagicMock(side_effect=lambda: setattr(self.controlled_pop_manager, 'is_paused', False) or setattr(self.controlled_pop_manager, 'status', "RUNNING"))
 
-        # Define side effect for evolve_population on our controlled instance
-        original_evolve_population = self.controlled_pop_manager.evolve_population
-
-        # Use a simple counter for calls, as MagicMock might be reset if instance is re-patched
-        evolve_call_count = 0
-
-        def side_effect_evolve(*args, **kwargs):
-            nonlocal evolve_call_count
-            evolve_call_count += 1
-
-            # Simulate resuming the GA externally after the first pause check in main_ga_loop
-            if evolve_call_count == 1: # This means first attempt to evolve
-                print("Test: Simulating resume after first pause check in orchestrator loop.")
-                self.controlled_pop_manager.resume_evolution()
-
-            # Simulate what evolve_population does: increments generation number
-            # The actual evolution logic is mocked away by not calling original_evolve_population
-            # or by having its dependencies (like fitness_evaluator) fully controlled.
-            # Here, we directly control generation number for simplicity in test.
-            self.controlled_pop_manager.generation_number += 1
-            # Ensure status reflects running if not paused/stopped by test logic
-            if not self.controlled_pop_manager.is_paused and not self.controlled_pop_manager.should_stop:
-                 self.controlled_pop_manager.status = "RUNNING"
-
-        # Replace the method on the instance main_ga_loop will use
-        self.controlled_pop_manager.evolve_population = MagicMock(side_effect=side_effect_evolve)
 
         num_generations = 3
-        main_ga_loop(
-            task_desc="test task", keywords=["test"],
-            num_generations=num_generations, population_size=5, elitism_count=1,
-            execution_mode=ExecutionMode.TEST,
-            agent_settings_override=None, llm_settings_override=None, parallel_workers=None
-        )
 
-        self.controlled_pop_manager.evolve_population = original_evolve_population # Restore
+        # Simulate external system starting the PopulationManager in a paused state
+        # BEFORE the runner's `run` method is called.
+        # The runner's `run` method starts by setting PM status to "RUNNING".
+        # To test pause *during* run, pause needs to be triggered by a side effect of evolve_population.
+        # For this test, let's make the PM start as if it was already running then paused by external agent.
 
-        mock_time_sleep.assert_called() # Check orchestrator loop paused
-        self.assertEqual(evolve_call_count, num_generations) # Check it ran all generations
+        # Initial state for PM before runner.run() is called by main_ga_loop
+        # Runner will set it to "RUNNING" then "PAUSED" if pause_evolution is called by side_effect
+        self.controlled_pop_manager.status = "RUNNING" # Runner will set this at start of its run
 
-        resume_broadcast_found = False
-        for call_args in self.mock_connection_manager_for_bus.broadcast_json.call_args_list:
-            if call_args[0][0]['type'] == 'ga_resumed':
-                resume_broadcast_found = True
-                break
-        self.assertTrue(resume_broadcast_found, "ga_resumed broadcast was not found")
-        self.assertFalse(self.controlled_pop_manager.is_paused)
+        evolve_call_attempts = 0
 
+        def custom_evolve_side_effect(*args, **kwargs):
+            nonlocal evolve_call_attempts
+            evolve_call_attempts += 1
 
-    @patch('prompthelix.orchestrator.PopulationManager')
-    @patch('time.sleep', return_value=None) # Mock sleep even if not directly testing pause
-    def test_main_ga_loop_stop(self, mock_time_sleep, MockOrchestratorPopulationManager):
-        MockOrchestratorPopulationManager.return_value = self.controlled_pop_manager
-        self.mock_connection_manager_for_bus.broadcast_json.reset_mock()
+            # This is the mock of PopulationManager.evolve_population()
+            # If this method is called while the PM is paused, it should do nothing / return early.
+            if self.controlled_pop_manager.is_paused:
+                # print(f"Test custom_evolve: Evolution attempt {evolve_call_attempts} while PAUSED. Skipping.")
+                # PM's own evolve_population would broadcast heartbeat if paused.
+                self.controlled_pop_manager.broadcast_ga_update(event_type="ga_status_heartbeat_mocked_evolve")
+                return
 
-        original_evolve_population = self.controlled_pop_manager.evolve_population
-        evolve_call_count = 0
+            if self.controlled_pop_manager.should_stop:
+                self.controlled_pop_manager.status = "STOPPED"
+                return
 
-        def side_effect_evolve(*args, **kwargs):
-            nonlocal evolve_call_count
-            evolve_call_count += 1
-
-            # Simulate stopping the GA externally after the first generation
-            if evolve_call_count == 1:
-                print("Test: Simulating stop request after first generation.")
-                self.controlled_pop_manager.stop_evolution()
-
+            # If not paused or stopped, simulate successful evolution by incrementing generation number
             self.controlled_pop_manager.generation_number += 1
-            if not self.controlled_pop_manager.is_paused and not self.controlled_pop_manager.should_stop:
-                 self.controlled_pop_manager.status = "RUNNING"
+            self.controlled_pop_manager.status = "RUNNING" # After successful evolution part
+            # print(f"Test custom_evolve: Evolution attempt {evolve_call_attempts} successful. Gen: {self.controlled_pop_manager.generation_number}")
 
+            # Test Logic: After the first *successful* evolution, simulate an external pause.
+            # Then, after the next *attempted* (paused) evolution, simulate a resume.
+            if evolve_call_attempts == 1: # After 1st successful evolution
+                # print("Test custom_evolve: Simulating external PAUSE request.")
+                self.controlled_pop_manager.pause_evolution() # Sets is_paused=True, status="PAUSED"
 
-        self.controlled_pop_manager.evolve_population = MagicMock(side_effect=side_effect_evolve)
+            if evolve_call_attempts == 2 and self.controlled_pop_manager.is_paused: # After 1st paused attempt
+                # print("Test custom_evolve: Simulating external RESUME request.")
+                self.controlled_pop_manager.resume_evolution() # Sets is_paused=False, status="RUNNING"
 
-        num_generations = 5
+        self.controlled_pop_manager.evolve_population.side_effect = custom_evolve_side_effect
+
         main_ga_loop(
             task_desc="test task", keywords=["test"],
             num_generations=num_generations, population_size=5, elitism_count=1,
@@ -177,21 +163,96 @@ class TestOrchestratorGAControl(unittest.TestCase):
             agent_settings_override=None, llm_settings_override=None, parallel_workers=None
         )
 
-        self.controlled_pop_manager.evolve_population = original_evolve_population # Restore
+        # Runner calls evolve_population `num_generations` (3) times.
+        # 1st call: successful, then pause_evolution() is called by side_effect. PM is_paused = True. Gen = 1.
+        # 2nd call: PM is_paused. evolve_population mock returns early (heartbeat). resume_evolution() called by side_effect. PM is_paused = False. Gen = 1.
+        # 3rd call: PM not paused. Successful. Gen = 2.
+        self.assertEqual(self.controlled_pop_manager.evolve_population.call_count, num_generations)
+        self.assertEqual(self.controlled_pop_manager.generation_number, num_generations - 1) # Two successful evolutions
 
-        # evolve_population on the instance should only be called once
-        self.assertEqual(evolve_call_count, 1)
+        self.assertFalse(self.controlled_pop_manager.is_paused, "PopulationManager should not be paused at the end.")
+        self.controlled_pop_manager.pause_evolution.assert_called_once()
+        self.controlled_pop_manager.resume_evolution.assert_called_once()
+
+        # Check broadcasts from the mock PM's control methods
+        self.controlled_pop_manager.broadcast_ga_update.assert_any_call(event_type='ga_paused')
+        self.controlled_pop_manager.broadcast_ga_update.assert_any_call(event_type='ga_resumed')
+        # Check heartbeat broadcast during the paused evolution attempt
+        self.controlled_pop_manager.broadcast_ga_update.assert_any_call(event_type='ga_status_heartbeat_mocked_evolve')
+
+
+    @patch('prompthelix.orchestrator.PopulationManager', new_callable=MagicMock)
+    def test_main_ga_loop_stop(self, MockPmConstructorInOrchestrator):
+        MockPmConstructorInOrchestrator.return_value = self.controlled_pop_manager
+
+        self.controlled_pop_manager.reset_mock()
+        self.controlled_pop_manager.generation_number = 0
+        self.controlled_pop_manager.is_paused = False
+        self.controlled_pop_manager.should_stop = False
+        self.controlled_pop_manager.status = "IDLE"
+        self.controlled_pop_manager.evolve_population = MagicMock()
+        self.controlled_pop_manager.broadcast_ga_update = MagicMock()
+        # Ensure stop_evolution is a mock to assert calls and control side effects
+        self.controlled_pop_manager.stop_evolution = MagicMock(
+            side_effect=lambda: (
+                setattr(self.controlled_pop_manager, 'should_stop', True),
+                setattr(self.controlled_pop_manager, 'status', "STOPPING") # Status PM sets
+            )
+        )
+
+
+        num_generations_target = 5 # Orchestrator/Runner will try to run this many
+
+        evolve_attempts_count = 0
+
+        def side_effect_evolve_for_stop(*args, **kwargs):
+            nonlocal evolve_attempts_count
+            evolve_attempts_count += 1
+
+            # This mock for PM's evolve_population needs to respect should_stop
+            if self.controlled_pop_manager.should_stop:
+                # print(f"Test evolve_for_stop: Detected should_stop. Attempt: {evolve_attempts_count}")
+                # If PopulationManager.evolve_population itself sets status to STOPPED
+                # self.controlled_pop_manager.status = "STOPPED"
+                return
+
+            # Simulate normal evolution if not stopped
+            self.controlled_pop_manager.generation_number += 1
+            self.controlled_pop_manager.status = "RUNNING" # After successful evolution part
+            # print(f"Test evolve_for_stop: Evolved gen {self.controlled_pop_manager.generation_number}. Attempt: {evolve_attempts_count}")
+
+            # Test logic: Stop after the first successful evolution
+            if evolve_attempts_count == 1:
+                # print("Test evolve_for_stop: Simulating external STOP request after 1st evolution.")
+                self.controlled_pop_manager.stop_evolution() # Sets should_stop=True, status="STOPPING"
+
+        self.controlled_pop_manager.evolve_population.side_effect = side_effect_evolve_for_stop
+
+        main_ga_loop(
+            task_desc="test task", keywords=["test"],
+            num_generations=num_generations_target, population_size=5, elitism_count=1,
+            execution_mode=ExecutionMode.TEST,
+            agent_settings_override=None, llm_settings_override=None, parallel_workers=None
+        )
+
+        # Runner's loop:
+        # Gen 1: evolve_population called. side_effect runs, increments gen_number to 1. stop_evolution() called. should_stop = True.
+        # Gen 2: Runner's loop checks should_stop *before* calling evolve_population. It's true. Loop breaks.
+        # So, evolve_population (the mock) should be called only once.
+        self.assertEqual(self.controlled_pop_manager.evolve_population.call_count, 1)
         self.assertTrue(self.controlled_pop_manager.should_stop)
-        self.assertEqual(self.controlled_pop_manager.status, "STOPPED")
 
-        stop_broadcast_found = False
-        # Check for 'ga_stopping' from stop_evolution() or 'ga_run_stopped' from orchestrator loop
-        for call_args in self.mock_connection_manager_for_bus.broadcast_json.call_args_list:
-            if call_args[0][0]['type'] in ['ga_stopping', 'ga_run_stopped', 'ga_run_final_status']:
-                 if call_args[0][0]['data']['status'] == 'STOPPED':
-                    stop_broadcast_found = True
-                    break
-        self.assertTrue(stop_broadcast_found, "GA stop broadcast with status STOPPED was not found")
+        # The runner's loop detects should_stop and sets PM status to "STOPPED" and broadcasts.
+        # The self.controlled_pop_manager.status might be "STOPPING" from its own stop_evolution,
+        # but the runner updates it to "STOPPED".
+        self.assertEqual(self.controlled_pop_manager.status, "STOPPED")
+        self.controlled_pop_manager.stop_evolution.assert_called_once()
+
+        # Check broadcasts
+        # stop_evolution() on PM mock broadcasts "ga_stopping".
+        # Runner broadcasts "ga_run_stopped_runner_signal" or similar when its loop breaks due to stop.
+        self.controlled_pop_manager.broadcast_ga_update.assert_any_call(event_type='ga_stopping')
+        self.controlled_pop_manager.broadcast_ga_update.assert_any_call(event_type='ga_run_stopped_runner_signal')
 
 
 if __name__ == '__main__':

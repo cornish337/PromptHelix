@@ -8,6 +8,7 @@ from prompthelix.genetics.engine import (
 )
 from prompthelix.agents.architect import PromptArchitectAgent
 from prompthelix.agents.results_evaluator import ResultsEvaluatorAgent # Needed for actual FitnessEvaluator
+from prompthelix.message_bus import MessageBus # Needed for mocking message_bus
 
 class TestPopulationManager(unittest.TestCase):
     """Test suite for the PopulationManager class."""
@@ -17,6 +18,8 @@ class TestPopulationManager(unittest.TestCase):
         self.mock_genetic_ops = Mock(spec=GeneticOperators)
         self.mock_fitness_eval = Mock(spec=FitnessEvaluator)
         self.mock_architect_agent = Mock(spec=PromptArchitectAgent)
+        self.mock_message_bus = MagicMock(spec=MessageBus)
+
 
         # Configure default return values for process_request to avoid errors if not overridden
         self.mock_architect_agent.process_request.return_value = PromptChromosome(genes=["Default gene"])
@@ -276,6 +279,104 @@ class TestPopulationManager(unittest.TestCase):
         self.assertEqual(manager.generation_number, 0, "Generation number should not change for empty population.")
         self.assertEqual(len(manager.population), 0, "Population should remain empty.")
         self.mock_fitness_eval.evaluate.assert_not_called()
+
+    # --- Test Control Methods (pause, resume, stop) ---
+
+    @patch('prompthelix.genetics.engine.PopulationManager.broadcast_ga_update')
+    def test_pause_evolution(self, mock_broadcast_ga_update):
+        """Test pausing the evolution."""
+        manager = PopulationManager(
+            self.mock_genetic_ops, self.mock_fitness_eval, self.mock_architect_agent,
+            message_bus=self.mock_message_bus
+        )
+        manager.status = "RUNNING" # Set initial state
+
+        manager.pause_evolution()
+
+        self.assertTrue(manager.is_paused)
+        self.assertEqual(manager.status, "PAUSED")
+        mock_broadcast_ga_update.assert_called_once_with(event_type="ga_paused")
+
+    @patch('prompthelix.genetics.engine.PopulationManager.broadcast_ga_update')
+    def test_resume_evolution(self, mock_broadcast_ga_update):
+        """Test resuming the evolution."""
+        manager = PopulationManager(
+            self.mock_genetic_ops, self.mock_fitness_eval, self.mock_architect_agent,
+            message_bus=self.mock_message_bus
+        )
+        manager.is_paused = True # Set initial state
+        manager.status = "PAUSED"
+
+        manager.resume_evolution()
+
+        self.assertFalse(manager.is_paused)
+        self.assertEqual(manager.status, "RUNNING") # Assuming resume sets it back to RUNNING
+        mock_broadcast_ga_update.assert_called_once_with(event_type="ga_resumed")
+
+    @patch('prompthelix.genetics.engine.PopulationManager.broadcast_ga_update')
+    def test_stop_evolution(self, mock_broadcast_ga_update):
+        """Test stopping the evolution."""
+        manager = PopulationManager(
+            self.mock_genetic_ops, self.mock_fitness_eval, self.mock_architect_agent,
+            message_bus=self.mock_message_bus
+        )
+        manager.status = "RUNNING"
+        manager.is_paused = True # Stop should also clear pause
+
+        manager.stop_evolution()
+
+        self.assertTrue(manager.should_stop)
+        self.assertFalse(manager.is_paused, "stop_evolution should set is_paused to False.")
+        self.assertEqual(manager.status, "STOPPING")
+        mock_broadcast_ga_update.assert_called_once_with(event_type="ga_stopping")
+
+    def test_pause_evolution_no_message_bus(self):
+        """Test pause_evolution when message_bus is None."""
+        manager = PopulationManager(
+            self.mock_genetic_ops, self.mock_fitness_eval, self.mock_architect_agent,
+            message_bus=None # No MessageBus
+        )
+        manager.status = "RUNNING"
+
+        # Check that broadcast_ga_update is not called or does not raise error
+        with patch.object(manager, 'broadcast_ga_update', wraps=manager.broadcast_ga_update) as mock_broadcast_spy:
+            manager.pause_evolution()
+            mock_broadcast_spy.assert_not_called()
+
+        self.assertTrue(manager.is_paused)
+        self.assertEqual(manager.status, "PAUSED")
+
+    def test_resume_evolution_no_message_bus(self):
+        """Test resume_evolution when message_bus is None."""
+        manager = PopulationManager(
+            self.mock_genetic_ops, self.mock_fitness_eval, self.mock_architect_agent,
+            message_bus=None
+        )
+        manager.is_paused = True
+        manager.status = "PAUSED"
+
+        with patch.object(manager, 'broadcast_ga_update', wraps=manager.broadcast_ga_update) as mock_broadcast_spy:
+            manager.resume_evolution()
+            mock_broadcast_spy.assert_not_called()
+
+        self.assertFalse(manager.is_paused)
+        self.assertEqual(manager.status, "RUNNING")
+
+    def test_stop_evolution_no_message_bus(self):
+        """Test stop_evolution when message_bus is None."""
+        manager = PopulationManager(
+            self.mock_genetic_ops, self.mock_fitness_eval, self.mock_architect_agent,
+            message_bus=None
+        )
+        manager.status = "RUNNING"
+
+        with patch.object(manager, 'broadcast_ga_update', wraps=manager.broadcast_ga_update) as mock_broadcast_spy:
+            manager.stop_evolution()
+            mock_broadcast_spy.assert_not_called()
+
+        self.assertTrue(manager.should_stop)
+        self.assertFalse(manager.is_paused)
+        self.assertEqual(manager.status, "STOPPING")
 
 
 if __name__ == '__main__':

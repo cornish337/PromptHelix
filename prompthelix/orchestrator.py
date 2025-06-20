@@ -13,6 +13,7 @@ from prompthelix.agents.domain_expert import DomainExpertAgent # Added for demo
 from prompthelix.agents.critic import PromptCriticAgent # Added for demo
 # Import BaseAgent if we need to use it for the example, or a mock agent
 from prompthelix.agents.base import BaseAgent
+from prompthelix.experiment_runners import GeneticAlgorithmRunner # Added import
 from prompthelix.genetics.engine import (
     GeneticOperators,
     FitnessEvaluator,
@@ -203,102 +204,68 @@ def main_ga_loop(
         else:
             return
 
-    # 5. Evolution Loop
-    print("\n--- Starting Evolution Loop ---")
-    logger.info("Starting evolution loop for %d generations", num_generations)
-    fittest_individual = None
+    # 5. Instantiate and Run GeneticAlgorithmRunner
+    logger.info("\n--- Initializing and Starting Genetic Algorithm Runner ---")
 
-    if pop_manager.population: # Ensure there's a population to manage
-        pop_manager.status = "RUNNING" # Initial status before first generation
-        pop_manager.broadcast_ga_update(event_type="ga_run_started")
+    runner = GeneticAlgorithmRunner(
+        population_manager=pop_manager,
+        num_generations=num_generations
+    )
 
-    for i in range(num_generations):
-        # --- Start of new control logic ---
-        while pop_manager.is_paused and not pop_manager.should_stop:
-            logger.info("GA run is paused. Waiting for resume or stop command...")
-            pop_manager.broadcast_ga_update(event_type="ga_status_heartbeat") # Optional: send periodic updates while paused
-            time.sleep(1) # Check every second
+    # evaluation_task_desc and evaluation_success_criteria are defined earlier in main_ga_loop
+    # For example:
+    # evaluation_task_desc = task_desc
+    # evaluation_success_criteria = {
+    #     "must_include_keywords": keywords[:2] if keywords else [],
+    #     "max_length": 500
+    # }
 
-        if pop_manager.should_stop:
-            logger.info("GA run stopping as per request.")
-            pop_manager.status = "STOPPED" # Status already set by stop_evolution, but ensure it's reflected
-            pop_manager.broadcast_ga_update(event_type="ga_run_stopped") # Broadcast again to confirm orchestrator loop stop
-            break # Exit the generation loop
-        # --- End of new control logic ---
+    run_kwargs = {
+        "task_description": evaluation_task_desc,
+        "success_criteria": evaluation_success_criteria,
+        "target_style": "formal" # Maintaining the style from the original evolve_population call
+    }
 
-        current_generation_num = pop_manager.generation_number + 1
-        print(f"\n--- Generation {current_generation_num} of {num_generations} ---")
-        logger.info("Generation %d start", current_generation_num)
+    logger.info(f"Handing over to GeneticAlgorithmRunner (ID: {id(runner)}) to run for {num_generations} generations.")
+    # The runner's run() method will now manage the evolution loop and pause/stop/complete states.
+    fittest_individual = runner.run(**run_kwargs) # This will be the overall best from the run.
 
-        # evolve_population now checks for should_stop internally as well.
-        pop_manager.evolve_population(
-            task_description=evaluation_task_desc,  # Use consistent task for evaluation
-            success_criteria=evaluation_success_criteria,
-            target_style="formal" # Example, ensure this is handled or removed if not dynamic
-        )
+    logger.info(f"GeneticAlgorithmRunner has completed. Orchestrator check on PopulationManager status: {pop_manager.status}")
 
-        # If evolve_population was skipped due to should_stop, this check handles it
-        if pop_manager.should_stop and pop_manager.status == "STOPPED": # Status might be set by evolve_population's end or by stop_evolution
-            logger.info(f"GA run stopped during generation {current_generation_num} processing.")
-            # An event for ga_run_stopped would have been sent by stop_evolution or the check above.
-            # If evolve_population itself sets status to STOPPED and broadcasts, this might be redundant.
-            # For clarity, let's ensure a final "run_stopped" is sent if loop breaks here.
-            # pop_manager.broadcast_ga_update(event_type="ga_run_stopped_in_gen") # Or rely on evolve_population's broadcast
-            break
+    # After the runner completes (or is stopped), get the final best from the population manager
+    final_fittest_overall = pop_manager.get_fittest_individual()
 
-
-        fittest_in_gen = pop_manager.get_fittest_individual()
-        if fittest_in_gen:
-            print(f"Fittest in Generation {pop_manager.generation_number}: Fitness={fittest_in_gen.fitness_score:.4f}")
-            print(f"Prompt (ID: {fittest_in_gen.id}): {fittest_in_gen.to_prompt_string()[:200]}...")
-            fittest_individual = fittest_in_gen
-        else:
-            print("No fittest individual found in this generation.")
-        logger.info(
-            "Generation %d end - population size: %d, best fitness: %s",
-            pop_manager.generation_number,
-            len(pop_manager.population),
-            f"{fittest_in_gen.fitness_score:.4f}" if fittest_in_gen else "N/A",
-        )
-
-        # If loop completes normally (all generations run for this iteration)
-        if i == num_generations - 1 and not pop_manager.should_stop:
-             pop_manager.status = "COMPLETED" # Mark as completed if it finished all generations
-             pop_manager.broadcast_ga_update(event_type="ga_run_completed")
-
-
-    # After the loop (if it broke due to stop or completed naturally)
-    final_fittest_overall = pop_manager.get_fittest_individual() # Get the best regardless of how loop ended
-
-    # Consolidate final status update logic
-    if pop_manager.should_stop and pop_manager.status != "STOPPED":
-        # This case might occur if stop_evolution was called but loop exited before status was updated by main loop logic
-        pop_manager.status = "STOPPED"
-        logger.info("GA run has been externally stopped. Final status set to STOPPED.")
-    elif not pop_manager.should_stop and pop_manager.status != "COMPLETED":
-        # If not stopped and not already marked COMPLETED (e.g. if num_generations was 0 or loop exited unexpectedly)
-        # This could also be an ERROR state if population became empty, etc.
-        # For now, if it wasn't explicitly stopped, and didn't complete all gens, assume it finished its course.
-        pop_manager.status = "COMPLETED" # Or "UNKNOWN_EXIT_STATUS"
-        logger.info(f"GA run finished. Final status set to {pop_manager.status}.")
-
-    pop_manager.broadcast_ga_update(event_type="ga_run_final_status") # Send final status
+    # Consolidate final status update logic (this was present in original orchestrator)
+    # This might need adjustment if the runner already robustly sets these.
+    # For now, keeping it to ensure final status is logged by orchestrator.
+    if pop_manager.status not in ["STOPPED", "COMPLETED", "ERROR"]:
+        logger.warning(f"Orchestrator: PopulationManager status is '{pop_manager.status}' after runner completion. Expected STOPPED, COMPLETED, or ERROR.")
+        if pop_manager.should_stop: # if a stop was signaled to PM but runner didn't set it
+            pop_manager.status = "STOPPED"
+        elif pop_manager.generation_number >= num_generations: # Check actual generations run vs target
+             pop_manager.status = "COMPLETED"
+        else: # If neither stopped nor completed full generations (e.g. error or unexpected exit)
+            pop_manager.status = "UNKNOWN_POST_RUN"
+        logger.info(f"Orchestrator: Adjusted PopulationManager status to '{pop_manager.status}'.")
+        pop_manager.broadcast_ga_update(event_type="ga_run_status_adjusted_orchestrator")
 
 
     if final_fittest_overall:
-        print("\n--- Overall Best Prompt Found ---")
+        print("\n--- Overall Best Prompt Found (via Orchestrator) ---")
         print(str(final_fittest_overall))
         logger.info(
-            "GA finished - final population size: %d, best fitness: %.4f, status: %s",
-            len(pop_manager.population),
+            "Orchestrator: GA finished - final population size: %d, best fitness: %.4f, status: %s",
+            len(pop_manager.population) if pop_manager.population else 0,
             final_fittest_overall.fitness_score,
             pop_manager.status
         )
     else:
-        print("\nNo solution found after all generations.")
+        # This might occur if fittest_individual from runner.run() was None,
+        # and pop_manager.get_fittest_individual() also returns None.
+        print("\nNo solution found after all generations (checked by Orchestrator).")
         logger.info(
-            "GA finished - final population size: %d, no valid solution, status: %s",
-            len(pop_manager.population),
+            "Orchestrator: GA finished - final population size: %d, no valid solution, status: %s",
+            len(pop_manager.population) if pop_manager.population else 0,
             pop_manager.status
         )
 
