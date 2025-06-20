@@ -329,3 +329,19 @@ python -m prompthelix.cli test --path tests/unit/test_architect_agent.py
 
 The output will show the progress of the tests and a summary of the results.
 
+
+### Interactive Tests
+
+Some tests require manual input from a user. These tests live in `tests/interactive/` and are skipped automatically when no TTY is available. To run them directly with pytest:
+
+```bash
+pytest tests/interactive -s
+```
+
+You can also invoke them through the PromptHelix CLI:
+
+```bash
+python -m prompthelix.cli interactive
+```
+
+Use `--path` to run a specific interactive test module if needed.
