@@ -16,8 +16,8 @@ The core components of PromptHelix are organized as follows:
 -   `prompthelix/database/`: Database models (SQLAlchemy), session management, and initialization.
 -   `prompthelix/docs/`: Project documentation, including this file and `agent_specifications.md`.
 -   `prompthelix/evaluation/`: Modules for evaluating prompt performance.
--   `prompthelix/evolution/`: Core logic for the genetic algorithm (chromosomes, operators, population), previously `prompthelix/genetics/`.
--   `prompthelix/llm_integrations/`: Modules for interacting with various LLM providers.
+-   `prompthelix/genetics/`: Core logic for the genetic algorithm (chromosomes, operators, population).
+-   `prompthelix/utils/llm_utils.py`: Utility functions for interacting with various LLM providers.
 -   `prompthelix/main.py`: Main FastAPI application entry point.
 -   `prompthelix/schemas/`: Pydantic schemas for data validation and serialization.
 -   `prompthelix/services/`: Business logic and services.
@@ -147,7 +147,7 @@ python prompthelix/tests/test_llm_connectivity.py [options]
 
 -   `--provider`: Specifies the LLM provider.
     -   Default: `openai`
-    -   Example: `openai`, `anthropic`, `google` (adjust based on actual provider keys in `llm_integrations`)
+     -   Example: `openai`, `anthropic`, `google` (adjust based on provider keys configured in `utils.llm_utils`)
 -   `--model`: Specifies the model name for the chosen provider.
     -   Default: `gpt-3.5-turbo`
     -   Example: `gpt-3.5-turbo` (for OpenAI), `claude-2` (for Anthropic), `gemini-pro` (for Google)
@@ -190,7 +190,7 @@ For instructions on running the main Web UI or the CLI for tasks like running th
 *   Running the FastAPI web server.
 *   Using the `prompthelix.cli` for various operations.
 
-The `prompthelix/orchestrator.py` mentioned in previous versions of this document has likely been integrated into or superseded by the CLI and API functionalities described in the main `README.md`.
+While you can still run the genetic algorithm by calling `prompthelix/orchestrator.py` directly, the recommended approach is to use the CLI or API described in the main `README.md`.
 
 ## Future Directions
 (This section can be maintained here if it pertains to more granular, internal development plans not covered in the main README.)
