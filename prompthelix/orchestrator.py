@@ -167,6 +167,7 @@ def main_ga_loop(
         message_bus=message_bus,  # Added
         agents_used=agent_names,  # Pass the collected agent names/IDs
 
+
         # TODO: Pass agent_settings_override or specific agent configs if PopulationManager
         # is responsible for creating/configuring more agents during its operations.
         # For now, agents are configured above.
