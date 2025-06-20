@@ -46,9 +46,13 @@ def main_cli():
     subparsers = parser.add_subparsers(title="commands", dest="command")
 
     # Subcommand for "test"
-    test_parser = subparsers.add_parser("test", help="Run all tests")
-    # The --all argument is removed, test command will now always run all tests.
-    # TODO: Future enhancement could allow specifying individual test files or modules.
+    test_parser = subparsers.add_parser("test", help="Run tests")
+    # Allow specifying a path to limit discovery to a subset of tests
+    test_parser.add_argument(
+        "--path",
+        "-p",
+        help="Optional directory or pattern to discover tests under",
+    )
 
     # "run" command
     run_parser = subparsers.add_parser("run", help="Run the PromptHelix application or a specific module")
@@ -76,68 +80,77 @@ def main_cli():
     args = parser.parse_args()
 
     if args.command == "test":
-        print("CLI: Running all tests...")
         loader = unittest.TestLoader()
-        # Determine the correct start_dir relative to the project root
-        # Assuming cli.py is in prompthelix/ and tests are in prompthelix/tests
-        # For the discover method, the path should be relative to the project root if running `python -m prompthelix.cli`
-        # or relative to the current working directory if running the script directly.
-        # Let's try to make it robust by finding the project root or using a path relative to this file.
-        
-        # Path to the 'tests' directory relative to this cli.py file
-        # __file__ is prompthelix/cli.py, so dirname(__file__) is prompthelix/
-        # tests_dir_relative_to_cli = os.path.join(os.path.dirname(__file__), "tests")
+        if args.path:
+            print(f"CLI: Running tests from {args.path}...")
+            suite = loader.discover(start_dir=args.path)
+        else:
+            print("CLI: Running all tests...")
+            # Determine the correct start_dir relative to the project root
+            # Assuming cli.py is in prompthelix/ and tests are in prompthelix/tests
+            # For the discover method, the path should be relative to the project root if running `python -m prompthelix.cli`
+            # or relative to the current working directory if running the script directly.
+            # Let's try to make it robust by finding the project root or using a path relative to this file.
 
-        # However, TestLoader.discover usually works best with paths relative to the project root,
-        # or python package paths.
-        # If 'prompthelix' is in PYTHONPATH or installed, 'prompthelix.tests' should work.
-        # If running as 'python -m prompthelix.cli', CWD is usually project root.
-        
-        # Let's assume the tests are within the 'prompthelix' package, under a 'tests' sub-package.
-        # The pattern 'test*.py' is the default for discover.
-        
-        # Determine the project root path (parent of the 'prompthelix' directory)
-        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-        start_dir = os.path.join(project_root, 'prompthelix', 'tests')
+            # Path to the 'tests' directory relative to this cli.py file
+            # __file__ is prompthelix/cli.py, so dirname(__file__) is prompthelix/
+            # tests_dir_relative_to_cli = os.path.join(os.path.dirname(__file__), "tests")
 
-        # A more common way if 'prompthelix' is a package and tests are inside it:
-        # suite = loader.discover('prompthelix.tests', pattern='test_*.py', top_level_dir=project_root)
-        # For simplicity and directness with file paths:
-        
-        if not os.path.isdir(start_dir):
-            print(f"Error: Test directory not found at {start_dir}", file=sys.stderr)
-            print(f"Project root detected as: {project_root}", file=sys.stderr)
-            print(f"Current __file__ is: {__file__}", file=sys.stderr)
-            # Fallback if the structure is different, e.g., /app/tests
-            alt_start_dir = os.path.join(project_root, 'tests')
-            if os.path.isdir(alt_start_dir):
-                start_dir = alt_start_dir
-            else:
-                # If the cli.py is not where we think, this might also be problematic.
-                # For `python -m prompthelix.cli`, CWD is usually the project root.
-                # So 'prompthelix/tests' should be discoverable from there.
-                # If running `python prompthelix/cli.py`, then start_dir needs to be '../prompthelix/tests' if CWD is `prompthelix`
-                # or `prompthelix/tests` if CWD is project root.
-                # The most robust way is to use package discovery if tests are part of the package.
-                # For discover by path, it's relative to CWD or an absolute path.
-                
-                # Using 'prompthelix.tests' as the start_dir for package-based discovery
-                # This requires that 'prompthelix' is in sys.path (e.g. installed or PYTHONPATH set)
-                # and that tests directory is a package (has __init__.py)
-                # And subdirectories (unit, integration) also have __init__.py
-                try:
-                    print(f"Attempting package discovery for 'prompthelix.tests' from project root '{project_root}'")
-                    suite = loader.discover(start_dir='prompthelix.tests', top_level_dir=project_root)
-                except ImportError:
-                     print(f"Package discovery failed. Ensure 'prompthelix' is in PYTHONPATH or installed.", file=sys.stderr)
-                     print(f"Attempting path discovery from CWD: 'prompthelix/tests'", file=sys.stderr)
-                     # This assumes CWD is project root
-                     suite = loader.discover(start_dir='prompthelix/tests')
+            # However, TestLoader.discover usually works best with paths relative to the project root,
+            # or python package paths.
+            # If 'prompthelix' is in PYTHONPATH or installed, 'prompthelix.tests' should work.
+            # If running as 'python -m prompthelix.cli', CWD is usually project root.
 
+            # Let's assume the tests are within the 'prompthelix' package, under a 'tests' sub-package.
+            # The pattern 'test*.py' is the default for discover.
 
-        else: # start_dir (e.g. /app/prompthelix/tests) was found
-            print(f"Using path discovery from: {start_dir}")
-            suite = loader.discover(start_dir)
+            # Determine the project root path (parent of the 'prompthelix' directory)
+            project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+            start_dir = os.path.join(project_root, 'prompthelix', 'tests')
+
+            # A more common way if 'prompthelix' is a package and tests are inside it:
+            # suite = loader.discover('prompthelix.tests', pattern='test_*.py', top_level_dir=project_root)
+            # For simplicity and directness with file paths:
+
+            if not os.path.isdir(start_dir):
+                print(f"Error: Test directory not found at {start_dir}", file=sys.stderr)
+                print(f"Project root detected as: {project_root}", file=sys.stderr)
+                print(f"Current __file__ is: {__file__}", file=sys.stderr)
+                # Fallback if the structure is different, e.g., /app/tests
+                alt_start_dir = os.path.join(project_root, 'tests')
+                if os.path.isdir(alt_start_dir):
+                    start_dir = alt_start_dir
+                else:
+                    # If the cli.py is not where we think, this might also be problematic.
+                    # For `python -m prompthelix.cli`, CWD is usually the project root.
+                    # So 'prompthelix/tests' should be discoverable from there.
+                    # If running `python prompthelix/cli.py`, then start_dir needs to be '../prompthelix/tests' if CWD is `prompthelix`
+                    # or `prompthelix/tests` if CWD is project root.
+                    # The most robust way is to use package discovery if tests are part of the package.
+                    # For discover by path, it's relative to CWD or an absolute path.
+
+                    # Using 'prompthelix.tests' as the start_dir for package-based discovery
+                    # This requires that 'prompthelix' is in sys.path (e.g. installed or PYTHONPATH set)
+                    # and that tests directory is a package (has __init__.py)
+                    # And subdirectories (unit, integration) also have __init__.py
+                    try:
+                        print(f"Attempting package discovery for 'prompthelix.tests' from project root '{project_root}'")
+                        suite = loader.discover(start_dir='prompthelix.tests', top_level_dir=project_root)
+                    except ImportError:
+                        print(
+                            "Package discovery failed. Ensure 'prompthelix' is in PYTHONPATH or installed.",
+                            file=sys.stderr,
+                        )
+                        print(
+                            "Attempting path discovery from CWD: 'prompthelix/tests'",
+                            file=sys.stderr,
+                        )
+                        # This assumes CWD is project root
+                        suite = loader.discover(start_dir='prompthelix/tests')
+
+            else:  # start_dir (e.g. /app/prompthelix/tests) was found
+                print(f"Using path discovery from: {start_dir}")
+                suite = loader.discover(start_dir)
 
         runner = unittest.TextTestRunner(verbosity=2)
         result = runner.run(suite)
