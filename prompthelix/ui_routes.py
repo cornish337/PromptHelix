@@ -9,6 +9,9 @@ from sqlalchemy.orm import Session
 from starlette.status import HTTP_303_SEE_OTHER  # For POST redirect
 import httpx  # For making API calls from UI routes
 from datetime import datetime
+import unittest
+import io
+import asyncio
 
 from prompthelix.templating import templates # Import from templating.py
 from prompthelix.database import get_db     # Ensure this is imported
@@ -86,6 +89,39 @@ def list_available_agents() -> List[dict[str, str]]: # Updated type hint
             except Exception as e:
                 print(f"Error processing module {module_name}: {e}") # Proper logging recommended
     return sorted(agents_info, key=lambda x: x['id']) # Return unique (by id), sorted list of dicts
+
+
+def list_interactive_tests() -> List[str]:
+    """Discover interactive tests inside the tests/interactive directory."""
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+    tests_dir = os.path.join(project_root, "tests", "interactive")
+    if not os.path.isdir(tests_dir):
+        return []
+
+    loader = unittest.TestLoader()
+    suite = loader.discover(start_dir=tests_dir)
+
+    test_names: List[str] = []
+
+    def _collect(s: unittest.TestSuite):
+        for t in s:
+            if isinstance(t, unittest.TestSuite):
+                _collect(t)
+            else:
+                test_names.append(t.id())
+
+    _collect(suite)
+    return sorted(set(test_names))
+
+
+def run_unittest(test_name: str) -> tuple[str, bool]:
+    """Run a single unittest and return output and success status."""
+    stream = io.StringIO()
+    loader = unittest.TestLoader()
+    suite = loader.loadTestsFromName(test_name)
+    runner = unittest.TextTestRunner(stream=stream, verbosity=2)
+    result = runner.run(suite)
+    return stream.getvalue(), result.wasSuccessful()
 
 
 @router.get("/ui/", response_class=HTMLResponse, name="ui_index")
@@ -431,3 +467,28 @@ async def ui_logout(request: Request):
 async def get_dashboard_ui(request: Request):
     """Serves the UI page for the real-time monitoring dashboard."""
     return templates.TemplateResponse("dashboard.html", {"request": request})
+
+
+@router.get("/ui/tests", response_class=HTMLResponse, name="ui_list_tests")
+async def ui_list_tests(request: Request):
+    tests = list_interactive_tests()
+    return templates.TemplateResponse(
+        "interactive_tests.html",
+        {"request": request, "tests": tests, "selected_test": None, "test_output": None},
+    )
+
+
+@router.post("/ui/tests/run", response_class=HTMLResponse, name="ui_run_test")
+async def ui_run_test(request: Request, test_name: str = Form(...)):
+    output, success = await asyncio.to_thread(run_unittest, test_name)
+    tests = list_interactive_tests()
+    return templates.TemplateResponse(
+        "interactive_tests.html",
+        {
+            "request": request,
+            "tests": tests,
+            "selected_test": test_name,
+            "test_output": output,
+            "success": success,
+        },
+    )
