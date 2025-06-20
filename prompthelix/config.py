@@ -8,6 +8,7 @@ configurations from environment variables and potentially .env files.
 # Load environment variables from a .env file if present
 import os
 import logging
+import json
 from sqlalchemy.orm import Session
 from typing import Optional
 from prompthelix.api import crud
@@ -163,6 +164,32 @@ AGENT_SETTINGS = {
         "default_llm_model": "gpt-3.5-turbo",
     },
 }
+
+# Apply environment variable overrides for agent settings
+def _apply_agent_env_overrides(agent_settings: dict) -> dict:
+    """Override agent settings using environment variables."""
+    for agent_name, settings_dict in agent_settings.items():
+        prefix = agent_name.replace("Agent", "").upper()
+        for key, default_val in settings_dict.items():
+            env_var = f"{prefix}_{key.upper()}"
+            if env_var in os.environ:
+                raw_val = os.environ[env_var]
+                new_val = raw_val
+                try:
+                    if isinstance(default_val, bool):
+                        new_val = raw_val.lower() in {"1", "true", "yes"}
+                    elif isinstance(default_val, int) and raw_val.isdigit():
+                        new_val = int(raw_val)
+                    elif isinstance(default_val, float):
+                        new_val = float(raw_val)
+                    elif isinstance(default_val, (dict, list)):
+                        new_val = json.loads(raw_val)
+                except Exception:
+                    new_val = raw_val
+                settings_dict[key] = new_val
+    return agent_settings
+
+AGENT_SETTINGS = _apply_agent_env_overrides(AGENT_SETTINGS)
 
 # --- LLM Utility Settings ---
 LLM_UTILS_SETTINGS = {

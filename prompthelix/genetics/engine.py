@@ -6,6 +6,7 @@ import json
 import os
 import random
 import statistics # Added import
+
 from typing import TYPE_CHECKING, Optional, Dict  # Ensure Optional is here
 import asyncio  # Added
 import openai
@@ -819,19 +820,21 @@ class PopulationManager:
             agents_used (list[str] | None, optional): A list of agent IDs used in the process.
                                                      Defaults to None, resulting in an empty list.
         """
-        # Allow duck-typed objects for easier testing/mocking
-        required_go_methods = ("selection", "crossover", "mutate")
-        if not all(hasattr(genetic_operators, m) for m in required_go_methods):
+
+        if not isinstance(genetic_operators, GeneticOperators):
             raise TypeError(
-                "genetic_operators must implement selection, crossover and mutate"
+                "genetic_operators must be an instance of GeneticOperators."
             )
-
-        if not hasattr(fitness_evaluator, "evaluate"):
-            raise TypeError("fitness_evaluator must implement an evaluate method")
-
-        if not hasattr(prompt_architect_agent, "process_request"):
+        if not isinstance(fitness_evaluator, FitnessEvaluator):
             raise TypeError(
-                "prompt_architect_agent must implement a process_request method"
+                "fitness_evaluator must be an instance of FitnessEvaluator."
+            )
+        from prompthelix.agents.architect import PromptArchitectAgent
+
+        if not isinstance(prompt_architect_agent, PromptArchitectAgent):
+            raise TypeError(
+                "prompt_architect_agent must be an instance of PromptArchitectAgent."
+
             )
         if population_size <= 0:
             raise ValueError("Population size must be positive.")
@@ -1172,6 +1175,7 @@ class PopulationManager:
         )
         # failed_evaluations_count is correct
 
+
         # Log fitness statistics before sorting
         if self.population: # Ensure population is not empty
             fitness_scores = [c.fitness_score for c in self.population if hasattr(c, 'fitness_score')] # Added check for attribute
@@ -1193,6 +1197,7 @@ class PopulationManager:
                 logger.info(f"Generation {current_generation_number}: No valid fitness scores found in population to report statistics.")
         else:
             logger.info(f"Generation {current_generation_number}: Population is empty, no fitness statistics to report.")
+
 
         logger.info(
             f"PopulationManager: Fitness evaluation complete for generation {current_generation_number}."

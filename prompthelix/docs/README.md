@@ -89,6 +89,7 @@ The following options are available when running the Genetic Algorithm (`python 
 *   `--task-description "<string>"`: (Optional) A detailed description of the task the generated prompts should accomplish. This helps guide the GA.
 *   `--keywords <word1> <word2> ...`: (Optional) A list of keywords relevant to the task. These can be used by agents to focus prompt generation.
 *   `--num-generations <integer>`: (Optional) The number of generations the GA should run for.
+*   `--parallel-workers <integer>`: (Optional) Number of parallel workers used for fitness evaluation. Use `1` for serial execution. Default uses available CPU cores.
 *   `--population-size <integer>`: (Optional) The number of prompts (chromosomes) in each generation.
 *   `--elitism-count <integer>`: (Optional) The number of the best prompts from one generation to carry over directly to the next.
 *   `--output-file <filepath>`: (Optional) Specify a file path to save the best prompt found by the GA at the end of the run.
@@ -96,6 +97,7 @@ The following options are available when running the Genetic Algorithm (`python 
     *   *JSON Format*: The JSON should be a dictionary where keys are agent class names (e.g., "PromptArchitectAgent") and values are dictionaries of settings for that agent. Example: `'{"PromptArchitectAgent": {"default_llm_model": "gpt-4o-mini"}}'`
 *   `--llm-settings <json_string_or_filepath>`: (Optional) Override default LLM utility settings (e.g., timeouts, API keys if applicable). This can be a direct JSON string or a path to a JSON file.
     *   *JSON Format*: The JSON should be a dictionary of LLM parameters. Example: `'{"default_timeout": 120, "temperature": 0.8}'`
+*   `--population-path <filepath>`: (Optional) Path to load or save the GA population. Defaults to the configuration value if omitted.
 *   `--execution-mode <TEST|REAL>`: (Optional) Set the execution mode. `TEST` mode uses mock LLM calls and is faster. `REAL` mode makes actual calls to configured LLM providers. Defaults to `TEST`.
 
 **Examples for `run ga`:**
@@ -123,6 +125,10 @@ The following options are available when running the Genetic Algorithm (`python 
 *   Run GA in `REAL` mode (ensure API keys are set):
     ```bash
     python -m prompthelix.cli run ga --execution-mode REAL --prompt "A real test with an LLM."
+    ```
+*   Run GA with multiple parallel workers:
+    ```bash
+    python -m prompthelix.cli run ga --parallel-workers 4
     ```
 
 ### LLM Connectivity Test

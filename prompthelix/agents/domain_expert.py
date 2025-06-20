@@ -7,9 +7,7 @@ import os
 
 logger = logging.getLogger(__name__)
 
-# Default provider from config if specific agent setting is not found
-FALLBACK_LLM_PROVIDER = AGENT_SETTINGS.get("DomainExpertAgent", {}).get("default_llm_provider", "openai")
-FALLBACK_LLM_MODEL = AGENT_SETTINGS.get("DomainExpertAgent", {}).get("default_llm_model", "gpt-3.5-turbo")
+# Default provider fallbacks will be resolved during initialization
 
 # Known error strings returned by call_llm_api indicating the call failed
 LLM_API_ERROR_STRINGS = {
@@ -52,8 +50,10 @@ class DomainExpertAgent(BaseAgent):
         os.makedirs(os.path.dirname(self.knowledge_file_path), exist_ok=True)
 
         agent_config = AGENT_SETTINGS.get(self.agent_id, {})
-        self.llm_provider = agent_config.get("default_llm_provider", FALLBACK_LLM_PROVIDER)
-        self.llm_model = agent_config.get("default_llm_model", FALLBACK_LLM_MODEL)
+        llm_provider_default = agent_config.get("default_llm_provider", "openai")
+        llm_model_default = agent_config.get("default_llm_model", "gpt-3.5-turbo")
+        self.llm_provider = llm_provider_default
+        self.llm_model = llm_model_default
         logger.info(f"Agent '{self.agent_id}' initialized with LLM provider: {self.llm_provider} and model: {self.llm_model}")
 
         self.knowledge_base = {} # Initialize before loading

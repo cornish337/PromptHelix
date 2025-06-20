@@ -86,7 +86,7 @@ class TestCli(unittest.TestCase):
             self.assertIn("mocked-response", result.stdout)
 
     # Helper method to run CLI commands
-    def _run_cli_command(self, command_args, timeout=30):
+    def _run_cli_command(self, command_args, timeout=30, env=None):
         base_command = [sys.executable, "-m", "prompthelix.cli"]
         full_command = base_command + command_args
         try:
@@ -96,7 +96,7 @@ class TestCli(unittest.TestCase):
                 text=True,
                 check=False, # We will check returncode manually to get more info from stderr
                 timeout=timeout,
-                env=os.environ.copy() # Pass current environment
+                env=(env or os.environ.copy()) # Pass provided environment
             )
         except subprocess.TimeoutExpired as e:
             self.fail(f"CLI command '{' '.join(full_command)}' timed out: {e}")
@@ -137,6 +137,52 @@ class TestCli(unittest.TestCase):
             # Our PopulationManager currently creates the seeded chromosome with genes=[initial_prompt_str].
             self.assertEqual(content.strip(), seed_prompt.strip(),
                              f"Output file content mismatch. Expected '{seed_prompt}', got '{content}'")
+
+    def test_run_ga_with_population_path(self):
+        """Test 'run ga' with --population-path to ensure persistence file is created."""
+        import tempfile
+        import textwrap
+        import types
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            pop_file_path = os.path.join(tmpdir, "ga_population.json")
+            sitecustomize_path = os.path.join(tmpdir, "sitecustomize.py")
+
+            sitecustomize_code = textwrap.dedent(
+                """
+                import types, sys, os
+
+                def main_ga_loop(*args, **kwargs):
+                    pop = kwargs.get('population_path')
+                    if pop:
+                        with open(pop, 'w') as f:
+                            f.write('mock')
+                    return None
+
+                fake = types.ModuleType('prompthelix.orchestrator')
+                fake.main_ga_loop = main_ga_loop
+                sys.modules['prompthelix.orchestrator'] = fake
+                """
+            )
+
+            with open(sitecustomize_path, "w") as f:
+                f.write(sitecustomize_code)
+
+            env = os.environ.copy()
+            env["PYTHONPATH"] = tmpdir + os.pathsep + env.get("PYTHONPATH", "")
+
+            args = [
+                "run", "ga",
+                "--population-path", pop_file_path,
+                "--num-generations", "1",
+                "--population-size", "2",
+                "--execution-mode", "TEST"
+            ]
+
+            result = self._run_cli_command(args, timeout=30, env=env)
+
+            self.assertEqual(result.returncode, 0, f"CLI command failed with stderr: {result.stderr}\nStdout: {result.stdout}")
+            self.assertTrue(os.path.exists(pop_file_path), "Population file was not created.")
 
     def test_run_ga_with_ga_parameter_overrides(self):
         """Test 'run ga' with overridden GA parameters like num-generations."""

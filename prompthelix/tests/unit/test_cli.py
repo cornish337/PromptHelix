@@ -202,6 +202,25 @@ class TestCli:
             return_best=True
         )
 
+    @patch('prompthelix.orchestrator.main_ga_loop')
+    def test_command_run_ga_parallel_workers(self, mock_main_ga_loop, mock_stdout, mock_stderr):
+        with patch.object(sys, 'argv', ['prompthelix', 'run', 'ga', '--parallel-workers', '4']):
+            main_cli()
+
+        mock_main_ga_loop.assert_called_once_with(
+            task_desc=ANY,
+            keywords=ANY,
+            num_generations=ANY,
+            population_size=ANY,
+            elitism_count=ANY,
+            execution_mode=ExecutionMode.TEST,
+            initial_prompt_str=None,
+            agent_settings_override=None,
+            llm_settings_override=None,
+            parallel_workers=4,
+            return_best=True
+        )
+
     @patch('prompthelix.cli.main_ga_loop')
     @patch('builtins.open', new_callable=unittest.mock.mock_open)
     def test_command_run_ga_output_file(self, mock_file_open, mock_main_ga_loop, mock_stdout, mock_stderr):

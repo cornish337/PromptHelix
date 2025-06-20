@@ -9,11 +9,7 @@ from typing import Optional, Dict # Added for type hinting
 
 logger = logging.getLogger(__name__)
 
-# Default provider from config if specific agent setting is not found
-# These fallbacks can be used if settings dict doesn't provide them.
-DEFAULT_ARCHITECT_SETTINGS = AGENT_SETTINGS.get("PromptArchitectAgent", {})
-FALLBACK_LLM_PROVIDER = DEFAULT_ARCHITECT_SETTINGS.get("default_llm_provider", "openai")
-FALLBACK_LLM_MODEL = DEFAULT_ARCHITECT_SETTINGS.get("default_llm_model", "gpt-3.5-turbo")
+# Default knowledge filename if nothing else is provided
 FALLBACK_KNOWLEDGE_FILE = "architect_knowledge.json"
 
 
@@ -38,9 +34,14 @@ class PromptArchitectAgent(BaseAgent):
         """
         super().__init__(agent_id=self.agent_id, message_bus=message_bus, settings=settings)
 
+        # Load defaults from global AGENT_SETTINGS in case settings dict is missing keys
+        global_defaults = AGENT_SETTINGS.get("PromptArchitectAgent", {})
+        llm_provider_default = global_defaults.get("default_llm_provider", "openai")
+        llm_model_default = global_defaults.get("default_llm_model", "gpt-3.5-turbo")
+
         # Configuration values will now be sourced from self.settings, with fallbacks
-        self.llm_provider = self.settings.get("default_llm_provider", FALLBACK_LLM_PROVIDER)
-        self.llm_model = self.settings.get("default_llm_model", FALLBACK_LLM_MODEL)
+        self.llm_provider = self.settings.get("default_llm_provider", llm_provider_default)
+        self.llm_model = self.settings.get("default_llm_model", llm_model_default)
 
         # knowledge_file_path can be overridden by settings, then by direct param, then fallback
         _knowledge_file = self.settings.get("knowledge_file_path", knowledge_file_path)

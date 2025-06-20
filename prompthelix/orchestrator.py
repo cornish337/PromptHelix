@@ -150,7 +150,8 @@ def main_ga_loop(
 
     fitness_eval = FitnessEvaluator(
         results_evaluator_agent=results_evaluator,
-        execution_mode=execution_mode
+        execution_mode=execution_mode,
+        llm_settings=current_llm_settings,
     )
     # TODO: FitnessEvaluator needs to be updated to accept and use llm_settings.
 
@@ -163,14 +164,17 @@ def main_ga_loop(
         population_path=actual_population_path,  # Use determined path
         initial_prompt_str=initial_prompt_str,
         parallel_workers=parallel_workers,
-        message_bus=message_bus,  # Added
-        agents_used=agent_names  # Pass the collected agent names/IDs
+        population_path=actual_population_path, # Use determined path
+        initial_prompt_str=initial_prompt_str,
+        message_bus=message_bus, # Added
+        agents_used=agent_names # Pass the collected agent names/IDs
+
         # TODO: Pass agent_settings_override or specific agent configs if PopulationManager
         # is responsible for creating/configuring more agents during its operations.
         # For now, agents are configured above.
     )
-    # TODO: PopulationManager needs to be updated to accept and use initial_prompt_str.
-    #       Actually, initial_prompt_str is passed to initialize_population and also handled by PopulationManager's __init__
+    # PopulationManager accepts `initial_prompt_str` and uses it when initializing
+    # the population.
     logger.debug("GA components initialized.")
 
     # 3. Use GA Parameters (already logged)
@@ -185,7 +189,7 @@ def main_ga_loop(
     # 4. Initialize Population
     if not pop_manager.population:
         logger.info("--- Initializing Population ---")
-        # PopulationManager will now use initial_prompt_str if provided (once updated)
+        # PopulationManager uses initial_prompt_str if provided
         pop_manager.initialize_population(
             initial_task_description=task_desc, # This might be redundant if initial_prompt_str is primary
             initial_keywords=keywords
