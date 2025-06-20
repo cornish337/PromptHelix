@@ -3,6 +3,9 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session as DbSession # Use DbSession for type hinting
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
+from pathlib import Path
+import asyncio
+import subprocess
 from datetime import datetime, timedelta
 import secrets
 
@@ -437,3 +440,23 @@ def get_api_key_route(service_name: str, db: DbSession = Depends(get_db), curren
         api_key_hint=f"**********{db_apikey.api_key[-4:]}" if db_apikey.api_key and len(db_apikey.api_key) >=4 else "Not Set", # Ensure api_key is not empty and long enough
         is_set=bool(db_apikey.api_key)
     )
+
+
+@router.post("/api/interactive_tests/run", tags=["Tests"])
+async def run_interactive_test(test_name: str):
+    """Run an interactive pytest file and return its output."""
+    root_dir = Path(__file__).resolve().parents[2]
+    test_file = root_dir / "tests" / "interactive" / test_name
+    if not test_file.is_file():
+        raise HTTPException(status_code=404, detail="Test not found")
+    try:
+        result = await asyncio.to_thread(
+            subprocess.run,
+            ["pytest", str(test_file)],
+            capture_output=True,
+            text=True,
+        )
+        output = result.stdout + result.stderr
+        return {"output": output, "returncode": result.returncode}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
