@@ -9,10 +9,7 @@ from typing import Optional, Dict # Added for type hinting
 
 logger = logging.getLogger(__name__)
 
-# Default values from global AGENT_SETTINGS or hardcoded fallbacks
-DEFAULT_OPTIMIZER_SETTINGS = AGENT_SETTINGS.get("StyleOptimizerAgent", {})
-FALLBACK_LLM_PROVIDER = DEFAULT_OPTIMIZER_SETTINGS.get("default_llm_provider", "openai")
-FALLBACK_LLM_MODEL = DEFAULT_OPTIMIZER_SETTINGS.get("default_llm_model", "gpt-3.5-turbo")
+# Default knowledge filename if nothing else is provided
 FALLBACK_KNOWLEDGE_FILE = "style_optimizer_rules.json"
 
 
@@ -36,8 +33,12 @@ class StyleOptimizerAgent(BaseAgent):
         """
         super().__init__(agent_id="StyleOptimizer", message_bus=message_bus, settings=settings)
 
-        self.llm_provider = self.settings.get("default_llm_provider", FALLBACK_LLM_PROVIDER)
-        self.llm_model = self.settings.get("default_llm_model", FALLBACK_LLM_MODEL)
+        global_defaults = AGENT_SETTINGS.get("StyleOptimizerAgent", {})
+        llm_provider_default = global_defaults.get("default_llm_provider", "openai")
+        llm_model_default = global_defaults.get("default_llm_model", "gpt-3.5-turbo")
+
+        self.llm_provider = self.settings.get("default_llm_provider", llm_provider_default)
+        self.llm_model = self.settings.get("default_llm_model", llm_model_default)
 
         _knowledge_file = self.settings.get("knowledge_file_path", knowledge_file_path)
         if _knowledge_file:

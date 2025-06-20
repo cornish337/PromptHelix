@@ -53,6 +53,14 @@ The application requires certain environment variables to be set, especially for
 *   `GOOGLE_API_KEY`: Your API key for Google AI services.
 *   `DATABASE_URL`: The connection string for your database (e.g., `postgresql://user:password@host:port/database` for PostgreSQL, or `sqlite:///./prompthelix.db` for SQLite).
 
+**Agent Overrides:**
+
+Environment variables can also override default agent settings. Use the pattern `<AGENTNAME>_<SETTING>` where `AGENTNAME` is the agent class name without the `Agent` suffix. Example overrides include:
+
+* `PROMPTARCHITECT_DEFAULT_LLM_MODEL`
+* `METALEARNER_PERSIST_KNOWLEDGE_ON_UPDATE`
+* `RESULTSEVALUATOR_FITNESS_SCORE_WEIGHTS` (as a JSON string)
+
 **Setting Environment Variables:**
 
 You can set these variables in a few ways:

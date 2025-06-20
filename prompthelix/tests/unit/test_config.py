@@ -98,5 +98,34 @@ class TestConfigSettings(unittest.TestCase):
             importlib.reload(config)
             self.assertIsInstance(config.settings.DEFAULT_SAVE_POPULATION_FREQUENCY, int)
 
+    def test_agent_setting_env_override(self):
+        """Environment variable should override agent defaults."""
+        with patch.dict(os.environ, {"PROMPTARCHITECT_DEFAULT_LLM_MODEL": "env-model"}, clear=True):
+            importlib.reload(config)
+            self.assertEqual(
+                config.AGENT_SETTINGS["PromptArchitectAgent"]["default_llm_model"],
+                "env-model",
+            )
+
+    def test_agent_setting_json_override(self):
+        """JSON environment variables should be parsed for complex settings."""
+        weights_json = '{"constraint_adherence": 0.1, "llm_quality_assessment": 0.9}'
+        with patch.dict(
+            os.environ,
+            {
+                "RESULTSEVALUATOR_FITNESS_SCORE_WEIGHTS": weights_json,
+                "METALEARNER_PERSIST_KNOWLEDGE_ON_UPDATE": "false",
+            },
+            clear=True,
+        ):
+            importlib.reload(config)
+            self.assertEqual(
+                config.AGENT_SETTINGS["ResultsEvaluatorAgent"]["fitness_score_weights"],
+                {"constraint_adherence": 0.1, "llm_quality_assessment": 0.9},
+            )
+            self.assertFalse(
+                config.AGENT_SETTINGS["MetaLearnerAgent"]["persist_knowledge_on_update"]
+            )
+
 if __name__ == '__main__':
     unittest.main()
