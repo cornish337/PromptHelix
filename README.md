@@ -255,19 +255,14 @@ PromptHelix also provides an API endpoint to trigger the genetic algorithm.
     ```
 
 2.  **Access the GA endpoint**:
-    Once the server is running, you can trigger the genetic algorithm by sending a POST request to the `/api/experiments/run-ga` endpoint. The body must contain JSON matching `GAExperimentParams` with required fields like `task_description`, `keywords`, `num_generations`, `population_size`, and `elitism_count`.
+
+    Once the server is running, trigger the genetic algorithm by sending a **POST** request to the `/api/experiments/run-ga` endpoint. Example command:
     ```bash
     curl -X POST http://127.0.0.1:8000/api/experiments/run-ga \
-      -H "Content-Type: application/json" \
-      -d '{
-        "task_description": "Generate a marketing slogan",
-        "keywords": ["creative", "short"],
-        "num_generations": 10,
-        "population_size": 20,
-        "elitism_count": 2
-      }'
+         -H "Content-Type: application/json" \
+         -d '{"task_description":"Example","keywords":["demo"],"execution_mode":"TEST"}'
     ```
-    You can also send this POST request using a REST client in your web browser.
+
 
 3.  **Try the Prompt Manager UI**:
     The Prompt Manager UI, for adding and viewing prompts, can be accessed as described in the "Setup and Run the Web UI" section.
