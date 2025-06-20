@@ -1,6 +1,7 @@
 # prompthelix/evaluation/metrics.py
 
 import re
+import logging
 
 def calculate_exact_match(generated_output: str, expected_output: str) -> float:
     """
@@ -106,7 +107,15 @@ if __name__ == '__main__':
 
 
 # --- New Prompt Quality Metrics ---
-import textstat # For readability scores
+try:
+    import textstat  # For readability scores
+except Exception as e:  # pragma: no cover - triggered in tests
+    textstat = None
+    logger = logging.getLogger(__name__)
+    logger.warning(
+        "textstat unavailable: %s. Readability metrics will degrade.",
+        e,
+    )
 
 # A simple predefined list of potentially ambiguous/weak phrases
 AMBIGUOUS_PHRASES = [
@@ -143,10 +152,20 @@ def calculate_clarity_score(prompt_text: str, max_flesch_reading_ease: float = 6
         return 0.0
 
     # Normalize Flesch Reading Ease score
-    try:
-        f_ease = textstat.flesch_reading_ease(prompt_text)
-    except Exception:
-        f_ease = 0.0
+    if textstat:
+        try:
+            f_ease = textstat.flesch_reading_ease(prompt_text)
+        except Exception:
+            f_ease = 0.0
+    else:
+        # Simple heuristic approximation if textstat is unavailable
+        words = re.findall(r"\w+", prompt_text)
+        word_count = len(words)
+        sentence_count = len(re.findall(r"[.!?]", prompt_text)) or 1
+        syllables = sum(len(re.findall(r"[aeiouyAEIOUY]+", w)) for w in words)
+        avg_words_per_sentence = word_count / sentence_count if sentence_count else 0
+        avg_syllables_per_word = syllables / float(word_count or 1)
+        f_ease = 206.835 - 1.015 * avg_words_per_sentence - 84.6 * avg_syllables_per_word
 
     clarity_from_ease = min(1.0, max(0.0, f_ease / max_flesch_reading_ease))
 
@@ -230,9 +249,12 @@ def calculate_specificity_score(prompt_text: str, placeholder_penalty_factor: fl
     placeholder_penalty = min(0.5, num_placeholders * placeholder_penalty_factor)
     score -= placeholder_penalty
 
-    try:
-        word_count = textstat.lexicon_count(prompt_text)
-    except Exception:
+    if textstat:
+        try:
+            word_count = textstat.lexicon_count(prompt_text)
+        except Exception:
+            word_count = len(prompt_text.split())
+    else:
         word_count = len(prompt_text.split())
 
     if word_count < 10:
@@ -243,16 +265,20 @@ def calculate_specificity_score(prompt_text: str, placeholder_penalty_factor: fl
             score -= 0.2
 
 
-    try:
-        sentence_count = textstat.sentence_count(prompt_text)
-        if sentence_count > 0:
-            avg_sentence_length = word_count / sentence_count
-            if avg_sentence_length > 35:
-                score -= 0.15
-            elif avg_sentence_length > 25:
-                score -= 0.1
-    except (ZeroDivisionError, Exception):
-        pass
+    if textstat:
+        try:
+            sentence_count = textstat.sentence_count(prompt_text)
+        except Exception:
+            sentence_count = len(re.findall(r"[.!?]", prompt_text)) or 1
+    else:
+        sentence_count = len(re.findall(r"[.!?]", prompt_text)) or 1
+
+    if sentence_count > 0:
+        avg_sentence_length = word_count / sentence_count
+        if avg_sentence_length > 35:
+            score -= 0.15
+        elif avg_sentence_length > 25:
+            score -= 0.1
 
     return round(max(0.0, score), 3)
 
