@@ -177,6 +177,14 @@ Debug logs are printed to the console to aid troubleshooting.
 
 PromptHelix employs a Genetic Algorithm (GA) to iteratively evolve and optimize prompts. This engine uses concepts like selection, crossover, and mutation to refine a population of prompts over generations, aiming to enhance their effectiveness based on defined fitness criteria. The GA is designed to interact with various specialized agents for tasks like initial prompt creation, fitness evaluation (based on LLM output simulation), and potentially for more advanced "smart" mutations.
 
+Custom mutation strategies can be loaded dynamically from Python modules. Pass module paths to ``GeneticOperators`` and any class within those modules that subclasses ``MutationStrategy`` will be instantiated automatically:
+
+```python
+from prompthelix.genetics.engine import GeneticOperators
+
+operators = GeneticOperators(strategy_modules=["myproject.custom_strategies"])
+```
+
 For a detailed explanation of the GA components and flow, please see:
 `[Read more about the Genetic Algorithm](./genetic_algorithm.md)`
 
