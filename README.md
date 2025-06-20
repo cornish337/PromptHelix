@@ -338,16 +338,20 @@ The output will show the progress of the tests and a summary of the results.
 
 ### Interactive Tests
 
-Some tests require manual input from a user. These tests live in `tests/interactive/` and are skipped automatically when no TTY is available. To run them directly with pytest:
+PromptHelix also provides a simple web interface for running tests manually. Start the
+development server and navigate to `/ui/tests` to see the available tests.
+
+1. Open [http://127.0.0.1:8000/ui/tests](http://127.0.0.1:8000/ui/tests) in your browser.
+2. Choose a test from the dropdown list and click **Run**.
+3. Results will be displayed on the page once execution completes.
+
+If your deployment enforces authentication for UI routes, log in first via
+`/ui/login`. Otherwise, the interactive test page can be accessed without a token.
+
+You can also launch the interactive runner from the command line:
 
 ```bash
-pytest tests/interactive -s
+python -m prompthelix.cli test --interactive
 ```
 
-You can also invoke them through the PromptHelix CLI:
 
-```bash
-python -m prompthelix.cli interactive
-```
-
-Use `--path` to run a specific interactive test module if needed.
