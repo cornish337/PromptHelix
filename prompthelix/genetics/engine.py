@@ -936,6 +936,16 @@ class PopulationManager:
         if additional_data:
             payload.update(additional_data)
 
+        # Store history for API retrieval
+        try:
+            from prompthelix import globals as ph_globals
+            ph_globals.ga_history.append({
+                "generation": self.generation_number,
+                "best_fitness": payload.get("best_fitness")
+            })
+        except Exception:
+            pass
+
         try:
             loop = asyncio.get_running_loop()
             if loop.is_running():

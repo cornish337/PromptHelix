@@ -323,6 +323,11 @@ def get_ga_experiment_status():
             should_stop=False
         )
 
+# --- GA History Route ---
+@router.get("/api/ga/history", tags=["GA Control"], summary="Get GA fitness history")
+def get_ga_history():
+    return ph_globals.ga_history
+
 # --- LLM Utility Routes (Verified, using CRUD layer for stats) ---
 
 @router.post("/api/llm/test_prompt", response_model=schemas.LLMTestResponse, name="test_llm_prompt", tags=["LLM Utilities"], summary="Test a prompt with an LLM", description="Sends a given prompt text to a specified LLM service and returns the response. Increments usage statistics for the LLM service.")

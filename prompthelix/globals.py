@@ -18,6 +18,9 @@ websocket_manager = ConnectionManager()
 # Definition for the active Genetic Algorithm runner
 active_ga_runner: Optional["GeneticAlgorithmRunner"] = None
 
+# Fitness history collected during GA runs
+ga_history: list[dict] = []
+
 # You can add other global instances here if needed, e.g., a global MessageBus
 # from prompthelix.database import SessionLocal
 # from prompthelix.message_bus import MessageBus
