@@ -9,6 +9,27 @@ from prompthelix.experiment_runners.base_runner import BaseExperimentRunner
 from prompthelix.genetics.engine import PopulationManager, PromptChromosome
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO) # <--- ADD THIS LINE
+
+# Add the WebSocketLogHandler to the logger instance
+# This setup can be done once when the module is loaded,
+# or specifically when a GeneticAlgorithmRunner is instantiated if preferred.
+# For simplicity, let's add it to the module-level logger.
+# Ensure this part of the code runs when the module is imported.
+
+# Create and configure the WebSocket log handler
+websocket_log_handler = WebSocketLogHandler(connection_manager=websocket_manager)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(module)s.%(funcName)s:%(lineno)d - %(message)s')
+websocket_log_handler.setFormatter(formatter)
+websocket_log_handler.setLevel(logging.INFO) # Or logging.DEBUG for more verbosity
+
+# Add the handler to the logger
+if not any(isinstance(h, WebSocketLogHandler) for h in logger.handlers):
+    logger.addHandler(websocket_log_handler)
+    logger.info("WebSocketLogHandler added to ga_runner logger.")
+else:
+    logger.info("WebSocketLogHandler already present in ga_runner logger.")
+
 
 # Add the WebSocketLogHandler to the logger instance
 # This setup can be done once when the module is loaded,

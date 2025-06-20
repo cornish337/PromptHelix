@@ -128,8 +128,11 @@
                 logsContainer.appendChild(logEntry);
                 logsContainer.scrollTop = logsContainer.scrollHeight; // Auto-scroll
             } else if (message.type === 'debug_log' && message.data) {
-                const debugLogsContainer = document.getElementById('debug-logs-container'); // Re-fetch or ensure it's in scope
-                const toggleDebugLogs = document.getElementById('toggle-debug-logs'); // Re-fetch or ensure it's in scope
+
+                // REMOVED: const debugLogsContainer = document.getElementById('debug-logs-container');
+                // REMOVED: const toggleDebugLogs = document.getElementById('toggle-debug-logs');
+
+                // Use the 'toggleDebugLogs' and 'debugLogsContainer' from the outer scope (DOMContentLoaded)
 
                 if (toggleDebugLogs && toggleDebugLogs.checked) {
                     const logEntry = document.createElement('div');
