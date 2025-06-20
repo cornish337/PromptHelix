@@ -131,6 +131,7 @@ from prompthelix.genetics.mutation_strategies import (
     ReverseSliceStrategy,
     PlaceholderReplaceStrategy,
     NoOperationMutationStrategy,
+    load_strategies,
 )
 
 
@@ -145,6 +146,7 @@ class GeneticOperators:
         self,
         style_optimizer_agent: "StyleOptimizerAgent" | None = None,
         mutation_strategies: list[MutationStrategy] | None = None,
+        strategy_modules: list[str] | None = None,
     ):
         """
         Initializes the operator with an optional StyleOptimizerAgent and mutation strategies.
@@ -152,28 +154,45 @@ class GeneticOperators:
         Args:
             style_optimizer_agent (StyleOptimizerAgent | None, optional): Agent for style optimization.
             mutation_strategies (list[MutationStrategy] | None, optional):
-                A list of mutation strategies to use. If None, default strategies are initialized.
+                A list of mutation strategies to use. If None, strategies will be
+                loaded from ``strategy_modules`` if provided, otherwise defaults are used.
+            strategy_modules (list[str] | None, optional):
+                Module paths from which to dynamically load ``MutationStrategy``
+                implementations.
         """
         self.style_optimizer_agent = style_optimizer_agent
 
         if mutation_strategies is None:
-            # If no list is provided at all, use the default set of strategies
-            self.mutation_strategies = [
-                AppendCharStrategy(),
-                ReverseSliceStrategy(),
-                PlaceholderReplaceStrategy(),
-            ]
-            logger.info(
-                "GeneticOperators initialized with default mutation strategies."
-            )
+            loaded: list[MutationStrategy] = []
+            if strategy_modules:
+                loaded = load_strategies(strategy_modules)
+                if loaded:
+                    logger.info(
+                        f"GeneticOperators loaded {len(loaded)} mutation strategies from modules."
+                    )
+                else:
+                    logger.warning(
+                        "No mutation strategies found in given modules; falling back to defaults."
+                    )
+
+            if loaded:
+                self.mutation_strategies = loaded
+            else:
+                self.mutation_strategies = [
+                    AppendCharStrategy(),
+                    ReverseSliceStrategy(),
+                    PlaceholderReplaceStrategy(),
+                ]
+                logger.info(
+                    "GeneticOperators initialized with default mutation strategies."
+                )
         else:
             # If a list is provided (even if empty), use that list
             self.mutation_strategies = mutation_strategies
-            if self.mutation_strategies:  # Log if the provided list is not empty
+            if self.mutation_strategies:
                 logger.info(
                     f"GeneticOperators initialized with {len(self.mutation_strategies)} custom mutation strategies."
                 )
-            # If the provided list IS empty, the next check will handle it.
 
         # If, after the above, mutation_strategies is an empty list (e.g., user passed []),
         # then default to NoOperationMutationStrategy.
