@@ -4,6 +4,7 @@ import logging
 # Add these imports at the top of prompthelix/experiment_runners/ga_runner.py
 from prompthelix.logging_handlers import WebSocketLogHandler
 from prompthelix.globals import websocket_manager # Import the global instance from globals
+from prompthelix import globals as ph_globals
 
 from prompthelix.experiment_runners.base_runner import BaseExperimentRunner
 from prompthelix.genetics.engine import PopulationManager, PromptChromosome
@@ -76,6 +77,8 @@ class GeneticAlgorithmRunner(BaseExperimentRunner):
             f"GeneticAlgorithmRunner initialized for {num_generations} generations "
             f"with PopulationManager (ID: {id(population_manager)})"
         )
+        ph_globals.active_ga_runner = self
+        logger.info(f"GeneticAlgorithmRunner instance {id(self)} registered as active_ga_runner.")
 
     def run(self, **kwargs) -> Optional[PromptChromosome]:
         """
@@ -182,6 +185,9 @@ class GeneticAlgorithmRunner(BaseExperimentRunner):
             # Re-raise the exception so the caller (orchestrator) is aware
             raise
         finally:
+            if ph_globals.active_ga_runner is self:
+                ph_globals.active_ga_runner = None
+                logger.info(f"GeneticAlgorithmRunner instance {id(self)} unregistered as active_ga_runner.")
             final_fittest = self.population_manager.get_fittest_individual()
             logger.info(
                 f"GeneticAlgorithmRunner: Run finished. Status: {self.population_manager.status}. "

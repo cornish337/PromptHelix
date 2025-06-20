@@ -4,10 +4,19 @@ Global shared instances for the PromptHelix application.
 This module should be kept lightweight and free of complex imports
 to avoid circular dependencies.
 """
+from typing import Optional
+# Forward reference for GeneticAlgorithmRunner to avoid circular import issues
+# as experiment_runners.ga_runner will import this file.
+if False: # TYPE_CHECKING can also be used here if preferred
+    from prompthelix.experiment_runners.ga_runner import GeneticAlgorithmRunner
+
 from prompthelix.websocket_manager import ConnectionManager
 
 # Global WebSocket connection manager instance
 websocket_manager = ConnectionManager()
+
+# Definition for the active Genetic Algorithm runner
+active_ga_runner: Optional["GeneticAlgorithmRunner"] = None
 
 # You can add other global instances here if needed, e.g., a global MessageBus
 # from prompthelix.database import SessionLocal

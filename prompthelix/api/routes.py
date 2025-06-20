@@ -9,6 +9,11 @@ import secrets
 from prompthelix.database import get_db
 from prompthelix.api import crud
 from prompthelix import schemas
+from prompthelix import globals as ph_globals
+# Import GeneticAlgorithmRunner for type hinting if direct type checks are needed,
+# otherwise, rely on the object having the methods.
+# from prompthelix.experiment_runners.ga_runner import GeneticAlgorithmRunner
+
 
 from prompthelix.models.user_models import User as UserModel # For get_current_user return type
 from prompthelix.utils import llm_utils
@@ -214,6 +219,91 @@ def run_ga_experiment_route(params: schemas.GAExperimentParams, db: DbSession = 
     if not created_version:
         raise HTTPException(status_code=500, detail="Failed to save GA experiment result as a prompt version.")
     return created_version
+
+# --- GA Control Routes ---
+@router.post("/api/ga/pause", status_code=status.HTTP_200_OK, tags=["GA Control"], summary="Pause the running GA experiment")
+def pause_ga_experiment():
+    if ph_globals.active_ga_runner:
+        try:
+            # Check current status before pausing
+            runner_status = ph_globals.active_ga_runner.get_status()
+            if runner_status.get('status') == "RUNNING":
+                ph_globals.active_ga_runner.pause()
+                return {"message": "Genetic Algorithm experiment pause request sent."}
+            else:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"GA is not running, current status: {runner_status.get('status')}")
+        except Exception as e:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error pausing GA: {str(e)}")
+    else:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active Genetic Algorithm experiment found.")
+
+@router.post("/api/ga/resume", status_code=status.HTTP_200_OK, tags=["GA Control"], summary="Resume a paused GA experiment")
+def resume_ga_experiment():
+    if ph_globals.active_ga_runner:
+        try:
+            runner_status = ph_globals.active_ga_runner.get_status()
+            if runner_status.get('status') == "PAUSED":
+                ph_globals.active_ga_runner.resume()
+                return {"message": "Genetic Algorithm experiment resume request sent."}
+            else:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"GA is not paused, current status: {runner_status.get('status')}")
+        except Exception as e:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error resuming GA: {str(e)}")
+    else:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active Genetic Algorithm experiment found.")
+
+@router.post("/api/ga/cancel", status_code=status.HTTP_200_OK, tags=["GA Control"], summary="Cancel the running GA experiment")
+def cancel_ga_experiment():
+    if ph_globals.active_ga_runner:
+        try:
+            # Runner's 'run' method finally block will set ph_globals.active_ga_runner to None
+            ph_globals.active_ga_runner.stop()
+            return {"message": "Genetic Algorithm experiment cancel request sent."}
+        except Exception as e:
+            # This might catch errors if stop() fails, but active_ga_runner might still be set
+            # The finally block in runner.run() is the primary mechanism for clearing it.
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error cancelling GA: {str(e)}")
+    else:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active Genetic Algorithm experiment found.")
+
+@router.get("/api/ga/status", response_model=schemas.GAStatusResponse, tags=["GA Control"], summary="Get the status of the current GA experiment")
+def get_ga_experiment_status():
+    if ph_globals.active_ga_runner:
+        try:
+            status_data = ph_globals.active_ga_runner.get_status()
+            # Ensure all fields required by GAStatusResponse are present in status_data
+            # The get_status method in GeneticAlgorithmRunner should provide these.
+            # If PopulationManager.get_ga_status() is called, ensure it includes:
+            # is_paused, should_stop (added these to GAStatusResponse)
+            # The runner's get_status was defined as:
+            # pm_status = self.population_manager.get_ga_status()
+            # status_report = pm_status.copy()
+            # status_report.update(runner_status)
+            # status_report['is_paused'] = self.population_manager.is_paused
+            # status_report['should_stop'] = self.population_manager.should_stop
+            # So, all fields should be present.
+            return schemas.GAStatusResponse(**status_data)
+        except Exception as e:
+            # Consider adding logging here: logger.error(f"Error getting GA status: {e}", exc_info=True)
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error retrieving GA status: {str(e)}")
+    else:
+        # Return a default "IDLE" status if no runner is active
+        # Ensure all required fields for GAStatusResponse are provided.
+        # Based on GAStatusResponse, 'status', 'generation', 'population_size' are mandatory.
+        return schemas.GAStatusResponse(
+            status="IDLE",
+            generation=0, # Default value for idle state
+            population_size=0, # Default value for idle state
+            best_fitness=None,
+            fittest_individual_id=None,
+            fittest_chromosome_string=None,
+            agents_used=[],
+            runner_current_generation=0,
+            runner_target_generations=0,
+            runner_population_manager_id=None,
+            is_paused=False,
+            should_stop=False
+        )
 
 # --- LLM Utility Routes (Verified, using CRUD layer for stats) ---
 
