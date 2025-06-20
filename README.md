@@ -225,6 +225,8 @@ python -m prompthelix.cli run ga [options]
 
 This command runs the Genetic Algorithm. It supports various options to customize the GA run, including providing an initial seed prompt, setting GA parameters (generations, population size), overriding agent and LLM configurations, and specifying an output file for the best prompt.
 
+If you pass a value via the `--prompt` option, the text you supply becomes the first chromosome of the initial generation. This allows you to start the GA from a known prompt rather than generating all prompts randomly.
+
 For a detailed list of all `run ga` options and usage examples, please refer to the [CLI Documentation in `prompthelix/docs/README.md`](prompthelix/docs/README.md#run-command).
 
 ### Checking LLM Connectivity

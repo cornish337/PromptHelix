@@ -157,13 +157,14 @@ def main_ga_loop(
     pop_manager = PopulationManager(
         genetic_operators=genetic_ops,
         fitness_evaluator=fitness_eval,
-        prompt_architect_agent=prompt_architect, # Architect is used for initial prompt generation
+        prompt_architect_agent=prompt_architect,  # Architect is used for initial prompt generation
         population_size=population_size,
         elitism_count=elitism_count,
+        population_path=actual_population_path,  # Use determined path
+        initial_prompt_str=initial_prompt_str,
         parallel_workers=parallel_workers,
-        population_path=actual_population_path, # Use determined path
-        message_bus=message_bus, # Added
-        agents_used=agent_names # Pass the collected agent names/IDs
+        message_bus=message_bus,  # Added
+        agents_used=agent_names  # Pass the collected agent names/IDs
         # TODO: Pass agent_settings_override or specific agent configs if PopulationManager
         # is responsible for creating/configuring more agents during its operations.
         # For now, agents are configured above.

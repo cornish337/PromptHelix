@@ -85,7 +85,7 @@ If `module_name` is omitted, it defaults to `ga`.
 The following options are available when running the Genetic Algorithm (`python -m prompthelix.cli run ga`):
 
 *   `module`: (Optional) The name of the module to run. Defaults to `ga`.
-*   `--prompt "<string>`: (Optional) Provide an initial custom prompt string to seed the first generation of the GA.
+*   `--prompt "<string>`: (Optional) Provide an initial custom prompt string to seed the first generation of the GA. The given text becomes the first chromosome before any prompts are randomly generated.
 *   `--task-description "<string>"`: (Optional) A detailed description of the task the generated prompts should accomplish. This helps guide the GA.
 *   `--keywords <word1> <word2> ...`: (Optional) A list of keywords relevant to the task. These can be used by agents to focus prompt generation.
 *   `--num-generations <integer>`: (Optional) The number of generations the GA should run for.
