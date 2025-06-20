@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import patch, MagicMock, call
 
 from prompthelix.orchestrator import main_ga_loop
+from prompthelix import config as global_config
 from prompthelix.enums import ExecutionMode
 from prompthelix.genetics.engine import PromptChromosome # Needed for mocking population
 
@@ -183,6 +184,61 @@ class TestOrchestratorConfigPropagation(unittest.TestCase):
 
         # Crucially, assert that save_population on the instance was NOT called
         mock_pop_manager_instance.save_population.assert_not_called()
+
+    @patch('prompthelix.orchestrator.GeneticAlgorithmRunner')
+    @patch('prompthelix.orchestrator.PopulationManager')
+    @patch('prompthelix.orchestrator.FitnessEvaluator')
+    @patch('prompthelix.orchestrator.GeneticOperators')
+    @patch('prompthelix.orchestrator.StyleOptimizerAgent')
+    @patch('prompthelix.orchestrator.ResultsEvaluatorAgent')
+    @patch('prompthelix.orchestrator.PromptArchitectAgent')
+    @patch('prompthelix.orchestrator.MessageBus')
+    @patch('prompthelix.orchestrator.logger')
+    @patch('prompthelix.orchestrator.settings')
+    def test_main_ga_loop_forwards_prompt_and_llm_settings(
+        self, mock_settings, mock_logger, mock_message_bus_cls,
+        mock_architect_cls, mock_results_eval_cls, mock_style_opt_cls,
+        mock_gen_ops_cls, mock_fitness_eval_cls, mock_pop_manager_cls, mock_ga_runner_cls
+    ):
+        mock_settings.DEFAULT_POPULATION_PERSISTENCE_PATH = "def_path.json"
+        mock_settings.DEFAULT_SAVE_POPULATION_FREQUENCY = 10
+
+        mock_pop_manager_instance = MagicMock(spec=PopulationManager)
+        mock_chromosome = MagicMock(spec=PromptChromosome)
+        mock_chromosome.fitness_score = 0.5
+        mock_chromosome.to_prompt_string.return_value = "prompt"
+        mock_pop_manager_instance.population = [mock_chromosome]
+        mock_pop_manager_instance.get_fittest_individual.return_value = mock_chromosome
+        mock_pop_manager_instance.save_population = MagicMock()
+        mock_pop_manager_cls.return_value = mock_pop_manager_instance
+
+        mock_ga_runner_instance = MagicMock()
+        mock_ga_runner_instance.run.return_value = mock_chromosome
+        mock_ga_runner_cls.return_value = mock_ga_runner_instance
+
+        initial_prompt = "Seed prompt"
+        override_llm = {"api_key": "test-key"}
+        args_for_loop = {
+            **BASE_ARGS,
+            "population_path": None,
+            "save_frequency_override": None,
+            "initial_prompt_str": initial_prompt,
+            "llm_settings_override": override_llm,
+        }
+
+        main_ga_loop(**args_for_loop)
+
+        # Check FitnessEvaluator received merged llm settings
+        mock_fitness_eval_cls.assert_called_once()
+        _, fe_kwargs = mock_fitness_eval_cls.call_args
+        expected_llm = global_config.LLM_UTILS_SETTINGS.copy()
+        expected_llm.update(override_llm)
+        self.assertEqual(fe_kwargs.get("llm_settings"), expected_llm)
+
+        # Check PopulationManager received the initial prompt string
+        mock_pop_manager_cls.assert_called_once()
+        _, pm_kwargs = mock_pop_manager_cls.call_args
+        self.assertEqual(pm_kwargs.get("initial_prompt_str"), initial_prompt)
 
 if __name__ == '__main__':
     unittest.main()
