@@ -18,6 +18,12 @@ AI prompts through innovative techniques inspired by genetic algorithms and mult
         *   Displays messages for a selected session, ordered by timestamp.
         *   Shows sender ID, recipient ID (or "BROADCAST"), message type, full timestamp, and the message content.
         *   Attempts to pretty-print JSON content within messages for readability.
+*   **GA Analytics Dashboard**:
+    *   **Access**: Visit the `/ui/dashboard` route while the server is running.
+    *   **Features**:
+        *   Real-time metrics and logs streamed via WebSockets.
+        *   Line chart visualizing max, mean, and min fitness across generations.
+        *   Agent metrics and conversation events are displayed to show how interactions influence GA evolution.
 *   Performance tracking and evaluation of prompts
 *   API for programmatic access and integration
 *   User interface for managing and experimenting with prompts (basic HTML interface available)
@@ -328,6 +334,7 @@ python -m prompthelix.cli test --path tests/unit/test_architect_agent.py
 ```
 
 The output will show the progress of the tests and a summary of the results.
+
 
 ### Interactive Tests
 
