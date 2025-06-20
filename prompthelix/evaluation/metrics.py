@@ -241,10 +241,10 @@ def calculate_specificity_score(prompt_text: str, placeholder_penalty_factor: fl
     score = 1.0
     lower_text = prompt_text.lower()
 
-    num_placeholders = 0
-    for ph in COMMON_PLACEHOLDERS:
-        if ph.lower() in lower_text:
-            num_placeholders += 1
+    # Count any text within square brackets as a placeholder. This captures
+    # both known placeholders from COMMON_PLACEHOLDERS and ad-hoc variants
+    # like "[examples]" or "[subtopic]" used in the tests.
+    num_placeholders = len(re.findall(r"\[[^\]]+\]", lower_text))
 
     placeholder_penalty = min(0.5, num_placeholders * placeholder_penalty_factor)
     score -= placeholder_penalty
@@ -257,12 +257,12 @@ def calculate_specificity_score(prompt_text: str, placeholder_penalty_factor: fl
     else:
         word_count = len(prompt_text.split())
 
-    if word_count < 10:
-        score -= 0.2
-    elif word_count < 5: # Extremely short
+    if word_count < 5:
         score -= 0.4
-        if num_placeholders > 0 : # Heavily penalize short prompts that are ALSO just placeholders
+        if num_placeholders > 0:
             score -= 0.2
+    elif word_count < 10:
+        score -= 0.2
 
 
     if textstat:
