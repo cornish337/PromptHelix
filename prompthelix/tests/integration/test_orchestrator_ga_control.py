@@ -81,6 +81,7 @@ class TestOrchestratorGAControl(unittest.TestCase):
         self.controlled_pop_manager.is_paused = False
         self.controlled_pop_manager.should_stop = False
         self.controlled_pop_manager.status = "IDLE"
+        self.controlled_pop_manager.population_path = "mock/integration_population.json" # Added this line
         self.controlled_pop_manager.message_bus = self.message_bus # Runner might use this via PM
         # Ensure methods that return values are configured if the runner uses them directly
         self.controlled_pop_manager.get_fittest_individual.return_value = self.controlled_pop_manager.population[0]
@@ -105,8 +106,21 @@ class TestOrchestratorGAControl(unittest.TestCase):
         # Ensure broadcast_ga_update is also part of the main mock or a fresh sub-mock
         self.controlled_pop_manager.broadcast_ga_update = MagicMock()
         # Ensure control methods are fresh mocks if we assert calls on them
-        self.controlled_pop_manager.pause_evolution = MagicMock(side_effect=lambda: setattr(self.controlled_pop_manager, 'is_paused', True) or setattr(self.controlled_pop_manager, 'status', "PAUSED"))
-        self.controlled_pop_manager.resume_evolution = MagicMock(side_effect=lambda: setattr(self.controlled_pop_manager, 'is_paused', False) or setattr(self.controlled_pop_manager, 'status', "RUNNING"))
+        # Make sure these mock methods also call broadcast_ga_update as the real ones would
+        self.controlled_pop_manager.pause_evolution = MagicMock(
+            side_effect=lambda: (
+                setattr(self.controlled_pop_manager, 'is_paused', True),
+                setattr(self.controlled_pop_manager, 'status', "PAUSED"),
+                self.controlled_pop_manager.broadcast_ga_update(event_type='ga_paused')
+            )
+        )
+        self.controlled_pop_manager.resume_evolution = MagicMock(
+            side_effect=lambda: (
+                setattr(self.controlled_pop_manager, 'is_paused', False),
+                setattr(self.controlled_pop_manager, 'status', "RUNNING"),
+                self.controlled_pop_manager.broadcast_ga_update(event_type='ga_resumed')
+            )
+        )
 
 
         num_generations = 3
@@ -127,32 +141,27 @@ class TestOrchestratorGAControl(unittest.TestCase):
             nonlocal evolve_call_attempts
             evolve_call_attempts += 1
 
-            # This is the mock of PopulationManager.evolve_population()
-            # If this method is called while the PM is paused, it should do nothing / return early.
-            if self.controlled_pop_manager.is_paused:
-                # print(f"Test custom_evolve: Evolution attempt {evolve_call_attempts} while PAUSED. Skipping.")
-                # PM's own evolve_population would broadcast heartbeat if paused.
+            was_paused_at_call_start = self.controlled_pop_manager.is_paused
+
+            # Simulate external pause AFTER the first successful evolution
+            if evolve_call_attempts == 1 and not was_paused_at_call_start:
+                self.controlled_pop_manager.pause_evolution()
+
+            # Simulate external resume if this is the attempt immediately following the pause
+            if evolve_call_attempts == 2 and was_paused_at_call_start:
+                self.controlled_pop_manager.resume_evolution()
+
+            if was_paused_at_call_start: # If it *was* paused when called, it shouldn't evolve this round
                 self.controlled_pop_manager.broadcast_ga_update(event_type="ga_status_heartbeat_mocked_evolve")
                 return
 
+            # --- Normal evolution logic if not paused ---
             if self.controlled_pop_manager.should_stop:
                 self.controlled_pop_manager.status = "STOPPED"
                 return
 
-            # If not paused or stopped, simulate successful evolution by incrementing generation number
             self.controlled_pop_manager.generation_number += 1
-            self.controlled_pop_manager.status = "RUNNING" # After successful evolution part
-            # print(f"Test custom_evolve: Evolution attempt {evolve_call_attempts} successful. Gen: {self.controlled_pop_manager.generation_number}")
-
-            # Test Logic: After the first *successful* evolution, simulate an external pause.
-            # Then, after the next *attempted* (paused) evolution, simulate a resume.
-            if evolve_call_attempts == 1: # After 1st successful evolution
-                # print("Test custom_evolve: Simulating external PAUSE request.")
-                self.controlled_pop_manager.pause_evolution() # Sets is_paused=True, status="PAUSED"
-
-            if evolve_call_attempts == 2 and self.controlled_pop_manager.is_paused: # After 1st paused attempt
-                # print("Test custom_evolve: Simulating external RESUME request.")
-                self.controlled_pop_manager.resume_evolution() # Sets is_paused=False, status="RUNNING"
+            self.controlled_pop_manager.status = "RUNNING"
 
         self.controlled_pop_manager.evolve_population.side_effect = custom_evolve_side_effect
 
@@ -196,7 +205,8 @@ class TestOrchestratorGAControl(unittest.TestCase):
         self.controlled_pop_manager.stop_evolution = MagicMock(
             side_effect=lambda: (
                 setattr(self.controlled_pop_manager, 'should_stop', True),
-                setattr(self.controlled_pop_manager, 'status', "STOPPING") # Status PM sets
+                setattr(self.controlled_pop_manager, 'status', "STOPPING"), # Status PM sets
+                self.controlled_pop_manager.broadcast_ga_update(event_type='ga_stopping') # Add this call
             )
         )
 

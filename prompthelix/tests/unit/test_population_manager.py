@@ -201,6 +201,7 @@ class TestPopulationManager(unittest.TestCase):
             self.mock_genetic_ops, self.mock_fitness_eval, self.mock_architect_agent,
             population_size=pop_size, elitism_count=elitism_count
         )
+        manager.parallel_workers = 1 # Force serial execution for this test to use the mock
 
         # Setup initial population
         initial_chromosomes = [
