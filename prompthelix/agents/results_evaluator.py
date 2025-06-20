@@ -148,10 +148,24 @@ class ResultsEvaluatorAgent(BaseAgent):
             self.evaluation_metrics_config = self._get_default_metrics_config()
             self.save_knowledge() # Save defaults if file not found
         except json.JSONDecodeError as e:
-            logger.error(f"Agent '{self.agent_id}': Error decoding JSON from '{self.knowledge_file_path}': {e}. Using default config.", exc_info=True)
+            logger.error(
+                f"Agent '{self.agent_id}': Error decoding JSON from '{self.knowledge_file_path}': {e}. Using default config.",
+                exc_info=True,
+            )
+            logging.error(
+                f"Agent '{self.agent_id}': Error decoding JSON from '{self.knowledge_file_path}': {e}. Using default config.",
+                exc_info=True,
+            )
             self.evaluation_metrics_config = self._get_default_metrics_config()
         except Exception as e:
-            logger.error(f"Agent '{self.agent_id}': Failed to load metrics config from '{self.knowledge_file_path}': {e}. Using default config.", exc_info=True)
+            logger.error(
+                f"Agent '{self.agent_id}': Failed to load metrics config from '{self.knowledge_file_path}': {e}. Using default config.",
+                exc_info=True,
+            )
+            logging.error(
+                f"Agent '{self.agent_id}': Failed to load metrics config from '{self.knowledge_file_path}': {e}. Using default config.",
+                exc_info=True,
+            )
             self.evaluation_metrics_config = self._get_default_metrics_config()
 
     def save_knowledge(self):

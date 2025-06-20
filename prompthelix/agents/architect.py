@@ -108,10 +108,24 @@ class PromptArchitectAgent(BaseAgent):
             self.templates = self._get_default_templates()
             self.save_knowledge() # Save defaults if file not found
         except json.JSONDecodeError as e:
-            logger.error(f"Agent '{self.agent_id}': Error decoding JSON from '{self.knowledge_file_path}': {e}. Using default templates.", exc_info=True)
+            logger.error(
+                f"Agent '{self.agent_id}': Error decoding JSON from '{self.knowledge_file_path}': {e}. Using default templates.",
+                exc_info=True,
+            )
+            logging.error(
+                f"Agent '{self.agent_id}': Error decoding JSON from '{self.knowledge_file_path}': {e}. Using default templates.",
+                exc_info=True,
+            )
             self.templates = self._get_default_templates()
         except Exception as e:
-            logger.error(f"Agent '{self.agent_id}': Failed to load templates from '{self.knowledge_file_path}': {e}. Using default templates.", exc_info=True)
+            logger.error(
+                f"Agent '{self.agent_id}': Failed to load templates from '{self.knowledge_file_path}': {e}. Using default templates.",
+                exc_info=True,
+            )
+            logging.error(
+                f"Agent '{self.agent_id}': Failed to load templates from '{self.knowledge_file_path}': {e}. Using default templates.",
+                exc_info=True,
+            )
             self.templates = self._get_default_templates()
 
     def save_knowledge(self):

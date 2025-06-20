@@ -140,10 +140,24 @@ class DomainExpertAgent(BaseAgent):
             self.knowledge_base = self._get_default_knowledge()
             self.save_knowledge()
         except json.JSONDecodeError as e:
-            logger.error(f"Agent '{self.agent_id}': Error decoding JSON from '{self.knowledge_file_path}': {e}. Using default knowledge.", exc_info=True)
+            logger.error(
+                f"Agent '{self.agent_id}': Error decoding JSON from '{self.knowledge_file_path}': {e}. Using default knowledge.",
+                exc_info=True,
+            )
+            logging.error(
+                f"Agent '{self.agent_id}': Error decoding JSON from '{self.knowledge_file_path}': {e}. Using default knowledge.",
+                exc_info=True,
+            )
             self.knowledge_base = self._get_default_knowledge()
         except Exception as e:
-            logger.error(f"Agent '{self.agent_id}': Failed to load knowledge from '{self.knowledge_file_path}': {e}. Using default knowledge.", exc_info=True)
+            logger.error(
+                f"Agent '{self.agent_id}': Failed to load knowledge from '{self.knowledge_file_path}': {e}. Using default knowledge.",
+                exc_info=True,
+            )
+            logging.error(
+                f"Agent '{self.agent_id}': Failed to load knowledge from '{self.knowledge_file_path}': {e}. Using default knowledge.",
+                exc_info=True,
+            )
             self.knowledge_base = self._get_default_knowledge()
 
     def save_knowledge(self):

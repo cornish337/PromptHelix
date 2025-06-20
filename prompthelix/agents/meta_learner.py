@@ -242,15 +242,36 @@ class MetaLearnerAgent(BaseAgent):
             logger.info(f"Agent '{self.agent_id}' successfully loaded and validated knowledge from {self.knowledge_file_path}")
 
         except json.JSONDecodeError as e:
-            logger.error(f"Agent '{self.agent_id}' failed to load knowledge due to JSON decoding error: {e}. Starting with an empty knowledge base.", exc_info=True)
+            logger.error(
+                f"Agent '{self.agent_id}' failed to load knowledge due to JSON decoding error: {e}. Starting with an empty knowledge base.",
+                exc_info=True,
+            )
+            logging.error(
+                f"Agent '{self.agent_id}' failed to load knowledge due to JSON decoding error: {e}. Starting with an empty knowledge base.",
+                exc_info=True,
+            )
             self.knowledge_base = self._default_knowledge_base_structure.copy()
             self.data_log = []
         except IOError as e:
-            logger.error(f"Agent '{self.agent_id}' failed to load knowledge due to IOError: {e}. Starting with an empty knowledge base.", exc_info=True)
+            logger.error(
+                f"Agent '{self.agent_id}' failed to load knowledge due to IOError: {e}. Starting with an empty knowledge base.",
+                exc_info=True,
+            )
+            logging.error(
+                f"Agent '{self.agent_id}' failed to load knowledge due to IOError: {e}. Starting with an empty knowledge base.",
+                exc_info=True,
+            )
             self.knowledge_base = self._default_knowledge_base_structure.copy()
             self.data_log = []
         except Exception as e:
-            logger.error(f"Agent '{self.agent_id}' encountered an unexpected error while loading knowledge: {e}. Starting with an empty knowledge base.", exc_info=True)
+            logger.error(
+                f"Agent '{self.agent_id}' encountered an unexpected error while loading knowledge: {e}. Starting with an empty knowledge base.",
+                exc_info=True,
+            )
+            logging.error(
+                f"Agent '{self.agent_id}' encountered an unexpected error while loading knowledge: {e}. Starting with an empty knowledge base.",
+                exc_info=True,
+            )
             self.knowledge_base = self._default_knowledge_base_structure.copy()
             self.data_log = []
 
