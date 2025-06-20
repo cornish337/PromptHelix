@@ -164,8 +164,6 @@ def main_ga_loop(
         population_path=actual_population_path,  # Use determined path
         initial_prompt_str=initial_prompt_str,
         parallel_workers=parallel_workers,
-        population_path=actual_population_path, # Use determined path
-        initial_prompt_str=initial_prompt_str,
         message_bus=message_bus, # Added
         agents_used=agent_names # Pass the collected agent names/IDs
 

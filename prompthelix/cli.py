@@ -10,7 +10,13 @@ import sys
 import os
 import unittest
 import logging # Added for logging configuration
-import openai # Added for openai.RateLimitError
+try:
+    import openai  # Used for catching openai.RateLimitError during GA runs
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
+    class _DummyRateLimitError(Exception):
+        pass
+
+    openai = type("openai", (), {"RateLimitError": _DummyRateLimitError})()
 import json # For parsing settings overrides
 
 logger = logging.getLogger(__name__)
