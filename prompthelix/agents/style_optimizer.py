@@ -10,6 +10,8 @@ from typing import Optional, Dict # Added for type hinting
 logger = logging.getLogger(__name__)
 
 # Default knowledge filename if nothing else is provided
+FALLBACK_LLM_PROVIDER = "openai"
+FALLBACK_LLM_MODEL = "gpt-3.5-turbo"
 FALLBACK_KNOWLEDGE_FILE = "style_optimizer_rules.json"
 
 
@@ -343,9 +345,11 @@ Rewritten Prompt Segments (JSON list of strings):
                         if gene_str and gene_str[-1] not in ".!?":
                             modified_genes[i] = gene_str + "."
             else:
-                # If LLM failed and no rule-based style exists, return original genes
-                logger.warning(f"Agent '{self.agent_id}': LLM failed for style '{target_style}' and no rule-based fallback exists. Returning original genes.")
-                modified_genes = list(original_genes_str_list)
+                # If LLM failed and no rule-based style exists, return the original chromosome unchanged
+                logger.warning(
+                    f"Agent '{self.agent_id}': LLM failed for style '{target_style}' and no rule-based fallback exists. Returning original genes."
+                )
+                return original_chromosome
 
             # Apply placeholder adjustments after rule-based changes or if LLM failed and no rules applied
             modified_genes = self._tone_analysis_adjustment(modified_genes, target_style)

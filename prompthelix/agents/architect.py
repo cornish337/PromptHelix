@@ -10,6 +10,8 @@ from typing import Optional, Dict # Added for type hinting
 logger = logging.getLogger(__name__)
 
 # Default knowledge filename if nothing else is provided
+FALLBACK_LLM_PROVIDER = "openai"
+FALLBACK_LLM_MODEL = "gpt-3.5-turbo"
 FALLBACK_KNOWLEDGE_FILE = "architect_knowledge.json"
 
 
