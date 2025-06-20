@@ -206,9 +206,13 @@ class MetaLearnerAgent(BaseAgent):
         """
         logger.info(f"Agent '{self.agent_id}' attempting to load knowledge from {self.knowledge_file_path}")
         if not os.path.exists(self.knowledge_file_path):
-            logger.info(f"Agent '{self.agent_id}': Knowledge file {self.knowledge_file_path} not found. Starting with an empty knowledge base.")
-            self.knowledge_base = self._default_knowledge_base_structure.copy() # Ensure it's a fresh copy
+            logger.info(
+                f"Agent '{self.agent_id}': Knowledge file {self.knowledge_file_path} not found. Starting with an empty knowledge base."
+            )
+            self.knowledge_base = self._default_knowledge_base_structure.copy()  # Ensure it's a fresh copy
             self.data_log = []
+            # Persist defaults so the file exists immediately after initialization
+            self.save_knowledge()
             return
 
         try:
