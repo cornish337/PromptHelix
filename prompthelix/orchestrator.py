@@ -13,7 +13,7 @@ from prompthelix.agents.domain_expert import DomainExpertAgent # Added for demo
 from prompthelix.agents.critic import PromptCriticAgent # Added for demo
 # Import BaseAgent if we need to use it for the example, or a mock agent
 from prompthelix.agents.base import BaseAgent
-from prompthelix.experiment_runners import GeneticAlgorithmRunner # Added import
+from prompthelix.experiment_runners.ga_runner import GeneticAlgorithmRunner # Changed import
 from prompthelix.genetics.engine import (
     GeneticOperators,
     FitnessEvaluator,
