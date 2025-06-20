@@ -98,10 +98,24 @@ class StyleOptimizerAgent(BaseAgent):
             self.style_rules = self._get_default_style_rules()
             self.save_knowledge() # Save defaults if file not found
         except json.JSONDecodeError as e:
-            logger.error(f"Agent '{self.agent_id}': Error decoding JSON from '{self.knowledge_file_path}': {e}. Using default rules.", exc_info=True)
+            logger.error(
+                f"Agent '{self.agent_id}': Error decoding JSON from '{self.knowledge_file_path}': {e}. Using default rules.",
+                exc_info=True,
+            )
+            logging.error(
+                f"Agent '{self.agent_id}': Error decoding JSON from '{self.knowledge_file_path}': {e}. Using default rules.",
+                exc_info=True,
+            )
             self.style_rules = self._get_default_style_rules()
         except Exception as e:
-            logger.error(f"Agent '{self.agent_id}': Failed to load style rules from '{self.knowledge_file_path}': {e}. Using default rules.", exc_info=True)
+            logger.error(
+                f"Agent '{self.agent_id}': Failed to load style rules from '{self.knowledge_file_path}': {e}. Using default rules.",
+                exc_info=True,
+            )
+            logging.error(
+                f"Agent '{self.agent_id}': Failed to load style rules from '{self.knowledge_file_path}': {e}. Using default rules.",
+                exc_info=True,
+            )
             self.style_rules = self._get_default_style_rules()
 
     def optimize(self, prompt: str, tone: str = "concise") -> str:

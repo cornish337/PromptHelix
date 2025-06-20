@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Welcome to PromptHelix</h1>
+<p>This is the central hub for managing and experimenting with your prompts.</p>
+
+<h2>Available Functionalities:</h2>
+<ul>
+    <li><a href="{{ url_for('list_prompts_ui') }}">All Prompts</a> - View, manage, and track versions of your prompts.</li>
+    <li><a href="{{ url_for('create_prompt_ui_form') }}">Create New Prompt</a> - Start a new prompt from scratch.</li>
+    <li><a href="{{ url_for('run_experiment_ui_form') }}">Run New Experiment</a> - Use genetic algorithms to evolve and improve your prompts.</li>
+    <li><a href="{{ request.url_for('llm_playground_ui') }}">LLM Playground</a> - Test your prompts directly with various LLM providers.</li>
+    <li><a href="{{ url_for('ui_dashboard') }}">Dashboard</a> - Monitor real-time activities and performance.</li>
+    <li><a href="{{ url_for('view_settings_ui') }}">Settings</a> - Configure API keys and other application settings.</li>
+    <li><a href="{{ url_for('ui_list_conversations') }}">Conversation Logs</a> - Review past conversations and interactions.</li>
+</ul>
+
+{% if request.cookies.get("prompthelix_access_token") %}
+    <p><a href="{{ url_for('ui_logout') }}">Logout</a></p>
+{% else %}
+    <p><a href="{{ url_for('ui_login') }}">Login</a></p>
+{% endif %}
+
+{% endblock %}

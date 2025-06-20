@@ -11,6 +11,17 @@ logger = logging.getLogger(__name__)
 FALLBACK_LLM_PROVIDER = AGENT_SETTINGS.get("DomainExpertAgent", {}).get("default_llm_provider", "openai")
 FALLBACK_LLM_MODEL = AGENT_SETTINGS.get("DomainExpertAgent", {}).get("default_llm_model", "gpt-3.5-turbo")
 
+# Known error strings returned by call_llm_api indicating the call failed
+LLM_API_ERROR_STRINGS = {
+    "RATE_LIMIT_ERROR", "API_KEY_MISSING_ERROR", "AUTHENTICATION_ERROR",
+    "API_CONNECTION_ERROR", "INVALID_REQUEST_ERROR", "API_ERROR", "OPENAI_ERROR",
+    "UNEXPECTED_OPENAI_CALL_ERROR", "ANTHROPIC_ERROR", "UNEXPECTED_ANTHROPIC_CALL_ERROR",
+    "GOOGLE_SDK_ERROR", "UNEXPECTED_GOOGLE_CALL_ERROR", "BLOCKED_PROMPT_ERROR",
+    "API_STATUS_ERROR", "API_SERVER_ERROR", "EMPTY_GOOGLE_RESPONSE", "INVALID_ARGUMENT_ERROR",
+    "MALFORMED_CLAUDE_RESPONSE_CONTENT", "EMPTY_CLAUDE_RESPONSE", "UNSUPPORTED_PROVIDER_ERROR",
+    "GENERATION_STOPPED_SAFETY", "GENERATION_STOPPED_RECITATION"
+}
+
 
 class DomainExpertAgent(BaseAgent):
     agent_id = "DomainExpert"
@@ -140,10 +151,24 @@ class DomainExpertAgent(BaseAgent):
             self.knowledge_base = self._get_default_knowledge()
             self.save_knowledge()
         except json.JSONDecodeError as e:
-            logger.error(f"Agent '{self.agent_id}': Error decoding JSON from '{self.knowledge_file_path}': {e}. Using default knowledge.", exc_info=True)
+            logger.error(
+                f"Agent '{self.agent_id}': Error decoding JSON from '{self.knowledge_file_path}': {e}. Using default knowledge.",
+                exc_info=True,
+            )
+            logging.error(
+                f"Agent '{self.agent_id}': Error decoding JSON from '{self.knowledge_file_path}': {e}. Using default knowledge.",
+                exc_info=True,
+            )
             self.knowledge_base = self._get_default_knowledge()
         except Exception as e:
-            logger.error(f"Agent '{self.agent_id}': Failed to load knowledge from '{self.knowledge_file_path}': {e}. Using default knowledge.", exc_info=True)
+            logger.error(
+                f"Agent '{self.agent_id}': Failed to load knowledge from '{self.knowledge_file_path}': {e}. Using default knowledge.",
+                exc_info=True,
+            )
+            logging.error(
+                f"Agent '{self.agent_id}': Failed to load knowledge from '{self.knowledge_file_path}': {e}. Using default knowledge.",
+                exc_info=True,
+            )
             self.knowledge_base = self._get_default_knowledge()
 
     def save_knowledge(self):
@@ -188,7 +213,23 @@ class DomainExpertAgent(BaseAgent):
         try:
             llm_response_str = call_llm_api(llm_prompt, provider=self.llm_provider, model=self.llm_model)
             logger.info(f"Agent '{self.agent_id}': LLM response for domain '{domain}', type '{query_type}': {llm_response_str}")
-            parsed_data = self._parse_llm_response(llm_response_str, query_type)
+            if isinstance(llm_response_str, str) and (
+                llm_response_str in LLM_API_ERROR_STRINGS or llm_response_str.startswith("GENERATION_STOPPED_")
+            ):
+                logger.warning(
+                    f"Agent '{self.agent_id}': LLM returned error code '{llm_response_str}'. Skipping parse and falling back."
+                )
+                parsed_data = None
+            else:
+                parsed_data = self._parse_llm_response(llm_response_str, query_type)
+                if query_type == "keywords" and isinstance(parsed_data, dict) and "keywords" not in parsed_data:
+                    merged_keywords = []
+                    for key in ("key_terms", "jargon", "important_concepts"):
+                        terms = parsed_data.get(key)
+                        if isinstance(terms, list):
+                            merged_keywords.extend(terms)
+                    if merged_keywords:
+                        parsed_data = merged_keywords
 
             if parsed_data is not None: # Successfully parsed data from LLM
                 return {"domain": domain, "query_type": query_type, "data": parsed_data, "source": "llm"}
@@ -202,14 +243,18 @@ class DomainExpertAgent(BaseAgent):
         domain_info = self.knowledge_base.get(domain)
 
         if not domain_info:
-            # Fallback to general_knowledge if specific domain not found and query is generic (original fallback logic)
-            if domain not in self.knowledge_base.keys() and "general_knowledge" in self.knowledge_base: # Check specific domain keys first
-                logger.info(f"Agent '{self.agent_id}': Domain '{domain}' not found, attempting fallback to 'general_knowledge'.")
+            if "general_knowledge" in self.knowledge_base:
+                logger.info(
+                    f"Agent '{self.agent_id}': Domain '{domain}' not found, using 'general_knowledge' as fallback."
+                )
                 domain_info = self.knowledge_base.get("general_knowledge")
                 effective_domain_for_fallback = "general_knowledge"
             else:
-                 logger.warning(f"Agent '{self.agent_id}': Domain '{domain}' not found in knowledge base and LLM fallback failed.")
-                 return {"error": f"Domain '{domain}' not found in knowledge base and LLM fallback failed."}
+                logger.warning(
+                    f"Agent '{self.agent_id}': Domain '{domain}' not found and no 'general_knowledge' available. Returning empty data."
+                )
+                domain_info = {}
+                effective_domain_for_fallback = domain
         else:
             effective_domain_for_fallback = domain
 

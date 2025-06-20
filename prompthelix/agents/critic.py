@@ -46,11 +46,36 @@ class PromptCriticAgent(BaseAgent):
             logger.error(f"Agent '{self.agent_id}': Knowledge file '{effective_path}' not found. No rules will be applied.")
             self.rules = []
         except json.JSONDecodeError as e:
-            logger.error(f"Agent '{self.agent_id}': Error decoding JSON from '{effective_path}': {e}. No rules will be applied.")
+            logger.error(
+                f"Agent '{self.agent_id}': Error decoding JSON from '{effective_path}': {e}. No rules will be applied.",
+                exc_info=True,
+            )
+            logging.error(
+                f"Agent '{self.agent_id}': Error decoding JSON from '{effective_path}': {e}. No rules will be applied.",
+                exc_info=True,
+            )
             self.rules = []
         except Exception as e:
-            logger.error(f"Agent '{self.agent_id}': Failed to load rules from '{effective_path}': {e}. No rules will be applied.", exc_info=True)
+            logger.error(
+                f"Agent '{self.agent_id}': Failed to load rules from '{effective_path}': {e}. No rules will be applied.",
+                exc_info=True,
+            )
+            logging.error(
+                f"Agent '{self.agent_id}': Failed to load rules from '{effective_path}': {e}. No rules will be applied.",
+                exc_info=True,
+            )
             self.rules = []
+
+    def process_request(self, request_data: dict) -> dict:
+        """Handle a direct critique request."""
+        prompt = request_data.get("prompt")
+        if not isinstance(prompt, str):
+            logger.error(
+                f"Agent '{self.agent_id}': 'prompt' missing or not a string in request_data."
+            )
+            return {"score": 0, "feedback": ["Error: Invalid or missing 'prompt'."]}
+
+        return self.process_prompt(prompt)
 
     def process_prompt(self, prompt: str) -> dict:
         """
