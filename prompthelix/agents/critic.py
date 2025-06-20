@@ -66,6 +66,17 @@ class PromptCriticAgent(BaseAgent):
             )
             self.rules = []
 
+    def process_request(self, request_data: dict) -> dict:
+        """Handle a direct critique request."""
+        prompt = request_data.get("prompt")
+        if not isinstance(prompt, str):
+            logger.error(
+                f"Agent '{self.agent_id}': 'prompt' missing or not a string in request_data."
+            )
+            return {"score": 0, "feedback": ["Error: Invalid or missing 'prompt'."]}
+
+        return self.process_prompt(prompt)
+
     def process_prompt(self, prompt: str) -> dict:
         """
         Analyzes a given prompt string based on loaded rules.
