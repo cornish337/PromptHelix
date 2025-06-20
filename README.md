@@ -329,3 +329,22 @@ python -m prompthelix.cli test --path tests/unit/test_architect_agent.py
 
 The output will show the progress of the tests and a summary of the results.
 
+### Interactive Tests
+
+PromptHelix also provides a simple web interface for running tests manually. Start the
+development server and navigate to `/ui/tests` to see the available tests.
+
+1. Open [http://127.0.0.1:8000/ui/tests](http://127.0.0.1:8000/ui/tests) in your browser.
+2. Choose a test from the dropdown list and click **Run**.
+3. Results will be displayed on the page once execution completes.
+
+If your deployment enforces authentication for UI routes, log in first via
+`/ui/login`. Otherwise, the interactive test page can be accessed without a token.
+
+You can also launch the interactive runner from the command line:
+
+```bash
+python -m prompthelix.cli test --interactive
+```
+
+
