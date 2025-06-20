@@ -102,14 +102,30 @@ class PromptCriticAgent(BaseAgent):
             return {"score": score, "feedback": ["Warning: No rules loaded for critique."]}
 
         for rule in self.rules:
+            pattern = rule.get("pattern")
+            if not pattern:
+                logger.error(
+                    f"Agent '{self.agent_id}': Invalid rule structure for rule '{rule.get('name', 'Unnamed')}'. Missing key: 'pattern'. Skipping rule."
+                )
+                continue
             try:
-                if re.search(rule["pattern"], prompt):
-                    issues.append(rule["feedback"])
-                    score -= rule.get("penalty", 1)
+                regex = re.compile(pattern)
             except re.error as e:
-                logger.error(f"Agent '{self.agent_id}': Regex error in rule '{rule.get('name', 'Unnamed')}': {e}. Skipping rule.")
-            except KeyError as e:
-                logger.error(f"Agent '{self.agent_id}': Invalid rule structure for rule '{rule.get('name', 'Unnamed')}'. Missing key: {e}. Skipping rule.")
+                logger.error(
+                    f"Agent '{self.agent_id}': Regex error in rule '{rule.get('name', 'Unnamed')}': {e}. Skipping rule."
+                )
+                continue
+
+            if regex.search(prompt):
+                penalty = rule.get("penalty", 1)
+                feedback = rule.get("feedback")
+                if feedback is not None:
+                    issues.append(feedback)
+                else:
+                    logger.error(
+                        f"Agent '{self.agent_id}': Invalid rule structure for rule '{rule.get('name', 'Unnamed')}'. Missing key: 'feedback'."
+                    )
+                score -= penalty
 
 
         final_score = max(score, 0)

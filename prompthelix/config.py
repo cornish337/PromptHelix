@@ -11,7 +11,6 @@ import logging
 import json
 from sqlalchemy.orm import Session
 from typing import Optional
-from prompthelix.api import crud
 from dotenv import load_dotenv
 # from pydantic import BaseSettings # Uncomment if Pydantic is used for settings management
 
@@ -96,8 +95,9 @@ logger.info(f"Default save population frequency: {settings.DEFAULT_SAVE_POPULATI
 # print(settings.DATABASE_URL)
 
 def _get_key_from_db(db_session: Session, service_name: str) -> Optional[str]:
-    if not db_session: # Should not happen if called by the new functions correctly
+    if not db_session:  # Should not happen if called by the new functions correctly
         return None
+    from prompthelix.api import crud  # Imported here to avoid circular import during module load
     key_obj = crud.get_api_key(db_session, service_name=service_name)
     return key_obj.api_key if key_obj else None
 

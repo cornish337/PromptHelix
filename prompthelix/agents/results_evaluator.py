@@ -13,6 +13,9 @@ from typing import Optional, Dict # Added for type hinting
 logger = logging.getLogger(__name__)
 
 # Default knowledge filename if nothing else is provided
+FALLBACK_LLM_PROVIDER = "openai"
+FALLBACK_EVAL_MODEL = "gpt-4"
+FALLBACK_FITNESS_WEIGHTS = {"constraint_adherence": 0.5, "llm_quality_assessment": 0.5}
 FALLBACK_KNOWLEDGE_FILE = "results_evaluator_config.json"
 
 
