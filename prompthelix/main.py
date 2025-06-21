@@ -176,6 +176,20 @@ app.include_router(api_routes.router)
 # Include UI routes
 app.include_router(ui_router, prefix="/ui", tags=["UI"])
 # Removed the /debug-routes endpoint
+@app.get("/debug-routes")
+async def debug_routes():
+    """
+    Temporary endpoint to list all registered routes for debugging.
+    """
+    routes = []
+    for route in app.routes:
+        routes.append(
+            {
+                "path": getattr(route, "path", "N/A"),
+                "name": getattr(route, "name", "N/A"),
+                "methods": sorted(list(getattr(route, "methods", []))),
+            }
+        )
     return JSONResponse(content={"routes": routes})
 
 if __name__ == "__main__":
