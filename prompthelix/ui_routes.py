@@ -131,6 +131,10 @@ async def ui_index_page(request: Request):
     """Serves the UI index page."""
     return templates.TemplateResponse("index.html", {"request": request})
 
+@router.get("/ui/index.html", include_in_schema=False)
+async def ui_index_page_alias(request: Request):
+    return RedirectResponse(url=str(request.url_for("ui_index")))
+
 @router.get("/ui/prompts", name="list_prompts_ui")
 async def list_prompts_ui(request: Request, db: Session = Depends(get_db), new_version_id: Optional[int] = Query(None)):
     db_prompts = crud.get_prompts(db)
@@ -139,9 +143,17 @@ async def list_prompts_ui(request: Request, db: Session = Depends(get_db), new_v
         {"request": request, "prompts": db_prompts, "new_version_id": new_version_id}
     )
 
+@router.get("/ui/prompts.html", include_in_schema=False)
+async def list_prompts_ui_alias(request: Request):
+    return RedirectResponse(url=str(request.url_for("list_prompts_ui")))
+
 @router.get("/ui/prompts/new", name="create_prompt_ui_form")
 async def create_prompt_ui_form(request: Request):
     return templates.TemplateResponse("create_prompt.html", {"request": request})
+
+@router.get("/ui/prompts/new.html", include_in_schema=False)
+async def create_prompt_ui_form_alias(request: Request):
+    return RedirectResponse(url=str(request.url_for("create_prompt_ui_form")))
 
 @router.post("/ui/prompts/new", name="create_prompt_ui_submit")
 async def create_prompt_ui_submit(
@@ -176,6 +188,10 @@ async def run_experiment_ui_form(
         "experiment.html",
         {"request": request, "available_prompts": available_prompts, "form_data": {}} # Pass empty form_data initially
     )
+
+@router.get("/ui/experiments/new.html", include_in_schema=False)
+async def run_experiment_ui_form_alias(request: Request):
+    return RedirectResponse(url=str(request.url_for("run_experiment_ui_form")))
 
 @router.post("/ui/experiments/new", name="run_experiment_ui_submit")
 async def run_experiment_ui_submit(
@@ -292,6 +308,10 @@ async def get_llm_playground_ui(request: Request, db: Session = Depends(get_db))
         }
     )
 
+@router.get("/ui/playground.html", include_in_schema=False)
+async def llm_playground_ui_alias(request: Request):
+    return RedirectResponse(url=str(request.url_for("llm_playground_ui")))
+
 
 @router.get("/ui/prompts/{prompt_id}", name="view_prompt_ui") # Keep existing view_prompt_ui
 async def view_prompt_ui(request: Request, prompt_id: int, db: Session = Depends(get_db), new_version_id: Optional[int] = Query(None)):
@@ -308,6 +328,10 @@ async def view_prompt_ui(request: Request, prompt_id: int, db: Session = Depends
         "prompt_detail.html",
         {"request": request, "prompt": db_prompt, "sorted_versions": sorted_versions, "new_version_id": new_version_id}
     )
+
+@router.get("/ui/prompts/{prompt_id}.html", include_in_schema=False)
+async def view_prompt_ui_alias(request: Request, prompt_id: int):
+    return RedirectResponse(url=str(request.url_for("view_prompt_ui", prompt_id=prompt_id)))
 
 @router.get("/ui/settings", name="view_settings_ui")
 @router.get("/ui/settings/", name="view_settings_ui_alt")
@@ -343,6 +367,10 @@ async def view_settings_ui(
             "error": error
         }
     )
+
+@router.get("/ui/settings.html", include_in_schema=False)
+async def view_settings_ui_alias(request: Request):
+    return RedirectResponse(url=str(request.url_for("view_settings_ui")))
 
 @router.post("/ui/settings/api_keys", name="save_api_keys_settings")
 async def save_api_keys_settings(
@@ -410,10 +438,18 @@ async def ui_list_conversations(request: Request):
     """Serves the UI page for viewing conversation logs."""
     return templates.TemplateResponse("conversations.html", {"request": request})
 
+@router.get("/ui/conversations.html", include_in_schema=False)
+async def ui_list_conversations_alias(request: Request):
+    return RedirectResponse(url=str(request.url_for("ui_list_conversations")))
+
 @router.get("/ui/login", response_class=HTMLResponse, name="ui_login")
 async def ui_login_form(request: Request):
     """Serves the UI page for user login."""
     return templates.TemplateResponse("login.html", {"request": request})
+
+@router.get("/ui/login.html", include_in_schema=False)
+async def ui_login_form_alias(request: Request):
+    return RedirectResponse(url=str(request.url_for("ui_login")))
 
 
 @router.post("/ui/login", name="ui_login_submit")
@@ -464,11 +500,19 @@ async def ui_logout(request: Request):
     redirect.delete_cookie("prompthelix_access_token", path="/")
     return redirect
 
+@router.get("/ui/logout.html", include_in_schema=False)
+async def ui_logout_alias(request: Request):
+    return RedirectResponse(url=str(request.url_for("ui_logout")))
+
 
 @router.get("/ui/dashboard", response_class=HTMLResponse, name="ui_dashboard")
 async def get_dashboard_ui(request: Request):
     """Serves the UI page for the real-time monitoring dashboard."""
     return templates.TemplateResponse("dashboard.html", {"request": request})
+
+@router.get("/ui/dashboard.html", include_in_schema=False)
+async def get_dashboard_ui_alias(request: Request):
+    return RedirectResponse(url=str(request.url_for("ui_dashboard")))
 
 
 @router.get("/ui/tests", response_class=HTMLResponse, name="ui_list_tests")
@@ -478,6 +522,10 @@ async def ui_list_tests(request: Request):
         "interactive_tests.html",
         {"request": request, "tests": tests, "selected_test": None, "test_output": None},
     )
+
+@router.get("/ui/tests.html", include_in_schema=False)
+async def ui_list_tests_alias(request: Request):
+    return RedirectResponse(url=str(request.url_for("ui_list_tests")))
 
 
 @router.post("/ui/tests/run", response_class=HTMLResponse, name="ui_run_test")

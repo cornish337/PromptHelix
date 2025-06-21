@@ -28,6 +28,7 @@ AI prompts through innovative techniques inspired by genetic algorithms and mult
 *   Performance tracking and evaluation of prompts
 *   API for programmatic access and integration
 *   User interface for managing and experimenting with prompts (basic HTML interface available)
+*   UI pages can be reached with or without a `.html` suffix (e.g., `/ui/tests` and `/ui/tests.html`)
 
 ### Inter-Agent Messaging
 
