@@ -822,6 +822,7 @@ class PopulationManager:
         evaluation_timeout: Optional[int] = 60,
         message_bus: Optional["MessageBus"] = None,  # Added message_bus
         agents_used: list[str] | None = None,
+        metrics_file_path: str | None = None,
     ):
         """
         Initializes the PopulationManager.
@@ -869,6 +870,7 @@ class PopulationManager:
         self.agents_used: list[str] = (
             agents_used if agents_used is not None else []
         )  # Added
+        self.metrics_file_path = metrics_file_path
 
         self.population: list[PromptChromosome] = []
         self.generation_number: int = 0
@@ -1368,6 +1370,36 @@ class PopulationManager:
 
         self.generation_number = current_generation_number  # Update generation number
 
+        # --- Calculate generation metrics ---
+        fitness_scores = [c.fitness_score for c in self.population] if self.population else []
+        if fitness_scores:
+            best_fitness = max(fitness_scores)
+            avg_fitness = statistics.mean(fitness_scores)
+            diversity_ratio = len({tuple(ch.genes) for ch in self.population}) / len(self.population)
+        else:
+            best_fitness = None
+            avg_fitness = None
+            diversity_ratio = None
+
+        generation_metrics = {
+            "run_id": experiment_run.id if experiment_run else None,
+            "generation_number": self.generation_number,
+            "best_fitness": best_fitness,
+            "avg_fitness": avg_fitness,
+            "population_size": len(self.population),
+            "diversity": {"unique_ratio": diversity_ratio},
+        }
+
+        if db_session and experiment_run:
+            from prompthelix.services import add_generation_metrics
+            add_generation_metrics(db_session, experiment_run, generation_metrics)
+        elif self.metrics_file_path:
+            try:
+                with open(self.metrics_file_path, "a", encoding="utf-8") as fh:
+                    fh.write(json.dumps(generation_metrics) + "\n")
+            except Exception as e:
+                logger.error(f"Failed to write generation metrics to {self.metrics_file_path}: {e}")
+
         # Update status based on pause/stop flags before final broadcast for the generation
         if self.is_paused:
             self.status = "PAUSED"
@@ -1385,7 +1417,10 @@ class PopulationManager:
 
         self.broadcast_ga_update(
             event_type="ga_generation_complete",
-            additional_data={"generation": self.generation_number},
+            additional_data={
+                "generation": self.generation_number,
+                "generation_metrics": generation_metrics,
+            },
             selected_parent_ids=unique_parent_ids, # Pass unique parent IDs
         )  # Added
 
