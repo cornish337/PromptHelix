@@ -41,7 +41,8 @@ class PromptChromosome:
     and a unique identifier.
     """
 
-    def __init__(self, genes: list | None = None, fitness_score: float = 0.0):
+    def __init__(self, genes: list | None = None, fitness_score: float = 0.0,
+                 parents: list[str] | None = None, mutation_op: str | None = None):
         """
         Initializes a PromptChromosome.
 
@@ -54,6 +55,8 @@ class PromptChromosome:
         self.id = uuid.uuid4()
         self.genes: list = [] if genes is None else genes
         self.fitness_score: float = fitness_score
+        self.parents: list[str] = parents if parents is not None else []
+        self.mutation_op: str | None = mutation_op
 
     def calculate_fitness(self) -> float:
         """
@@ -97,8 +100,11 @@ class PromptChromosome:
         """
         cloned_genes = copy.deepcopy(self.genes)
         cloned_chromosome = PromptChromosome(
-            genes=cloned_genes, fitness_score=self.fitness_score
+            genes=cloned_genes,
+            fitness_score=self.fitness_score,
+            parents=list(self.parents),
         )
+        cloned_chromosome.mutation_op = None
         return cloned_chromosome
 
     def __str__(self) -> str:
@@ -124,7 +130,11 @@ class PromptChromosome:
         Returns:
             str: A string that could ideally be used to recreate the object.
         """
-        return f"PromptChromosome(id='{self.id}', genes={self.genes!r}, fitness_score={self.fitness_score:.4f})"
+        return (
+            f"PromptChromosome(id='{self.id}', genes={self.genes!r}, "
+            f"fitness_score={self.fitness_score:.4f}, parents={self.parents}, "
+            f"mutation_op={self.mutation_op!r})"
+        )
 
 
 from prompthelix.genetics.mutation_strategies import (
@@ -291,14 +301,24 @@ class GeneticOperators:
                 child2_genes.extend(parent2.genes[:crossover_point])
                 child2_genes.extend(parent1.genes[crossover_point:])
 
-            child1 = PromptChromosome(genes=child1_genes, fitness_score=0.0)
-            child2 = PromptChromosome(genes=child2_genes, fitness_score=0.0)
+            child1 = PromptChromosome(
+                genes=child1_genes,
+                fitness_score=0.0,
+                parents=[str(parent1.id), str(parent2.id)],
+            )
+            child2 = PromptChromosome(
+                genes=child2_genes,
+                fitness_score=0.0,
+                parents=[str(parent1.id), str(parent2.id)],
+            )
             logger.debug(
                 f"Crossover performed between Parent {parent1.id} and Parent {parent2.id}. Child1 ID {child1.id}, Child2 ID {child2.id}."
             )
         else:
             child1 = parent1.clone()
             child2 = parent2.clone()
+            child1.parents = [str(parent1.id)]
+            child2.parents = [str(parent2.id)]
             child1.fitness_score = 0.0
             child2.fitness_score = 0.0
             logger.debug(
@@ -332,6 +352,7 @@ class GeneticOperators:
 
         mutated_chromosome_overall = chromosome  # Start with original
         mutation_applied_this_cycle = False
+        selected_strategy_name: str | None = None
 
         if (
             random.random() < mutation_rate
@@ -370,6 +391,7 @@ class GeneticOperators:
                 # Corrected logic: If chromosome is selected for mutation, pick one strategy and apply it.
                 # The chosen strategy will internally handle how it mutates (e.g. which gene).
                 selected_strategy = random.choice(self.mutation_strategies)
+                selected_strategy_name = selected_strategy.__class__.__name__
                 logger.debug(
                     f"Applying mutation strategy '{selected_strategy.__class__.__name__}' to chromosome {working_chromosome_clone.id}"
                 )
@@ -391,12 +413,16 @@ class GeneticOperators:
                     chromosome.clone()
                 )  # Still clone, reset fitness
                 mutated_chromosome_overall.fitness_score = 0.0
+                mutated_chromosome_overall.parents = list(chromosome.parents)
+                mutated_chromosome_overall.mutation_op = None
 
         # If no mutation was applied by random chance (missed mutation_rate),
         # return a fresh clone with reset fitness.
         if not mutation_applied_this_cycle:
             mutated_chromosome_overall = chromosome.clone()
             mutated_chromosome_overall.fitness_score = 0.0
+            mutated_chromosome_overall.parents = list(chromosome.parents)
+            mutated_chromosome_overall.mutation_op = None
             # No specific mutation strategy was chosen via mutation_rate
 
         # Style optimization step (if applicable)
@@ -422,9 +448,9 @@ class GeneticOperators:
                     # For now, we assume the optimizer returns a valid chromosome,
                     # and we'll ensure its fitness is 0.0 for the new generation.
                     mutated_chromosome_overall = optimized_chromosome
-                    mutated_chromosome_overall.fitness_score = (
-                        0.0  # Ensure fitness is reset
-                    )
+                    mutated_chromosome_overall.fitness_score = 0.0  # Ensure fitness is reset
+                    mutated_chromosome_overall.parents = list(chromosome.parents)
+                    mutated_chromosome_overall.mutation_op = selected_strategy_name
                     logger.info(
                         f"Chromosome {mutated_chromosome_overall.id} successfully style-optimized to target style '{target_style}'."
                     )
@@ -444,6 +470,19 @@ class GeneticOperators:
                 f"Target style '{target_style}' provided for mutation, but StyleOptimizerAgent is not available. Skipping style optimization."
             )
 
+        mutated_chromosome_overall.parents = list(chromosome.parents)
+        if mutation_applied_this_cycle:
+            mutated_chromosome_overall.mutation_op = selected_strategy_name
+        logger.info(
+            json.dumps(
+                {
+                    "event": "offspring_created",
+                    "child_id": str(mutated_chromosome_overall.id),
+                    "parent_ids": mutated_chromosome_overall.parents,
+                    "mutation_op": mutated_chromosome_overall.mutation_op,
+                }
+            )
+        )
         return mutated_chromosome_overall
 
 
@@ -1418,7 +1457,12 @@ class PopulationManager:
         data = {
             "generation_number": self.generation_number,
             "population": [
-                {"genes": c.genes, "fitness_score": c.fitness_score}
+                {
+                    "genes": c.genes,
+                    "fitness_score": c.fitness_score,
+                    "parents": c.parents,
+                    "mutation_op": c.mutation_op,
+                }
                 for c in self.population
             ],
         }
@@ -1445,6 +1489,8 @@ class PopulationManager:
                 PromptChromosome(
                     genes=item.get("genes", []),
                     fitness_score=item.get("fitness_score", 0.0),
+                    parents=item.get("parents", []),
+                    mutation_op=item.get("mutation_op"),
                 )
                 for item in individuals
             ]
