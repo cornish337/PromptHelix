@@ -1,17 +1,11 @@
 from prompthelix.message_bus import MessageBus
 import logging
-import time # Added
+import time  # Added
 
 logger = logging.getLogger(__name__)
 
-try:
-    from prompthelix.database import SessionLocal  # Added
-except Exception as e:  # pragma: no cover - optional dependency
-    logger.warning(
-        "Failed to import SessionLocal. Database features will be disabled. Error: %s",
-        e,
-    )
-    SessionLocal = None
+# Set a default for SessionLocal so references outside main_ga_loop do not fail
+SessionLocal = None
 from prompthelix.globals import websocket_manager  # Use the global connection manager
 from prompthelix.agents.architect import PromptArchitectAgent
 from prompthelix.agents.results_evaluator import ResultsEvaluatorAgent
@@ -91,6 +85,20 @@ def main_ga_loop(
         save_frequency_override: Optional override for population save frequency. If None, uses config default.
         metrics_file_path: Optional path to write generation metrics as JSON lines.
     """
+    # Import SessionLocal lazily so that SQLAlchemy is only required when
+    # database features are used.
+    try:
+        from prompthelix.database import SessionLocal as _SessionLocal  # type: ignore
+    except ModuleNotFoundError:
+        logger.error(
+            "SQLAlchemy is required for database logging. Install it with 'pip install SQLAlchemy'."
+        )
+        _SessionLocal = None
+
+    # Local reference used throughout this function and update module-level
+    global SessionLocal
+    SessionLocal = _SessionLocal
+
     logger.info("--- main_ga_loop started ---")
     logger.info(f"Task Description: {task_desc}")
     logger.info(f"Keywords: {keywords}")
