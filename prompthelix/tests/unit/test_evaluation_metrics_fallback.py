@@ -14,10 +14,11 @@ class TestMetricsFallback(unittest.TestCase):
 
         builtins.__import__ = fake_import
 
-        # Ensure the module is freshly imported/reloaded under the fake_import regime
+        # Ensure a clean import state for the metrics module and textstat
         if 'prompthelix.evaluation.metrics' in sys.modules:
-            # If already loaded, remove it to ensure the version processed by fake_import is used
             del sys.modules['prompthelix.evaluation.metrics']
+        if 'textstat' in sys.modules:
+            del sys.modules['textstat']
 
         # Import the module; it will be processed by fake_import
         from prompthelix.evaluation import metrics as freshly_imported_metrics
