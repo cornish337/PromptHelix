@@ -41,7 +41,8 @@ class PromptChromosome:
     and a unique identifier.
     """
 
-    def __init__(self, genes: list | None = None, fitness_score: float = 0.0):
+    def __init__(self, genes: list | None = None, fitness_score: float = 0.0,
+                 parents: list[str] | None = None, mutation_op: str | None = None):
         """
         Initializes a PromptChromosome.
 
@@ -54,6 +55,8 @@ class PromptChromosome:
         self.id = uuid.uuid4()
         self.genes: list = [] if genes is None else genes
         self.fitness_score: float = fitness_score
+        self.parents: list[str] = parents if parents is not None else []
+        self.mutation_op: str | None = mutation_op
 
     def calculate_fitness(self) -> float:
         """
@@ -97,8 +100,11 @@ class PromptChromosome:
         """
         cloned_genes = copy.deepcopy(self.genes)
         cloned_chromosome = PromptChromosome(
-            genes=cloned_genes, fitness_score=self.fitness_score
+            genes=cloned_genes,
+            fitness_score=self.fitness_score,
+            parents=list(self.parents),
         )
+        cloned_chromosome.mutation_op = None
         return cloned_chromosome
 
     def __str__(self) -> str:
@@ -124,7 +130,11 @@ class PromptChromosome:
         Returns:
             str: A string that could ideally be used to recreate the object.
         """
-        return f"PromptChromosome(id='{self.id}', genes={self.genes!r}, fitness_score={self.fitness_score:.4f})"
+        return (
+            f"PromptChromosome(id='{self.id}', genes={self.genes!r}, "
+            f"fitness_score={self.fitness_score:.4f}, parents={self.parents}, "
+            f"mutation_op={self.mutation_op!r})"
+        )
 
 
 import importlib
@@ -240,12 +250,44 @@ class GeneticOperators:
         # Pass through kwargs like tournament_size to the strategy's select method
         return self.selection_strategy.select(population, **kwargs)
 
+
     def crossover(self, parent1: PromptChromosome, parent2: PromptChromosome, **kwargs) -> tuple[PromptChromosome, PromptChromosome]:
         """
         Performs crossover using the configured crossover strategy.
         """
         # Pass through kwargs like crossover_rate
         return self.crossover_strategy.crossover(parent1, parent2, **kwargs)
+"""
+                child1_genes.extend(parent1.genes[:crossover_point])
+                child1_genes.extend(parent2.genes[crossover_point:])
+                child2_genes.extend(parent2.genes[:crossover_point])
+                child2_genes.extend(parent1.genes[crossover_point:])
+
+            child1 = PromptChromosome(
+                genes=child1_genes,
+                fitness_score=0.0,
+                parents=[str(parent1.id), str(parent2.id)],
+            )
+            child2 = PromptChromosome(
+                genes=child2_genes,
+                fitness_score=0.0,
+                parents=[str(parent1.id), str(parent2.id)],
+            )
+            logger.debug(
+                f"Crossover performed between Parent {parent1.id} and Parent {parent2.id}. Child1 ID {child1.id}, Child2 ID {child2.id}."
+            )
+        else:
+            child1 = parent1.clone()
+            child2 = parent2.clone()
+            child1.parents = [str(parent1.id)]
+            child2.parents = [str(parent2.id)]
+            child1.fitness_score = 0.0
+            child2.fitness_score = 0.0
+            logger.debug(
+                f"Crossover skipped (rate {crossover_rate}). Cloned Parent {parent1.id} to Child {child1.id}, Parent {parent2.id} to Child {child2.id}."
+            )
+        return child1, child2
+"""
 
     def mutate(
         self,
@@ -273,6 +315,7 @@ class GeneticOperators:
 
         mutated_chromosome_overall = chromosome  # Start with original
         mutation_applied_this_cycle = False
+        selected_strategy_name: str | None = None
 
         if (
             random.random() < mutation_rate
@@ -311,6 +354,7 @@ class GeneticOperators:
                 # Corrected logic: If chromosome is selected for mutation, pick one strategy and apply it.
                 # The chosen strategy will internally handle how it mutates (e.g. which gene).
                 selected_strategy = random.choice(self.mutation_strategies)
+                selected_strategy_name = selected_strategy.__class__.__name__
                 logger.debug(
                     f"Applying mutation strategy '{selected_strategy.__class__.__name__}' to chromosome {working_chromosome_clone.id}"
                 )
@@ -332,12 +376,16 @@ class GeneticOperators:
                     chromosome.clone()
                 )  # Still clone, reset fitness
                 mutated_chromosome_overall.fitness_score = 0.0
+                mutated_chromosome_overall.parents = list(chromosome.parents)
+                mutated_chromosome_overall.mutation_op = None
 
         # If no mutation was applied by random chance (missed mutation_rate),
         # return a fresh clone with reset fitness.
         if not mutation_applied_this_cycle:
             mutated_chromosome_overall = chromosome.clone()
             mutated_chromosome_overall.fitness_score = 0.0
+            mutated_chromosome_overall.parents = list(chromosome.parents)
+            mutated_chromosome_overall.mutation_op = None
             # No specific mutation strategy was chosen via mutation_rate
 
         # Style optimization step (if applicable)
@@ -363,9 +411,9 @@ class GeneticOperators:
                     # For now, we assume the optimizer returns a valid chromosome,
                     # and we'll ensure its fitness is 0.0 for the new generation.
                     mutated_chromosome_overall = optimized_chromosome
-                    mutated_chromosome_overall.fitness_score = (
-                        0.0  # Ensure fitness is reset
-                    )
+                    mutated_chromosome_overall.fitness_score = 0.0  # Ensure fitness is reset
+                    mutated_chromosome_overall.parents = list(chromosome.parents)
+                    mutated_chromosome_overall.mutation_op = selected_strategy_name
                     logger.info(
                         f"Chromosome {mutated_chromosome_overall.id} successfully style-optimized to target style '{target_style}'."
                     )
@@ -385,6 +433,19 @@ class GeneticOperators:
                 f"Target style '{target_style}' provided for mutation, but StyleOptimizerAgent is not available. Skipping style optimization."
             )
 
+        mutated_chromosome_overall.parents = list(chromosome.parents)
+        if mutation_applied_this_cycle:
+            mutated_chromosome_overall.mutation_op = selected_strategy_name
+        logger.info(
+            json.dumps(
+                {
+                    "event": "offspring_created",
+                    "child_id": str(mutated_chromosome_overall.id),
+                    "parent_ids": mutated_chromosome_overall.parents,
+                    "mutation_op": mutated_chromosome_overall.mutation_op,
+                }
+            )
+        )
         return mutated_chromosome_overall
 
 
@@ -785,6 +846,7 @@ class PopulationManager:
         evaluation_timeout: Optional[int] = 60,
         message_bus: Optional["MessageBus"] = None,  # Added message_bus
         agents_used: list[str] | None = None,
+        metrics_file_path: str | None = None,
     ):
         """
         Initializes the PopulationManager.
@@ -832,6 +894,7 @@ class PopulationManager:
         self.agents_used: list[str] = (
             agents_used if agents_used is not None else []
         )  # Added
+        self.metrics_file_path = metrics_file_path
 
         self.population: list[PromptChromosome] = []
         self.generation_number: int = 0
@@ -839,6 +902,8 @@ class PopulationManager:
         self.is_paused: bool = False  # Added
         self.should_stop: bool = False  # Added
         self.status: str = "IDLE"  # Added
+        self._wandb_run = None
+        self._mlflow_run = None
 
         if self.population_path:
             self.load_population(self.population_path)
@@ -930,13 +995,20 @@ class PopulationManager:
         if additional_data:
             payload.update(additional_data)
 
-        # Store history for API retrieval
+        # Store history for API retrieval and update metrics
         try:
             from prompthelix import globals as ph_globals
             ph_globals.ga_history.append({
                 "generation": self.generation_number,
                 "best_fitness": payload.get("best_fitness")
             })
+        except Exception:
+            pass
+
+        try:
+            from prompthelix.utils import update_generation, update_best_fitness
+            update_generation(self.generation_number)
+            update_best_fitness(payload.get("best_fitness"))
         except Exception:
             pass
 
@@ -1331,6 +1403,36 @@ class PopulationManager:
 
         self.generation_number = current_generation_number  # Update generation number
 
+        # --- Calculate generation metrics ---
+        fitness_scores = [c.fitness_score for c in self.population] if self.population else []
+        if fitness_scores:
+            best_fitness = max(fitness_scores)
+            avg_fitness = statistics.mean(fitness_scores)
+            diversity_ratio = len({tuple(ch.genes) for ch in self.population}) / len(self.population)
+        else:
+            best_fitness = None
+            avg_fitness = None
+            diversity_ratio = None
+
+        generation_metrics = {
+            "run_id": experiment_run.id if experiment_run else None,
+            "generation_number": self.generation_number,
+            "best_fitness": best_fitness,
+            "avg_fitness": avg_fitness,
+            "population_size": len(self.population),
+            "diversity": {"unique_ratio": diversity_ratio},
+        }
+
+        if db_session and experiment_run:
+            from prompthelix.services import add_generation_metrics
+            add_generation_metrics(db_session, experiment_run, generation_metrics)
+        elif self.metrics_file_path:
+            try:
+                with open(self.metrics_file_path, "a", encoding="utf-8") as fh:
+                    fh.write(json.dumps(generation_metrics) + "\n")
+            except Exception as e:
+                logger.error(f"Failed to write generation metrics to {self.metrics_file_path}: {e}")
+
         # Update status based on pause/stop flags before final broadcast for the generation
         if self.is_paused:
             self.status = "PAUSED"
@@ -1348,9 +1450,51 @@ class PopulationManager:
 
         self.broadcast_ga_update(
             event_type="ga_generation_complete",
-            additional_data={"generation": self.generation_number},
+            additional_data={
+                "generation": self.generation_number,
+                "generation_metrics": generation_metrics,
+            },
             selected_parent_ids=unique_parent_ids, # Pass unique parent IDs
         )  # Added
+
+        # Update Prometheus metrics and optional experiment trackers
+        from prompthelix.metrics import record_generation
+        from prompthelix.config import settings
+
+        best = self.get_fittest_individual()
+        best_fitness = best.fitness_score if best else 0.0
+        record_generation(
+            self.generation_number,
+            len(self.population),
+            best_fitness,
+            evaluated_chromosomes_count,
+        )
+
+        if settings.WANDB_API_KEY:
+            try:
+                import wandb
+                if self._wandb_run is None:
+                    wandb.login(key=settings.WANDB_API_KEY)
+                    self._wandb_run = wandb.init(project="prompthelix", reinit=True)
+                if self._wandb_run:
+                    wandb.log({
+                        "generation": self.generation_number,
+                        "best_fitness": best_fitness,
+                        "population_size": len(self.population),
+                    })
+            except Exception as exc:
+                logger.error(f"WandB logging failed: {exc}")
+
+        if settings.MLFLOW_TRACKING_URI:
+            try:
+                import mlflow
+                mlflow.set_tracking_uri(settings.MLFLOW_TRACKING_URI)
+                if self._mlflow_run is None:
+                    self._mlflow_run = mlflow.start_run(run_name="prompthelix_ga")
+                mlflow.log_metric("best_fitness", best_fitness, step=self.generation_number)
+                mlflow.log_metric("population_size", len(self.population), step=self.generation_number)
+            except Exception as exc:
+                logger.error(f"MLflow logging failed: {exc}")
 
     def get_fittest_individual(self) -> PromptChromosome | None:
         """
@@ -1374,7 +1518,12 @@ class PopulationManager:
         data = {
             "generation_number": self.generation_number,
             "population": [
-                {"genes": c.genes, "fitness_score": c.fitness_score}
+                {
+                    "genes": c.genes,
+                    "fitness_score": c.fitness_score,
+                    "parents": c.parents,
+                    "mutation_op": c.mutation_op,
+                }
                 for c in self.population
             ],
         }
@@ -1401,6 +1550,8 @@ class PopulationManager:
                 PromptChromosome(
                     genes=item.get("genes", []),
                     fitness_score=item.get("fitness_score", 0.0),
+                    parents=item.get("parents", []),
+                    mutation_op=item.get("mutation_op"),
                 )
                 for item in individuals
             ]
