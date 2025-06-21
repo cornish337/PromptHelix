@@ -1,6 +1,19 @@
 """Utility helper functions for PromptHelix."""
 
 from .config_utils import update_settings
+
 from .logging_utils import setup_logging
 
-__all__ = ["update_settings", "setup_logging"]
+from .metrics_exporter import (
+    start_exporter_if_enabled,
+    update_generation,
+    update_best_fitness,
+)
+
+__all__ = [
+    "update_settings",
+    "start_exporter_if_enabled",
+    "update_generation",
+    "update_best_fitness",
+]
+
