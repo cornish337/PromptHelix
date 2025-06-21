@@ -28,7 +28,6 @@ def get_db():
         db.close()
 
 def init_db():
-    logging.basicConfig(level=logging.INFO)  # Added logging config
     logger = logging.getLogger(__name__)  # Added logger instance
     logger.info("Initializing database...")  # Added log message
     logger.info(f"Using database URL: {DATABASE_URL}") # Added log message

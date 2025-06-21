@@ -51,6 +51,9 @@ class Settings:
     ANTHROPIC_API_KEY: str | None = os.getenv("ANTHROPIC_API_KEY")
     GOOGLE_API_KEY: str | None = os.getenv("GOOGLE_API_KEY") # For Gemini or other Google models
 
+    # Debug flag controls logging verbosity across the application
+    DEBUG: bool = os.getenv("PROMPTHELIX_DEBUG", "false").lower() in {"1", "true", "yes"}
+
     # Caching (e.g., Redis)
     REDIS_HOST: str = os.getenv("REDIS_HOST", "localhost")
     REDIS_PORT: int = int(os.getenv("REDIS_PORT", "6379"))

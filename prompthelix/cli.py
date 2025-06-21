@@ -10,6 +10,8 @@ import sys
 import os
 import unittest
 import logging # Added for logging configuration
+from prompthelix.config import settings
+from prompthelix.logging_config import configure_logging
 try:
     import openai  # Used for catching openai.RateLimitError during GA runs
 except ModuleNotFoundError:  # pragma: no cover - optional dependency
@@ -27,16 +29,8 @@ def main_cli():
     Main function for the PromptHelix CLI.
     Parses arguments and dispatches commands.
     """
-    # Configure logging for CLI visibility
-    # Set up basic configuration for the root logger.
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        stream=sys.stdout  # Ensure logs go to stdout
-    )
-    # Control verbosity of noisy libraries
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("openai._base_client").setLevel(logging.WARNING)
+    # Configure logging according to settings
+    configure_logging(settings.DEBUG)
 
     parser = argparse.ArgumentParser(description="PromptHelix CLI")
     parser.add_argument(
