@@ -2,7 +2,6 @@
 Main application file for the PromptHelix API.
 Initializes the FastAPI application and includes the root endpoint.
 """
-
 import traceback
 from pathlib import Path
 from fastapi import Request
@@ -50,6 +49,7 @@ configure_logging(settings.DEBUG)
 
 # Initialize FastAPI application
 app = FastAPI()
+print(">>> FastAPI app object created in main.py <<<" )
 # websocket_manager = ConnectionManager() # websocket_manager is now imported from globals
 
 # Mount static files
@@ -175,6 +175,8 @@ app.include_router(api_routes.router)
 # Include UI routes
 app.include_router(ui_router, prefix="/ui", tags=["UI"])
 
+# Removed the /debug-routes endpoint
+
 if __name__ == "__main__":
     # This block is for when you run the application directly, e.g., using `python -m prompthelix.main`
     # It's a good place to initialize the database if it hasn't been set up by other means (like Alembic).
@@ -187,3 +189,4 @@ if __name__ == "__main__":
     # If `init_db()` is critical on every startup when not testing, ensure it's called appropriately,
     # possibly earlier in the script if not managed by a migration tool or separate startup script.
     pass  # Placeholder if no direct run actions are needed here right now.
+print(">>> PROMPTHELIX.MAIN.PY EXECUTION COMPLETED TO THE END <<<" )
