@@ -51,6 +51,9 @@ class Settings:
     ANTHROPIC_API_KEY: str | None = os.getenv("ANTHROPIC_API_KEY")
     GOOGLE_API_KEY: str | None = os.getenv("GOOGLE_API_KEY") # For Gemini or other Google models
 
+    # Debug flag controlling log verbosity
+    DEBUG: bool = os.getenv("DEBUG", "false").lower() in {"1", "true", "yes"}
+
     # Caching (e.g., Redis)
     REDIS_HOST: str = os.getenv("REDIS_HOST", "localhost")
     REDIS_PORT: int = int(os.getenv("REDIS_PORT", "6379"))
@@ -94,6 +97,7 @@ else:
 logger.info(f"Loaded OPENAI_API_KEY: {display_key}")
 logger.info(f"Default population persistence path: {settings.DEFAULT_POPULATION_PERSISTENCE_PATH}")
 logger.info(f"Default save population frequency: {settings.DEFAULT_SAVE_POPULATION_FREQUENCY}")
+logger.info(f"Debug logging enabled: {settings.DEBUG}")
 
 # Example of how to access a setting:
 # print(settings.DATABASE_URL)
@@ -203,7 +207,7 @@ LLM_UTILS_SETTINGS = {
 
 # --- Logging Configuration (Simplified for now) ---
 LOGGING_CONFIG = {
-    "level": "INFO",
+    "level": "DEBUG" if settings.DEBUG else "INFO",
     "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 }
 
