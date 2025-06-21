@@ -2,6 +2,8 @@ import os
 import importlib
 import inspect
 from typing import List, Optional
+from pathlib import Path
+import asyncio
 
 from fastapi import APIRouter, Request, Depends, HTTPException, Form, Query, status
 from fastapi.responses import RedirectResponse, HTMLResponse
@@ -431,3 +433,19 @@ async def ui_logout(request: Request):
 async def get_dashboard_ui(request: Request):
     """Serves the UI page for the real-time monitoring dashboard."""
     return templates.TemplateResponse("dashboard.html", {"request": request})
+
+
+def discover_interactive_tests() -> List[str]:
+    """Return a list of test file names under tests/interactive."""
+    root_dir = Path(__file__).resolve().parents[1]
+    tests_dir = root_dir / "tests" / "interactive"
+    if not tests_dir.is_dir():
+        return []
+    return sorted([p.name for p in tests_dir.glob("test_*.py")])
+
+
+@router.get("/ui/tests", response_class=HTMLResponse, name="ui_tests")
+async def ui_tests_page(request: Request):
+    """Display available interactive tests."""
+    tests = discover_interactive_tests()
+    return templates.TemplateResponse("tests.html", {"request": request, "tests": tests})

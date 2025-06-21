@@ -43,7 +43,14 @@ class TestAgentPersistence(unittest.TestCase):
         self.assertTrue(os.path.exists(temp_file), f"Knowledge file {temp_file} should have been created with defaults.")
         with open(temp_file, 'r') as f:
             loaded_from_file = json.load(f)
-        self.assertEqual(default_knowledge, loaded_from_file, f"File content should match default knowledge for {agent_class.__name__}.")
+
+        if agent_class.__name__ == "MetaLearnerAgent":
+            # MetaLearnerAgent saves a dict with 'knowledge_base' and 'data_log'
+            self.assertEqual(default_knowledge, loaded_from_file.get("knowledge_base"), f"File content for MetaLearnerAgent knowledge_base should match default.")
+            # MetaLearnerAgent's load_knowledge also initializes data_log to [] and saves it.
+            self.assertEqual(getattr(agent, "data_log", None), loaded_from_file.get("data_log"), f"File content for MetaLearnerAgent data_log should match default.")
+        else:
+            self.assertEqual(default_knowledge, loaded_from_file, f"File content should match default knowledge for {agent_class.__name__}.")
 
     def _test_save_and_reload_modified_knowledge(self, agent_class, knowledge_attr, modification_func, **kwargs):
         temp_file = self._get_temp_filepath(f"{agent_class.__name__}_modified")
@@ -73,7 +80,10 @@ class TestAgentPersistence(unittest.TestCase):
         with open(temp_file, 'w') as f:
             f.write("this is not valid json")
 
-        with patch('logging.error') as mock_log_error:
+        # Dynamically determine the correct logger path based on the agent's module
+        patch_target = f'{agent_class.__module__}.logger.error'
+
+        with patch(patch_target) as mock_log_error:
             agent = agent_class(knowledge_file_path=temp_file, **kwargs)
             default_knowledge = getattr(agent, default_knowledge_attr)
             original_default_knowledge = agent._get_default_knowledge() if hasattr(agent, '_get_default_knowledge') else \

@@ -4,7 +4,12 @@ from unittest.mock import patch, MagicMock, call
 from prompthelix.orchestrator import main_ga_loop
 from prompthelix import config as global_config
 from prompthelix.enums import ExecutionMode
-from prompthelix.genetics.engine import PromptChromosome # Needed for mocking population
+from prompthelix.genetics.engine import PromptChromosome, PopulationManager, GeneticOperators, FitnessEvaluator
+from prompthelix.agents.architect import PromptArchitectAgent
+from prompthelix.agents.results_evaluator import ResultsEvaluatorAgent
+from prompthelix.agents.style_optimizer import StyleOptimizerAgent
+from prompthelix.message_bus import MessageBus
+from prompthelix.experiment_runners import GeneticAlgorithmRunner
 
 # Basic set of arguments for main_ga_loop to avoid repetition in tests
 BASE_ARGS = {
@@ -50,6 +55,7 @@ class TestOrchestratorConfigPropagation(unittest.TestCase):
         mock_pop_manager_instance.population = [mock_chromosome]
         mock_pop_manager_instance.get_fittest_individual.return_value = mock_chromosome
         mock_pop_manager_instance.save_population = MagicMock() # Mock save_population
+        mock_pop_manager_instance.status = "COMPLETED"  # Add status attribute
         mock_pop_manager_cls.return_value = mock_pop_manager_instance
 
         mock_ga_runner_instance = MagicMock()
@@ -110,6 +116,7 @@ class TestOrchestratorConfigPropagation(unittest.TestCase):
         mock_pop_manager_instance.population = [mock_chromosome]
         mock_pop_manager_instance.get_fittest_individual.return_value = mock_chromosome
         mock_pop_manager_instance.save_population = MagicMock()
+        mock_pop_manager_instance.status = "COMPLETED"  # Add status attribute
         mock_pop_manager_cls.return_value = mock_pop_manager_instance
 
         mock_ga_runner_instance = MagicMock()
@@ -164,6 +171,7 @@ class TestOrchestratorConfigPropagation(unittest.TestCase):
         mock_pop_manager_instance.population = [mock_chromosome]
         mock_pop_manager_instance.get_fittest_individual.return_value = mock_chromosome
         mock_pop_manager_instance.save_population = MagicMock() # This should NOT be called
+        mock_pop_manager_instance.status = "COMPLETED"  # Add status attribute
         mock_pop_manager_cls.return_value = mock_pop_manager_instance
 
         mock_ga_runner_instance = MagicMock()
@@ -206,10 +214,12 @@ class TestOrchestratorConfigPropagation(unittest.TestCase):
         mock_pop_manager_instance = MagicMock(spec=PopulationManager)
         mock_chromosome = MagicMock(spec=PromptChromosome)
         mock_chromosome.fitness_score = 0.5
+        mock_chromosome.id = "mock-chromosome-id" # Add id attribute
         mock_chromosome.to_prompt_string.return_value = "prompt"
         mock_pop_manager_instance.population = [mock_chromosome]
         mock_pop_manager_instance.get_fittest_individual.return_value = mock_chromosome
         mock_pop_manager_instance.save_population = MagicMock()
+        mock_pop_manager_instance.status = "COMPLETED"  # Add status attribute
         mock_pop_manager_cls.return_value = mock_pop_manager_instance
 
         mock_ga_runner_instance = MagicMock()
