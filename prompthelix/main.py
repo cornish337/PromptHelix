@@ -168,7 +168,6 @@ async def metrics():
 
 # Include API routes
 app.include_router(api_routes.router)
-app.include_router(ph_metrics.router)
 # Include UI routes
 app.include_router(ui_router)
 

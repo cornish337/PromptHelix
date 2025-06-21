@@ -44,8 +44,10 @@ logger = logging.getLogger(__name__)
 
 try:
     import wandb
-except ImportError:
-    logger.info("wandb library not found. W&B logging will be disabled.")
+except Exception as e:  # broaden exception handling to avoid startup failure
+    logger.warning(
+        "wandb failed to import. W&B logging will be disabled. Error: %s", e
+    )
     wandb = None
 
 
