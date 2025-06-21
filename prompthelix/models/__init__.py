@@ -5,7 +5,7 @@ from .statistics_models import LLMUsageStatistic # Add this import
 from .user_models import User, Session
 from .performance_models import PerformanceMetric
 from .conversation_models import ConversationLog
-from .evolution_models import GAExperimentRun, GAChromosome
+from .evolution_models import GAExperimentRun, GAChromosome, GAGenerationMetric
 
 __all__ = [
     "Base",
@@ -19,4 +19,5 @@ __all__ = [
     "ConversationLog",
     "GAExperimentRun",
     "GAChromosome",
+    "GAGenerationMetric",
 ]

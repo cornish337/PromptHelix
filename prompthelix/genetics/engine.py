@@ -1274,6 +1274,17 @@ class PopulationManager:
         else:
             logger.info(f"Generation {current_generation_number}: Population is empty, no fitness statistics to report.")
 
+        if db_session and experiment_run and fitness_scores:
+            from prompthelix.services import add_generation_metric
+            add_generation_metric(
+                db_session,
+                experiment_run,
+                current_generation_number,
+                max_fitness,
+                mean_fitness,
+                std_dev_fitness,
+            )
+
 
         logger.info(
             f"PopulationManager: Fitness evaluation complete for generation {current_generation_number}."

@@ -24,9 +24,11 @@ from .evolution_service import (
     create_experiment_run,
     complete_experiment_run,
     add_chromosome_record,
+    add_generation_metric,
     get_chromosomes_for_run,
     get_experiment_runs,
     get_experiment_run,
+    get_generation_metrics_for_run,
 )
 
 __all__ = [
@@ -52,7 +54,9 @@ __all__ = [
     "create_experiment_run",
     "complete_experiment_run",
     "add_chromosome_record",
+    "add_generation_metric",
     "get_chromosomes_for_run",
     "get_experiment_runs",
     "get_experiment_run",
+    "get_generation_metrics_for_run",
 ]

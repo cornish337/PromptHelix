@@ -29,3 +29,17 @@ class GAChromosome(Base):
 
     run = relationship("GAExperimentRun", back_populates="chromosomes")
 
+
+class GAGenerationMetric(Base):
+    __tablename__ = "ga_generation_metrics"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    run_id = Column(Integer, ForeignKey("ga_experiment_runs.id"), nullable=False)
+    generation_number = Column(Integer, nullable=False)
+    best_fitness = Column(Float, nullable=False)
+    avg_fitness = Column(Float, nullable=False)
+    population_diversity = Column(Float, nullable=False)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+
+    run = relationship("GAExperimentRun")
+
