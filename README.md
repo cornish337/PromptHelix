@@ -336,6 +336,7 @@ python -m prompthelix.cli test --path tests/unit/test_architect_agent.py
 The output will show the progress of the tests and a summary of the results.
 
 
+
 ### Interactive Tests
 
 PromptHelix also provides a simple web interface for running tests manually. Start the
