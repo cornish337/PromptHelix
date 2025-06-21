@@ -175,3 +175,4 @@ cython_debug/
 .ruff_cache/
 
 # PyPI configuration file
+prompthelix.db
