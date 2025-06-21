@@ -16,10 +16,7 @@ from prompthelix.models import ConversationLog
 if TYPE_CHECKING:  # Added
     from prompthelix.websocket_manager import ConnectionManager  # For type hinting
 
-# Configure basic logging for the message bus
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
+# Logging is configured centrally by setup_logging() in main.py or cli.py
 logger = logging.getLogger(__name__)
 
 

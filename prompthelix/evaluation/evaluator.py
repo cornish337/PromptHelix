@@ -213,8 +213,17 @@ class Evaluator:
             logger.info(f"Metric {metric_func.__name__} already present in evaluator.")
 
 if __name__ == '__main__':
-    # Configure basic logging for the example
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    # When running this module directly, configure logging by setting environment variables
+    # such as PROMPTHELIX_LOG_LEVEL and PROMPTHELIX_LOG_FILE.
+    # The application's central logging setup (setup_logging()) is not invoked automatically here.
+    # If you need to force the same logging configuration for standalone script execution,
+    # you could uncomment the following lines (ensure prompthelix is in PYTHONPATH):
+    # try:
+    #     from prompthelix.logging_config import setup_logging
+    #     setup_logging()
+    # except ImportError:
+    #     print("Could not import setup_logging. Using Python's default logging for direct script run.")
+    #     logging.basicConfig(level=logging.INFO) # Basic fallback if needed
 
     # Create a dummy evaluation data file for the example
     dummy_data = [

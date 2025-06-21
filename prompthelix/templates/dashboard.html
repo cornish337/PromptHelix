@@ -108,7 +108,8 @@
 
 </div>
 
-<script src="{{ url_for('static', path='chart.min.js') }}"></script>
+<!-- <script src="{{ url_for('static', path='chart.min.js') }}"></script> --> <!-- Removed mock Chart.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.0/chart.min.js" integrity="sha512-TW5s0IT/IppJtu76UbysrBH9Hy/5X41OTAbQuffZFU6lQ1rdAC2sGCgKxzGuFhKASaOLBWYPTzAvLMcvN4DsRg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script>
     function escapeHtml(unsafe) {
         if (unsafe === null || typeof unsafe === 'undefined') {
@@ -179,10 +180,19 @@
             datasets: [
                 {
                     label: 'Best Fitness',
-                    borderColor: 'rgb(99,102,241)',
+                    borderColor: 'rgb(99,102,241)', // Indigo
                     backgroundColor: 'rgba(99,102,241,0.3)',
-                    data: [],
-                    tension: 0.1
+                    data: [], // y-axis data for best fitness
+                    tension: 0.1,
+                    yAxisID: 'y' // Assuming a single y-axis for now
+                },
+                {
+                    label: 'Average Fitness',
+                    borderColor: 'rgb(34,197,94)', // Green
+                    backgroundColor: 'rgba(34,197,94,0.3)',
+                    data: [], // y-axis data for average fitness
+                    tension: 0.1,
+                    yAxisID: 'y'
                 }
             ]
         };
@@ -308,18 +318,40 @@
                     // A more robust way would be to map generations to indices.
                 }
 
-                // Ensure data arrays are appended to correctly or updated if generation label already existed
-                // This basic implementation assumes new generation data comes sequentially
-                // For a new generation, push data. If updating existing, replace at index.
-                // Current logic: always appends if generation is new, which is typical for GA progress.
-                const currentLabelIndex = chartData.labels.indexOf(data.generation);
+            // Update chart if generation data is present and it's a relevant event
+            if (data.generation !== undefined && data.best_fitness !== null && data.best_fitness !== undefined) {
+                const generation = data.generation;
+                const bestFitness = parseFloat(data.best_fitness);
+                const avgFitness = (data.fitness_mean !== null && data.fitness_mean !== undefined) ? parseFloat(data.fitness_mean) : null;
 
-                if (currentLabelIndex === chartData.datasets[0].data.length) { // New data point
-                    chartData.datasets[0].data.push(parseFloat(data.best_fitness));
-                } else if (currentLabelIndex !== -1 && currentLabelIndex < chartData.datasets[0].data.length) { // Update existing data point
-                    chartData.datasets[0].data[currentLabelIndex] = parseFloat(data.best_fitness);
+                let generationLabelIndex = chartData.labels.indexOf(generation);
+
+                if (generationLabelIndex === -1) { // New generation
+                    chartData.labels.push(generation);
+                    chartData.datasets[0].data.push(bestFitness);
+                    chartData.datasets[1].data.push(avgFitness);
+                } else { // Existing generation, update data
+                    chartData.datasets[0].data[generationLabelIndex] = bestFitness;
+                    if (avgFitness !== null) {
+                        // Ensure dataset array is long enough if avgFitness wasn't there before for this label
+                        while(chartData.datasets[1].data.length <= generationLabelIndex) chartData.datasets[1].data.push(null);
+                        chartData.datasets[1].data[generationLabelIndex] = avgFitness;
+                    }
                 }
 
+                // Sort chart data by generation number to ensure x-axis is correct
+                // This is crucial if data (e.g. from history + live) is not strictly ordered.
+                let combined = chartData.labels.map((label, i) => ({
+                    label: label,
+                    best: chartData.datasets[0].data[i],
+                    // Ensure avg exists for the combined mapping, default to null if not
+                    avg: (chartData.datasets[1].data.length > i) ? chartData.datasets[1].data[i] : null
+                }));
+                combined.sort((a, b) => a.label - b.label);
+
+                chartData.labels = combined.map(item => item.label);
+                chartData.datasets[0].data = combined.map(item => item.best);
+                chartData.datasets[1].data = combined.map(item => item.avg);
 
                 if (fitnessChart) {
                     fitnessChart.update();
@@ -493,9 +525,22 @@
             try {
                 const response = await fetch('/api/ga/history');
                 if (response.ok) {
-                    const history = await response.json();
+                    const history = await response.json(); // Assuming history is an array of {generation: x, best_fitness: y, fitness_mean: z}
+
+                    // Sort history by generation first
+                    history.sort((a, b) => a.generation - b.generation);
+
                     chartData.labels = history.map(h => h.generation);
-                    chartData.datasets[0].data = history.map(h => h.best_fitness);
+                    chartData.datasets[0].data = history.map(h => (h.best_fitness !== null && h.best_fitness !== undefined) ? parseFloat(h.best_fitness) : null);
+                    // Check if history items contain fitness_mean (or similar key for average)
+                    if (history.length > 0 && history[0].hasOwnProperty('fitness_mean')) {
+                        chartData.datasets[1].data = history.map(h => (h.fitness_mean !== null && h.fitness_mean !== undefined) ? parseFloat(h.fitness_mean) : null);
+                    } else if (history.length > 0 && history[0].hasOwnProperty('avg_fitness')) { // Fallback key
+                        chartData.datasets[1].data = history.map(h => (h.avg_fitness !== null && h.avg_fitness !== undefined) ? parseFloat(h.avg_fitness) : null);
+                    } else {
+                        // If no average fitness in history, fill with nulls matching labels length
+                        chartData.datasets[1].data = new Array(chartData.labels.length).fill(null);
+                    }
                 } else {
                     console.error('Failed to fetch GA history:', response.status);
                 }

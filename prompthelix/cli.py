@@ -27,16 +27,15 @@ def main_cli():
     Main function for the PromptHelix CLI.
     Parses arguments and dispatches commands.
     """
-    # Configure logging for CLI visibility
-    # Set up basic configuration for the root logger.
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        stream=sys.stdout  # Ensure logs go to stdout
-    )
-    # Control verbosity of noisy libraries
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("openai._base_client").setLevel(logging.WARNING)
+    # --- Setup Logging ---
+    # Centralized logging setup. This will also handle noisy libraries.
+    from prompthelix.logging_config import setup_logging
+    setup_logging()
+    # --- End Setup Logging ---
+
+    # Logger for CLI specific messages, after setup_logging has run.
+    # This logger instance will now use the configured handlers and format.
+    # logger = logging.getLogger(__name__) # Already defined at module level
 
     parser = argparse.ArgumentParser(description="PromptHelix CLI")
     parser.add_argument(

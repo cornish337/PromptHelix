@@ -22,9 +22,16 @@ from typing import List, Optional, Dict
 from prompthelix.enums import ExecutionMode
 from prompthelix.utils.config_utils import update_settings # Assuming a utility for deep merging configs
 from prompthelix import config as global_config # To access global default settings
-from prompthelix.config import settings # Added import
+from prompthelix.config import settings, ENABLE_WANDB_LOGGING, WANDB_PROJECT_NAME, WANDB_ENTITY_NAME # Added import
 
 logger = logging.getLogger(__name__)
+
+try:
+    import wandb
+except ImportError:
+    logger.info("wandb library not found. W&B logging will be disabled.")
+    wandb = None
+
 
 def main_ga_loop(
     task_desc: str,
@@ -86,6 +93,34 @@ def main_ga_loop(
     logger.info(f"Effective Population Persistence Path: {actual_population_path}")
     logger.info(f"Effective Save Population Frequency: Every {actual_save_frequency} generations (0 means periodic saving disabled)")
 
+    current_wandb_enabled = ENABLE_WANDB_LOGGING and wandb is not None
+    wandb_run = None
+
+    if current_wandb_enabled:
+        try:
+            wandb_run = wandb.init(
+                project=WANDB_PROJECT_NAME,
+                entity=WANDB_ENTITY_NAME, # Optional: Can be None
+                config={
+                    "task_description": task_desc,
+                    "keywords": ",".join(keywords) if keywords else "",
+                    "num_generations": num_generations,
+                    "population_size": population_size,
+                    "elitism_count": elitism_count,
+                    "execution_mode": execution_mode.name,
+                    "initial_prompt_provided": bool(initial_prompt_str),
+                    "parallel_workers": parallel_workers,
+                    "effective_population_path": actual_population_path,
+                    "effective_save_frequency": actual_save_frequency,
+                    "agent_settings_override": agent_settings_override if agent_settings_override else "None",
+                    "llm_settings_override": llm_settings_override if llm_settings_override else "None",
+                }
+            )
+            logger.info(f"W&B run initialized: {wandb_run.name if wandb_run else 'Failed'}")
+        except Exception as e:
+            logger.error(f"Failed to initialize W&B run: {e}", exc_info=True)
+            current_wandb_enabled = False # Disable W&B if init fails
+
     # 0. Instantiate Message Bus
     logger.debug("Initializing Message Bus...")
     message_bus = MessageBus(db_session_factory=SessionLocal, connection_manager=websocket_manager)
@@ -146,7 +181,11 @@ def main_ga_loop(
     # 2. Instantiate GA Components
     logger.debug("Initializing GA components...")
     # Pass style_optimizer_config to GeneticOperators if it needs settings
-    genetic_ops = GeneticOperators(style_optimizer_agent=style_optimizer) # Add settings if needed
+    metrics_logger_instance = logging.getLogger("prompthelix.ga_metrics")
+    genetic_ops = GeneticOperators(
+        style_optimizer_agent=style_optimizer,
+        metrics_logger=metrics_logger_instance
+    ) # Add settings if needed
 
     fitness_eval = FitnessEvaluator(
         results_evaluator_agent=results_evaluator,
@@ -166,6 +205,7 @@ def main_ga_loop(
         parallel_workers=parallel_workers,
         message_bus=message_bus,  # Added
         agents_used=agent_names,  # Pass the collected agent names/IDs
+        wandb_enabled=current_wandb_enabled, # Pass W&B status
 
 
         # TODO: Pass agent_settings_override or specific agent configs if PopulationManager
@@ -298,8 +338,25 @@ def main_ga_loop(
             logger.error(f"Orchestrator: Failed to save final population to {actual_population_path}. Error: {e}", exc_info=True)
 
 
+    if wandb_run:
+        # Optionally log summary metrics to W&B
+        if final_fittest_overall:
+            wandb_run.summary["final_best_fitness"] = final_fittest_overall.fitness_score
+            wandb_run.summary["final_best_prompt"] = final_fittest_overall.to_prompt_string()
+        wandb_run.summary["final_status"] = pop_manager.status
+        wandb_run.finish()
+        logger.info("W&B run finished.")
+
     if return_best:
+        # Ensure GA_RUNNING_STATUS is set to 0 as the run is complete
+        from prompthelix import metrics as ph_metrics
+        ph_metrics.GA_RUNNING_STATUS.set(0)
+        logger.info("Orchestrator: main_ga_loop completed. Set GA_RUNNING_STATUS to 0.")
         return final_fittest_overall
+    else: # Ensure it's set even if not returning best
+        from prompthelix import metrics as ph_metrics
+        ph_metrics.GA_RUNNING_STATUS.set(0)
+        logger.info("Orchestrator: main_ga_loop completed. Set GA_RUNNING_STATUS to 0.")
 
 
 if __name__ == "__main__":

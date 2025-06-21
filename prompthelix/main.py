@@ -14,6 +14,13 @@ from prompthelix.ui_routes import router as ui_router # Import the UI router
 # from prompthelix.websocket_manager import ConnectionManager # No longer imported directly for instantiation
 from prompthelix.globals import websocket_manager # Import the global instance
 from prompthelix.database import init_db
+from prompthelix.logging_config import setup_logging # Import the logging setup function
+
+# --- Setup Logging ---
+# Call this early, before other initializations if they might log.
+setup_logging()
+# --- End Setup Logging ---
+
 
 # Call init_db to create database tables on startup
 # For production, you'd likely use Alembic migrations separately.
@@ -111,6 +118,16 @@ async def root():
     Returns a welcome message.
     """
     return {"message": "Welcome to PromptHelix API"}
+
+from prometheus_client import generate_latest, REGISTRY, CONTENT_TYPE_LATEST
+from fastapi.responses import Response # Ensure Response is imported
+
+@app.get("/metrics", name="prometheus_metrics")
+async def metrics():
+    """
+    Prometheus metrics endpoint.
+    """
+    return Response(content=generate_latest(REGISTRY), media_type=CONTENT_TYPE_LATEST)
 
 
 # Include API routes

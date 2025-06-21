@@ -17,10 +17,17 @@ from prompthelix.config import (
 from prompthelix import config as global_ph_config  # For LLM_UTILS_SETTINGS
 import logging
 from prompthelix.enums import ExecutionMode  # Added import
+from prompthelix import metrics as ph_metrics # Import Prometheus metrics
 
 # from typing import Optional, Dict # Already imported above and updated
 
 logger = logging.getLogger(__name__)
+
+try:
+    import wandb
+except ImportError:
+    logger.info("wandb library not found in engine.py. W&B logging by PopulationManager will be disabled.")
+    wandb = None
 
 if TYPE_CHECKING:  # pragma: no cover - only for type hints
     from prompthelix.agents.architect import PromptArchitectAgent
@@ -30,6 +37,8 @@ if TYPE_CHECKING:  # pragma: no cover - only for type hints
     from sqlalchemy.orm import Session as DbSession
     from prompthelix.models.evolution_models import GAExperimentRun
 
+
+from prompthelix import metrics as ph_metrics # Already imported at top of file by PopulationManager changes, ensure it's usable here or re-import if needed.
 
 # PromptChromosome class remains unchanged
 class PromptChromosome:
@@ -41,7 +50,9 @@ class PromptChromosome:
     and a unique identifier.
     """
 
-    def __init__(self, genes: list | None = None, fitness_score: float = 0.0):
+    def __init__(self, genes: list | None = None, fitness_score: float = 0.0,
+                 parent_ids: list[str] | None = None,
+                 mutation_strategy_applied: str | None = None):
         """
         Initializes a PromptChromosome.
 
@@ -50,10 +61,17 @@ class PromptChromosome:
                                            of the prompt. Defaults to an empty list if None.
             fitness_score (float, optional): The initial fitness score of the chromosome.
                                              Defaults to 0.0.
+            parent_ids (list[str] | None, optional): A list of parent chromosome IDs.
+                                                     Defaults to None.
+            mutation_strategy_applied (str | None, optional): Name of the mutation strategy applied.
+                                                              Defaults to None.
         """
         self.id = uuid.uuid4()
         self.genes: list = [] if genes is None else genes
         self.fitness_score: float = fitness_score
+        self.parent_ids: list[str] | None = parent_ids
+        self.mutation_strategy_applied: str | None = mutation_strategy_applied
+        self.evaluation_details: dict = {} # Already present, just noting
 
     def calculate_fitness(self) -> float:
         """
@@ -96,9 +114,15 @@ class PromptChromosome:
                               of the current one, but with a new ID.
         """
         cloned_genes = copy.deepcopy(self.genes)
+        # A clone inherits the parentage and mutation history of its source.
+        # If the clone is subsequently mutated, that's a new event for that specific clone.
         cloned_chromosome = PromptChromosome(
-            genes=cloned_genes, fitness_score=self.fitness_score
+            genes=cloned_genes,
+            fitness_score=self.fitness_score,
+            parent_ids=copy.deepcopy(self.parent_ids) if self.parent_ids else None, # Deepcopy list
+            mutation_strategy_applied=self.mutation_strategy_applied
         )
+        # The clone gets a new ID, so it's distinct from its source.
         return cloned_chromosome
 
     def __str__(self) -> str:
@@ -149,9 +173,10 @@ class GeneticOperators:
         style_optimizer_agent: "StyleOptimizerAgent" | None = None,
         mutation_strategies: list[MutationStrategy] | None = None,
         strategy_modules: list[str] | None = None,
+        metrics_logger: Optional[logging.Logger] = None,
     ):
         """
-        Initializes the operator with an optional StyleOptimizerAgent and mutation strategies.
+        Initializes the operator with an optional StyleOptimizerAgent, mutation strategies, and metrics logger.
 
         Args:
             style_optimizer_agent (StyleOptimizerAgent | None, optional): Agent for style optimization.
@@ -203,6 +228,11 @@ class GeneticOperators:
                 "GeneticOperators received an empty list for mutation_strategies. Defaulting to NoOperationMutationStrategy."
             )
             self.mutation_strategies = [NoOperationMutationStrategy()]
+
+        self.metrics_logger = metrics_logger if metrics_logger else logging.getLogger("prompthelix.ga_metrics_fallback")
+        if metrics_logger is None:
+            logger.warning("GeneticOperators initialized without a specific metrics_logger. Falling back to 'prompthelix.ga_metrics_fallback'. Ensure this logger is configured if lineage logging is expected.")
+
 
     def selection(
         self, population: list[PromptChromosome], tournament_size: int = 3
@@ -291,19 +321,66 @@ class GeneticOperators:
                 child2_genes.extend(parent2.genes[:crossover_point])
                 child2_genes.extend(parent1.genes[crossover_point:])
 
-            child1 = PromptChromosome(genes=child1_genes, fitness_score=0.0)
-            child2 = PromptChromosome(genes=child2_genes, fitness_score=0.0)
-            logger.debug(
-                f"Crossover performed between Parent {parent1.id} and Parent {parent2.id}. Child1 ID {child1.id}, Child2 ID {child2.id}."
+            child1 = PromptChromosome(
+                genes=child1_genes,
+                fitness_score=0.0,
+                parent_ids=[str(parent1.id), str(parent2.id)],
+                mutation_strategy_applied="crossover"
             )
+            child2 = PromptChromosome(
+                genes=child2_genes,
+                fitness_score=0.0,
+                parent_ids=[str(parent1.id), str(parent2.id)],
+                mutation_strategy_applied="crossover"
+            )
+            log_msg = f"Crossover performed between Parent {parent1.id} and Parent {parent2.id}. Child1 ID {child1.id}, Child2 ID {child2.id}."
+            logger.debug(log_msg)
+            self.metrics_logger.info({
+                "event_type": "chromosome_created",
+                "child_id": str(child1.id),
+                "parent_ids": [str(parent1.id), str(parent2.id)],
+                "operation": "crossover",
+                "details": log_msg
+            })
+            ph_metrics.GA_CROSSOVERS_TOTAL.inc() # Increment crossover counter
+            self.metrics_logger.info({
+                "event_type": "chromosome_created",
+                "child_id": str(child2.id),
+                "parent_ids": [str(parent1.id), str(parent2.id)],
+                "operation": "crossover",
+                "details": log_msg
+            })
+            # Assuming crossover implies two children from one operation. If only one, inc once.
+            # If GA_CROSSOVERS_TOTAL is meant to count pairs of children, inc once.
+            # If it counts crossover "events" that produce children, also once.
+            # Let's assume it counts the number of times crossover operation was successfully performed.
         else:
+            # If crossover is skipped, children are clones of parents.
+            # Their parent_ids and mutation_strategy_applied are inherited via clone().
+            # Fitness is reset.
             child1 = parent1.clone()
-            child2 = parent2.clone()
             child1.fitness_score = 0.0
+            child2 = parent2.clone()
             child2.fitness_score = 0.0
-            logger.debug(
-                f"Crossover skipped (rate {crossover_rate}). Cloned Parent {parent1.id} to Child {child1.id}, Parent {parent2.id} to Child {child2.id}."
-            )
+            log_msg = f"Crossover skipped (rate {crossover_rate}). Cloned Parent {parent1.id} to Child {child1.id}, Parent {parent2.id} to Child {child2.id}."
+            logger.debug(log_msg)
+            # Logging for "clone" operation if desired, distinct from crossover
+            self.metrics_logger.info({
+                "event_type": "chromosome_cloned", # Different event type
+                "child_id": str(child1.id),
+                "original_id": str(parent1.id),
+                "parent_ids": child1.parent_ids, # Inherited parent_ids
+                "operation": "clone_due_to_skip_crossover",
+                "details": log_msg
+            })
+            self.metrics_logger.info({
+                "event_type": "chromosome_cloned",
+                "child_id": str(child2.id),
+                "original_id": str(parent2.id),
+                "parent_ids": child2.parent_ids, # Inherited parent_ids
+                "operation": "clone_due_to_skip_crossover",
+                "details": log_msg
+            })
         return child1, child2
 
     def mutate(
@@ -376,7 +453,27 @@ class GeneticOperators:
                 mutated_chromosome_overall = selected_strategy.mutate(
                     working_chromosome_clone
                 )  # Pass the clone
+                # Ensure the returned chromosome is a new instance with a new ID if strategy modified in-place
+                # For now, assume selected_strategy.mutate returns a new instance or correctly modifies the clone.
+                # The strategy itself should not change the ID. The clone() above gives a new ID.
+                # If selected_strategy.mutate returns the same instance it was passed (working_chromosome_clone),
+                # then its ID is already new.
+
+                mutated_chromosome_overall.mutation_strategy_applied = selected_strategy.__class__.__name__
                 mutation_applied_this_cycle = True  # A strategy was applied
+
+                log_msg = f"Mutation strategy '{selected_strategy.__class__.__name__}' applied to chromosome {chromosome.id} (clone ID: {working_chromosome_clone.id}). New/mutated chromosome ID: {mutated_chromosome_overall.id}"
+                logger.debug(log_msg)
+                self.metrics_logger.info({
+                    "event_type": "chromosome_mutated",
+                    "original_id": str(chromosome.id), # ID of the chromosome before this mutation cycle
+                    "mutated_id": str(mutated_chromosome_overall.id), # ID of the chromosome after mutation
+                    "parent_ids": mutated_chromosome_overall.parent_ids, # Should be same as original_chromosome.parent_ids
+                    "operation": "mutation",
+                    "mutation_strategy": selected_strategy.__class__.__name__,
+                    "details": log_msg
+                })
+                ph_metrics.GA_MUTATIONS_TOTAL.inc() # Increment mutation counter
 
                 # The old logic of appending "*" if no gene was modified by the above loop:
                 # This should be handled by ensuring strategies always make a change,
@@ -822,6 +919,7 @@ class PopulationManager:
         evaluation_timeout: Optional[int] = 60,
         message_bus: Optional["MessageBus"] = None,  # Added message_bus
         agents_used: list[str] | None = None,
+        wandb_enabled: bool = False, # Added for W&B integration
     ):
         """
         Initializes the PopulationManager.
@@ -856,7 +954,25 @@ class PopulationManager:
         if evaluation_timeout is not None and evaluation_timeout <= 0:
             raise ValueError("evaluation_timeout must be positive if specified.")
 
+        # Specific logger for GA metrics, initialize early to pass to GeneticOperators
+        self.metrics_logger = logging.getLogger("prompthelix.ga_metrics")
+
         self.genetic_operators = genetic_operators
+        # Pass metrics_logger to genetic_operators if it's an instance we control,
+        # or if it expects it. For now, we assume genetic_operators might be pre-configured.
+        # A better way would be to always pass it, or for GeneticOperators to fetch it itself.
+        # Let's assume GeneticOperators is instantiated within the GA loop or here, and we can pass it.
+        # If genetic_operators is passed in, we need to ensure it has the logger.
+        # This implies GeneticOperators needs a setter or modification at its instantiation site.
+
+        # Revisiting: The current structure has GeneticOperators passed in.
+        # The GA orchestrator (e.g. main_ga_loop) instantiates GeneticOperators.
+        # So, main_ga_loop should be responsible for creating metrics_logger and passing it.
+        # For now, I will assume that if self.genetic_operators has a metrics_logger attribute,
+        # it was set up correctly by the caller. If not, the fallback in GeneticOperators will be used.
+        # This change is primarily within GeneticOperators itself and PromptChromosome.
+        # The PopulationManager's metrics_logger is for its own direct metric logging.
+
         self.fitness_evaluator = fitness_evaluator
         self.prompt_architect_agent = prompt_architect_agent
         self.population_size = population_size
@@ -869,6 +985,7 @@ class PopulationManager:
         self.agents_used: list[str] = (
             agents_used if agents_used is not None else []
         )  # Added
+        self.wandb_enabled = wandb_enabled # Store W&B status
 
         self.population: list[PromptChromosome] = []
         self.generation_number: int = 0
@@ -877,22 +994,31 @@ class PopulationManager:
         self.should_stop: bool = False  # Added
         self.status: str = "IDLE"  # Added
 
+        # Specific logger for GA metrics
+        self.metrics_logger = logging.getLogger("prompthelix.ga_metrics")
+
         if self.population_path:
             self.load_population(self.population_path)
 
         self.broadcast_ga_update(
             event_type="ga_manager_initialized"
         )  # Initial broadcast
+        ph_metrics.GA_RUNNING_STATUS.set(0) # Initial status: idle
+        ph_metrics.GA_POPULATION_SIZE.set(len(self.population))
+        ph_metrics.GA_CURRENT_GENERATION.set(self.generation_number)
+
 
     def pause_evolution(self):  # Added
         self.is_paused = True
         self.status = "PAUSED"
+        ph_metrics.GA_RUNNING_STATUS.set(0) # Paused is considered not actively running for this metric
         logger.info("GA evolution paused.")
         self.broadcast_ga_update(event_type="ga_paused")
 
     def resume_evolution(self):  # Added
         self.is_paused = False
         self.status = "RUNNING"  # Or should it wait for evolve_population to set it?
+        ph_metrics.GA_RUNNING_STATUS.set(1)
         logger.info("GA evolution resumed.")
         self.broadcast_ga_update(event_type="ga_resumed")
 
@@ -900,6 +1026,7 @@ class PopulationManager:
         self.should_stop = True
         self.is_paused = False  # Ensure it's not stuck in pause
         self.status = "STOPPING"
+        ph_metrics.GA_RUNNING_STATUS.set(0) # Stopping, so not actively running
         logger.info("GA evolution stopping...")
         self.broadcast_ga_update(event_type="ga_stopping")
 
@@ -1039,6 +1166,15 @@ class PopulationManager:
             # Treat the entire string as a single gene for simplicity
             seeded_chromosome = PromptChromosome(genes=[self.initial_prompt_str])
             self.population.append(seeded_chromosome)
+            log_msg_seeded = f"Chromosome {seeded_chromosome.id} created from initial_prompt_str."
+            logger.info(log_msg_seeded)
+            self.metrics_logger.info({
+                "event_type": "chromosome_created",
+                "child_id": str(seeded_chromosome.id),
+                "parent_ids": None,
+                "operation": "initial_seed",
+                "details": log_msg_seeded
+            })
             num_to_generate_randomly -= 1
             if num_to_generate_randomly < 0:  # Should not happen if population_size > 0
                 num_to_generate_randomly = 0
@@ -1065,6 +1201,15 @@ class PopulationManager:
                 continue  # Consider how to handle this to ensure population size is met
 
             self.population.append(chromosome)
+            log_msg_architect = f"Chromosome {chromosome.id} created by PromptArchitectAgent."
+            logger.info(log_msg_architect)
+            self.metrics_logger.info({
+                "event_type": "chromosome_created",
+                "child_id": str(chromosome.id),
+                "parent_ids": None,
+                "operation": "architect_generated",
+                "details": log_msg_architect
+            })
 
         # Ensure population size is exactly self.population_size, potentially by adding more if architect failed
         # or truncating if somehow too many were added (though current logic prevents over-addition)
@@ -1102,6 +1247,9 @@ class PopulationManager:
         )
 
         self.status = "IDLE"  # Or "READY_TO_EVOLVE" # Added
+        ph_metrics.GA_POPULATION_SIZE.set(len(self.population))
+        ph_metrics.GA_CURRENT_GENERATION.set(self.generation_number) # Should be 0
+        ph_metrics.GA_RUNNING_STATUS.set(0) # Idle after initialization
         self.broadcast_ga_update(event_type="ga_initialization_complete")  # Added
 
     def evolve_population(
@@ -1129,14 +1277,19 @@ class PopulationManager:
             # Do not change self.status here, let the orchestrator loop handle final status.
             # self.status = "STOPPED" # This was here, but task says orchestrator handles final status
             # self.broadcast_ga_update(event_type="ga_stopped_before_generation") # This was here
+            # self.status = "STOPPED" # This was here, but task says orchestrator handles final status
+            # self.broadcast_ga_update(event_type="ga_stopped_before_generation") # This was here
+            ph_metrics.GA_RUNNING_STATUS.set(0) # Ensure status is set if stopping early
             return  # Exit early
 
         if self.is_paused:  # This check is fine
             logger.info("Evolution is paused, skipping generation.")
             # broadcast_ga_update is called by pause_evolution (which sets status to PAUSED)
+            # GA_RUNNING_STATUS is set to 0 by pause_evolution()
             return
 
-        self.status = "RUNNING"  # Added
+        self.status = "RUNNING"
+        ph_metrics.GA_RUNNING_STATUS.set(1) # Actively running a generation
         self.broadcast_ga_update(
             event_type="ga_generation_started",
             additional_data={"generation": self.generation_number + 1},
@@ -1196,6 +1349,8 @@ class PopulationManager:
                         0.0  # Assign a default low fitness on error
                     )
                     failed_evaluations_count += 1
+                        ph_metrics.GA_FAILED_EVALUATIONS_TOTAL.inc()
+                    ph_metrics.GA_EVALUATIONS_TOTAL.inc() # Increment for each attempt
         else:
             logger.info(
                 f"Generation {current_generation_number}: Running fitness evaluation in parallel mode (workers={self.parallel_workers})."
@@ -1234,6 +1389,7 @@ class PopulationManager:
                             0.0  # Assign a default low fitness on error
                         )
                         failed_evaluations_count += 1
+                        ph_metrics.GA_FAILED_EVALUATIONS_TOTAL.inc()
                     except Exception as e:
                         logger.error(
                             f"Error evaluating chromosome {chromosome.id} in parallel: {e}",
@@ -1243,6 +1399,8 @@ class PopulationManager:
                             0.0  # Assign a default low fitness on error
                         )
                         failed_evaluations_count += 1
+                        ph_metrics.GA_FAILED_EVALUATIONS_TOTAL.inc()
+                    ph_metrics.GA_EVALUATIONS_TOTAL.inc() # Increment for each attempt
 
         # This logging seems to have a slight logic error in original: evaluated_chromosomes_count already includes failures if we count attempts.
         # Let's adjust to show successful vs attempted.
@@ -1269,10 +1427,78 @@ class PopulationManager:
                     f"Mean: {mean_fitness:.4f}, Median: {median_fitness:.4f}, "
                     f"StdDev: {std_dev_fitness:.4f}"
                 )
-            else:
-                logger.info(f"Generation {current_generation_number}: No valid fitness scores found in population to report statistics.")
-        else:
-            logger.info(f"Generation {current_generation_number}: Population is empty, no fitness statistics to report.")
+                # Log structured metrics
+        # This logging seems to have a slight logic error in original: evaluated_chromosomes_count already includes failures if we count attempts.
+        # Let's adjust to show successful vs attempted.
+        successful_evaluations = (
+            evaluated_chromosomes_count  # This was already successes
+        )
+        # failed_evaluations_count is correct
+        ph_metrics.GA_SUCCESSFUL_EVALUATIONS_TOTAL.inc(successful_evaluations)
+
+
+        # Log structured metrics - MOVED HERE
+        if self.population and fitness_scores: # Check if fitness_scores was populated
+            # Update Prometheus Gauges
+            ph_metrics.GA_CURRENT_GENERATION.set(current_generation_number)
+            ph_metrics.GA_POPULATION_SIZE.set(len(self.population))
+            ph_metrics.GA_BEST_FITNESS.set(max_fitness)
+            ph_metrics.GA_AVG_FITNESS.set(mean_fitness)
+            ph_metrics.GA_MIN_FITNESS.set(min_fitness)
+            ph_metrics.GA_MEDIAN_FITNESS.set(median_fitness)
+            ph_metrics.GA_STD_DEV_FITNESS.set(std_dev_fitness)
+
+            self.metrics_logger.info({
+                "event_type": "generation_metrics",
+                "generation": current_generation_number,
+                "population_size": len(self.population),
+                "fitness_min": min_fitness,
+                "fitness_max": max_fitness,
+                "fitness_mean": mean_fitness,
+                "fitness_median": median_fitness,
+                "fitness_std_dev": std_dev_fitness,
+                "evaluated_chromosomes": successful_evaluations,
+                "failed_evaluations": failed_evaluations_count,
+            }
+            self.metrics_logger.info(metrics_to_log_dict) # Log to JSONL
+            if self.wandb_enabled and wandb:
+                # W&B uses 'generation' as the step by default if 'step' argument isn't passed to wandb.log
+                # or if 'generation' is part of the logged dict.
+                # Explicitly using commit=True ensures it logs as a new step for this generation.
+                wandb.log(metrics_to_log_dict, step=current_generation_number)
+                # Optionally log the best prompt of this generation
+                fittest_in_gen = self.get_fittest_individual() # Population is sorted here
+                if fittest_in_gen:
+                    wandb.log({
+                        "best_prompt_text_gen": fittest_in_gen.to_prompt_string()
+                    }, step=current_generation_number)
+
+
+        elif self.population: # Population exists, but no fitness_scores (e.g. all failed to evaluate)
+            metrics_to_log_dict = {
+                "event_type": "generation_metrics",
+                "generation": current_generation_number,
+                "population_size": len(self.population),
+                "message": "No valid fitness scores to report statistics (all evaluations might have failed).",
+                "evaluated_chromosomes": successful_evaluations, # will be 0
+                "failed_evaluations": failed_evaluations_count, # will be len(self.population)
+            }
+            self.metrics_logger.info(metrics_to_log_dict)
+            if self.wandb_enabled and wandb:
+                wandb.log(metrics_to_log_dict, step=current_generation_number)
+
+        else: # Population is empty
+            metrics_to_log_dict = {
+                "event_type": "generation_metrics",
+                "generation": current_generation_number,
+                "population_size": 0,
+                "message": "Population is empty, no fitness statistics.",
+                "evaluated_chromosomes": 0,
+                "failed_evaluations": 0,
+            }
+            self.metrics_logger.info(metrics_to_log_dict)
+            if self.wandb_enabled and wandb:
+                wandb.log(metrics_to_log_dict, step=current_generation_number)
 
 
         logger.info(
@@ -1323,7 +1549,9 @@ class PopulationManager:
             logger.info(
                 f"Generation {current_generation_number}: Applying elitism for top {self.elitism_count} individuals."
             )
-            new_population.extend(sorted_population[: self.elitism_count])
+            elites_to_carry = sorted_population[: self.elitism_count]
+            new_population.extend(elites_to_carry)
+            ph_metrics.GA_ELITE_INDIVIDUALS_TOTAL.inc(len(elites_to_carry))
 
         # 4. Generate Offspring
         logger.info(
@@ -1376,7 +1604,12 @@ class PopulationManager:
         else:
             # If not paused or stopped, it's still running (or completed if this was the last gen planned by orchestrator)
             # Orchestrator should set final "COMPLETED" status.
-            self.status = "RUNNING"
+            self.status = "RUNNING" # Default if no other condition met
+            ph_metrics.GA_RUNNING_STATUS.set(1) # Still running for next potential gen
+
+        if self.status == "PAUSED" or self.status == "STOPPED" or self.status == "COMPLETED_STOP_REQUESTED": # Check string literals
+            ph_metrics.GA_RUNNING_STATUS.set(0)
+
 
         logger.info(
             f"PopulationManager: Evolution complete for generation {self.generation_number}. New population size: {len(self.population)}. Status: {self.status}"
@@ -1388,6 +1621,7 @@ class PopulationManager:
             additional_data={"generation": self.generation_number},
             selected_parent_ids=unique_parent_ids, # Pass unique parent IDs
         )  # Added
+        # If it was the last generation or stopped, GA_RUNNING_STATUS will be set to 0 by orchestrator or stop_evolution
 
     def get_fittest_individual(self) -> PromptChromosome | None:
         """
