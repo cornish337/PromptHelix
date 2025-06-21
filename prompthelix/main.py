@@ -4,6 +4,7 @@ Initializes the FastAPI application and includes the root endpoint.
 """
 
 import traceback
+from pathlib import Path
 from fastapi import Request
 from fastapi.responses import JSONResponse, Response
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -53,7 +54,10 @@ app = FastAPI()
 
 # Mount static files
 # templates object is now imported, no need to initialize here
-app.mount("/static", StaticFiles(directory="prompthelix/static"), name="static")
+# Mount static files using an absolute path so the server can be started from
+# any working directory.
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
 # Add this before including routers
