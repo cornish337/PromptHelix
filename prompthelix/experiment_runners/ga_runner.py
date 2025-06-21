@@ -8,6 +8,11 @@ from prompthelix import globals as ph_globals
 
 from prompthelix.experiment_runners.base_runner import BaseExperimentRunner
 from prompthelix.genetics.engine import PopulationManager, PromptChromosome
+from prompthelix.database import SessionLocal
+from prompthelix.services import (
+    create_experiment_run,
+    complete_experiment_run,
+)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO) # <--- ADD THIS LINE
@@ -56,6 +61,8 @@ class GeneticAlgorithmRunner(BaseExperimentRunner):
         self.num_generations = num_generations
         self.save_frequency = save_frequency
         self.current_generation = 0 # Track current generation internally
+        self._db_session = None
+        self._experiment_run = None
         logger.info(
             f"GeneticAlgorithmRunner initialized for {num_generations} generations "
             f"with save frequency {save_frequency}, "
@@ -90,7 +97,18 @@ class GeneticAlgorithmRunner(BaseExperimentRunner):
                                         or if the run was stopped.
         """
         logger.info(f"GeneticAlgorithmRunner: Starting run for {self.num_generations} generations.")
-        self.population_manager.status = "RUNNING" # Ensure status is RUNNING at start
+        # Record the start of an experiment run in the database
+        self._db_session = SessionLocal()
+        experiment_parameters = {
+            "num_generations": self.num_generations,
+            "population_size": self.population_manager.population_size,
+            "elitism_count": self.population_manager.elitism_count,
+            "run_kwargs": kwargs,
+        }
+        self._experiment_run = create_experiment_run(
+            self._db_session, parameters=experiment_parameters
+        )
+        self.population_manager.status = "RUNNING"  # Ensure status is RUNNING at start
         self.population_manager.broadcast_ga_update(event_type="ga_run_started_runner")
 
         # Extract GA evolution parameters from kwargs
@@ -118,7 +136,9 @@ class GeneticAlgorithmRunner(BaseExperimentRunner):
                 self.population_manager.evolve_population(
                     task_description=task_description,
                     success_criteria=success_criteria,
-                    target_style=target_style
+                    target_style=target_style,
+                    db_session=self._db_session,
+                    experiment_run=self._experiment_run,
                 )
 
                 # Periodic saving of the population
@@ -191,6 +211,15 @@ class GeneticAlgorithmRunner(BaseExperimentRunner):
             )
             # The orchestrator might want to save the population, or this runner could.
             # For now, let's assume the orchestrator handles saving if population_path was provided to PopulationManager.
+            if self._experiment_run is not None and self._db_session is not None:
+                try:
+                    complete_experiment_run(
+                        self._db_session,
+                        self._experiment_run,
+                        prompt_version_id=None,
+                    )
+                finally:
+                    self._db_session.close()
 
         return self.population_manager.get_fittest_individual() # Return the best one found
 

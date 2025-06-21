@@ -27,6 +27,8 @@ if TYPE_CHECKING:  # pragma: no cover - only for type hints
     from prompthelix.agents.results_evaluator import ResultsEvaluatorAgent
     from prompthelix.agents.style_optimizer import StyleOptimizerAgent
     from prompthelix.message_bus import MessageBus  # Added for type hinting
+    from sqlalchemy.orm import Session as DbSession
+    from prompthelix.models.evolution_models import GAExperimentRun
 
 
 # PromptChromosome class remains unchanged
@@ -905,6 +907,7 @@ class PopulationManager:
         self,
         event_type: str = "ga_status_update",
         additional_data: Optional[dict] = None,
+        selected_parent_ids: Optional[list[str]] = None, # Added
     ):  # Added
         if not self.message_bus or not self.message_bus.connection_manager:
             # logger.debug("Message bus or connection manager not available for GA update broadcast.")
@@ -914,6 +917,32 @@ class PopulationManager:
         fitness_scores = []
         if self.population:
             fitness_scores = [c.fitness_score for c in self.population if hasattr(c, 'fitness_score')]
+
+        # --- Begin added logic for population sample ---
+        population_sample_data = []
+        if self.population:
+            # Ensure population is sorted by fitness (descending)
+            # get_fittest_individual might have already sorted it, but to be sure:
+            sorted_population_for_sample = sorted(self.population, key=lambda chromo: chromo.fitness_score, reverse=True)
+
+            sample_size = min(len(sorted_population_for_sample), 5) # Take top 5 or fewer
+            for chromo in sorted_population_for_sample[:sample_size]:
+                processed_genes = []
+                for gene in chromo.genes:
+                    gene_str = str(gene)
+                    if len(gene_str) > 50: # Truncate long gene strings
+                        gene_str = gene_str[:47] + "..."
+                    processed_genes.append(gene_str)
+
+                if len(processed_genes) > 3: # Limit number of genes shown per chromosome
+                    processed_genes = processed_genes[:3] + ["... (more genes)"]
+
+                population_sample_data.append({
+                    "id": str(chromo.id), # Ensure UUID is string
+                    "genes": processed_genes, # List of strings
+                    "fitness_score": chromo.fitness_score # Float
+                })
+        # --- End added logic for population sample ---
 
         payload = {
             "status": self.status,
@@ -932,6 +961,8 @@ class PopulationManager:
             "fitness_mean": statistics.mean(fitness_scores) if fitness_scores else None,
             "fitness_median": statistics.median(fitness_scores) if fitness_scores else None,
             "fitness_std_dev": statistics.stdev(fitness_scores) if len(fitness_scores) > 1 else (0.0 if fitness_scores else None),
+            "population_sample": population_sample_data, # Add the new sample data to the payload
+            "selected_parent_ids": selected_parent_ids if selected_parent_ids is not None else [], # Added
         }
         if additional_data:
             payload.update(additional_data)
@@ -1068,6 +1099,8 @@ class PopulationManager:
         task_description: str,
         success_criteria: dict | None = None,
         target_style: str | None = None,
+        db_session: 'DbSession' | None = None,
+        experiment_run: 'GAExperimentRun' | None = None,
     ):
         """
         Orchestrates one generation of evolution: evaluation, selection, crossover, and mutation.
@@ -1078,6 +1111,7 @@ class PopulationManager:
             target_style (str | None, optional): Desired style used during mutation when
                 StyleOptimizerAgent is available. Defaults to None.
         """
+        from prompthelix.services import add_chromosome_record
         if self.should_stop:  # Moved this check up, and modified its behavior
             logger.info(
                 f"PopulationManager.evolve_population: Stop requested before starting generation {self.generation_number + 1}. Aborting evolution for this generation."
@@ -1096,6 +1130,7 @@ class PopulationManager:
         self.broadcast_ga_update(
             event_type="ga_generation_started",
             additional_data={"generation": self.generation_number + 1},
+            selected_parent_ids=None, # Explicitly None
         )  # Added
 
         if not self.population:
@@ -1135,6 +1170,13 @@ class PopulationManager:
                     )
                     chromosome.fitness_score = fitness_score
                     evaluated_chromosomes_count += 1
+                    if db_session and experiment_run:
+                        add_chromosome_record(
+                            db_session,
+                            experiment_run,
+                            current_generation_number,
+                            chromosome,
+                        )
                 except Exception as e:
                     logger.error(
                         f"Error evaluating chromosome {chromosome.id} in serial mode: {e}",
@@ -1167,6 +1209,13 @@ class PopulationManager:
                         fitness_score = future.result(timeout=self.evaluation_timeout)
                         chromosome.fitness_score = fitness_score
                         evaluated_chromosomes_count += 1
+                        if db_session and experiment_run:
+                            add_chromosome_record(
+                                db_session,
+                                experiment_run,
+                                current_generation_number,
+                                chromosome,
+                            )
                     except TimeoutError:
                         logger.error(
                             f"Fitness evaluation for chromosome {chromosome.id} timed out after {self.evaluation_timeout} seconds."
@@ -1234,6 +1283,7 @@ class PopulationManager:
                 "evaluated_count": successful_evaluations,
                 "failed_count": failed_evaluations_count,
             },
+            selected_parent_ids=None, # Explicitly None
         )  # Added
 
         # 2. Sort Population by fitness (descending)
@@ -1272,12 +1322,16 @@ class PopulationManager:
         num_offspring_needed = self.population_size - len(new_population)
 
         generated_offspring_count = 0
+        current_generation_selected_parent_ids = [] # Initialize list to store parent IDs
+
         # Ensure there's a viable population to select from for breeding
         if sorted_population:  # Check if sorted_population is not empty
             while generated_offspring_count < num_offspring_needed:
                 # Selection - logging is inside genetic_operators.selection
                 parent1 = self.genetic_operators.selection(sorted_population)
+                current_generation_selected_parent_ids.append(str(parent1.id)) # Add parent1 ID
                 parent2 = self.genetic_operators.selection(sorted_population)
+                current_generation_selected_parent_ids.append(str(parent2.id)) # Add parent2 ID
 
                 # Crossover - logging is inside genetic_operators.crossover
                 child1, child2 = self.genetic_operators.crossover(parent1, parent2)
@@ -1317,9 +1371,12 @@ class PopulationManager:
         logger.info(
             f"PopulationManager: Evolution complete for generation {self.generation_number}. New population size: {len(self.population)}. Status: {self.status}"
         )
+        unique_parent_ids = list(set(current_generation_selected_parent_ids)) # Get unique parent IDs
+
         self.broadcast_ga_update(
             event_type="ga_generation_complete",
             additional_data={"generation": self.generation_number},
+            selected_parent_ids=unique_parent_ids, # Pass unique parent IDs
         )  # Added
 
     def get_fittest_individual(self) -> PromptChromosome | None:

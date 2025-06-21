@@ -18,6 +18,12 @@ AI prompts through innovative techniques inspired by genetic algorithms and mult
         *   Displays messages for a selected session, ordered by timestamp.
         *   Shows sender ID, recipient ID (or "BROADCAST"), message type, full timestamp, and the message content.
         *   Attempts to pretty-print JSON content within messages for readability.
+*   **GA Analytics Dashboard**:
+    *   **Access**: Visit the `/ui/dashboard` route while the server is running.
+    *   **Features**:
+        *   Real-time metrics and logs streamed via WebSockets.
+        *   Line chart visualizing max, mean, and min fitness across generations.
+        *   Agent metrics and conversation events are displayed to show how interactions influence GA evolution.
 *   Performance tracking and evaluation of prompts
 *   API for programmatic access and integration
 *   User interface for managing and experimenting with prompts (basic HTML interface available)
@@ -328,4 +334,25 @@ python -m prompthelix.cli test --path tests/unit/test_architect_agent.py
 ```
 
 The output will show the progress of the tests and a summary of the results.
+
+
+
+### Interactive Tests
+
+PromptHelix also provides a simple web interface for running tests manually. Start the
+development server and navigate to `/ui/tests` to see the available tests.
+
+1. Open [http://127.0.0.1:8000/ui/tests](http://127.0.0.1:8000/ui/tests) in your browser.
+2. Choose a test from the dropdown list and click **Run**.
+3. Results will be displayed on the page once execution completes.
+
+If your deployment enforces authentication for UI routes, log in first via
+`/ui/login`. Otherwise, the interactive test page can be accessed without a token.
+
+You can also launch the interactive runner from the command line:
+
+```bash
+python -m prompthelix.cli test --interactive
+```
+
 

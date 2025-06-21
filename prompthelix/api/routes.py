@@ -3,6 +3,9 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session as DbSession # Use DbSession for type hinting
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
+from pathlib import Path
+import asyncio
+import subprocess
 from datetime import datetime, timedelta
 import secrets
 
@@ -24,7 +27,13 @@ from . import conversation_routes # Added for conversation logs
 from .dependencies import get_current_user, oauth2_scheme
 
 # Import services (individual functions, not classes, based on previous service structure)
-from prompthelix.services import user_service, performance_service
+from prompthelix.services import (
+    user_service,
+    performance_service,
+    get_experiment_runs,
+    get_experiment_run,
+    get_chromosomes_for_run,
+)
 from prompthelix.services.prompt_service import PromptService
 
 prompt_service = PromptService()
@@ -323,6 +332,42 @@ def get_ga_experiment_status():
             should_stop=False
         )
 
+# --- GA Experiment History Routes ---
+
+@router.get(
+    "/api/experiments/runs",
+    response_model=List[schemas.GAExperimentRun],
+    tags=["Experiments"],
+    summary="List GA experiment runs",
+)
+def list_ga_experiment_runs(
+    skip: int = 0,
+    limit: int = 100,
+    db: DbSession = Depends(get_db),
+):
+    """Return a paginated list of recorded GA experiment runs."""
+    return get_experiment_runs(db=db, skip=skip, limit=limit)
+
+
+@router.get(
+    "/api/experiments/runs/{run_id}/chromosomes",
+    response_model=List[schemas.GAChromosome],
+    tags=["Experiments"],
+    summary="Get chromosomes for a GA run",
+)
+def list_chromosomes_for_run(
+    run_id: int,
+    skip: int = 0,
+    limit: int = 100,
+    db: DbSession = Depends(get_db),
+):
+    """Return chromosomes for the specified run, with optional pagination."""
+    run = get_experiment_run(db=db, run_id=run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Experiment run not found")
+    records = get_chromosomes_for_run(db=db, run_id=run_id)
+    return records[skip : skip + limit]
+
 # --- LLM Utility Routes (Verified, using CRUD layer for stats) ---
 
 @router.post("/api/llm/test_prompt", response_model=schemas.LLMTestResponse, name="test_llm_prompt", tags=["LLM Utilities"], summary="Test a prompt with an LLM", description="Sends a given prompt text to a specified LLM service and returns the response. Increments usage statistics for the LLM service.")
@@ -395,3 +440,23 @@ def get_api_key_route(service_name: str, db: DbSession = Depends(get_db), curren
         api_key_hint=f"**********{db_apikey.api_key[-4:]}" if db_apikey.api_key and len(db_apikey.api_key) >=4 else "Not Set", # Ensure api_key is not empty and long enough
         is_set=bool(db_apikey.api_key)
     )
+
+
+@router.post("/api/interactive_tests/run", tags=["Tests"])
+async def run_interactive_test(test_name: str):
+    """Run an interactive pytest file and return its output."""
+    root_dir = Path(__file__).resolve().parents[2]
+    test_file = root_dir / "tests" / "interactive" / test_name
+    if not test_file.is_file():
+        raise HTTPException(status_code=404, detail="Test not found")
+    try:
+        result = await asyncio.to_thread(
+            subprocess.run,
+            ["pytest", str(test_file)],
+            capture_output=True,
+            text=True,
+        )
+        output = result.stdout + result.stderr
+        return {"output": output, "returncode": result.returncode}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
