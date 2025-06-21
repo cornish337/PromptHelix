@@ -37,6 +37,16 @@ class TestAgentPersistence(unittest.TestCase):
 
         agent = agent_class(knowledge_file_path=temp_file, **kwargs)
         default_knowledge = getattr(agent, default_knowledge_attr)
+
+        if agent_class.__name__ == "PromptCriticAgent":
+            # PromptCriticAgent now starts with no default rules and should not
+            # create a file on initialization when none exists.
+            self.assertEqual(default_knowledge, [],
+                             "PromptCriticAgent should load with empty rules when no file is present.")
+            self.assertFalse(os.path.exists(temp_file),
+                             f"Knowledge file {temp_file} should not be created when no rules exist.")
+            return
+
         self.assertTrue(default_knowledge, f"Default knowledge for {agent_class.__name__} should not be empty.")
 
         # Check if save_knowledge was called (file should now exist with default content)
@@ -125,13 +135,19 @@ class TestAgentPersistence(unittest.TestCase):
         self._test_default_load_and_initial_save(PromptCriticAgent, 'critique_rules')
 
     def test_pca_save_reload_modified(self):
-        def modify_pca_rules(rules):
-            if isinstance(rules, list) and rules: # Default rules are a list
-                 rules[0]["message"] = "Modified test message"
-            else: # If it became a dict somehow or empty
-                rules.append({"name": "TestRule", "message": "Modified test message"})
+        temp_file = self._get_temp_filepath(f"{PromptCriticAgent.__name__}_modified")
 
-        self._test_save_and_reload_modified_knowledge(PromptCriticAgent, 'critique_rules', modify_pca_rules)
+        agent1 = PromptCriticAgent(knowledge_file_path=temp_file)
+
+        # Modify both rule lists to keep them in sync
+        agent1.rules.append({"name": "TestRule", "message": "Modified test message"})
+        agent1.critique_rules = agent1.rules
+
+        agent1.save_knowledge()
+
+        agent2 = PromptCriticAgent(knowledge_file_path=temp_file)
+        self.assertEqual(agent1.rules, agent2.rules,
+                         "Reloaded knowledge should match modified knowledge for PromptCriticAgent.")
 
     def test_pca_corrupted_fallback(self):
         self._test_corrupted_file_fallback(PromptCriticAgent, 'critique_rules')
