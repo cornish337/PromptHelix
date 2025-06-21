@@ -175,7 +175,7 @@ async def metrics():
 app.include_router(api_routes.router)
 # Include UI routes
 app.include_router(ui_router, prefix="/ui", tags=["UI"])
-# Removed the /debug-routes endpoint
+
 @app.get("/debug-routes")
 async def debug_routes():
     """
