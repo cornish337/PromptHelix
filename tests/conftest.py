@@ -1,6 +1,10 @@
 
 import pytest
 from prompthelix.tests.conftest import *  # re-export fixtures for root tests
+from prompthelix.config import settings
+from prompthelix.logging_config import configure_logging
+
+configure_logging(settings.DEBUG)
 
 @pytest.fixture(autouse=True)
 def mock_llm_api(monkeypatch):

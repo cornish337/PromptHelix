@@ -259,6 +259,8 @@ class GAChromosomeBase(BaseModel):
     genes: List[Any]
     fitness_score: float
     evaluation_details: Optional[Dict[str, Any]] = None
+    parent_ids: Optional[List[str]] = None
+    mutation_strategy: Optional[str] = None
 
 
 class GAChromosomeCreate(GAChromosomeBase):
@@ -268,6 +270,26 @@ class GAChromosomeCreate(GAChromosomeBase):
 class GAChromosome(GAChromosomeBase):
     id: str
     created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class GAGenerationMetricBase(BaseModel):
+    run_id: int
+    generation_number: int
+    best_fitness: float
+    avg_fitness: float
+    population_diversity: float
+    timestamp: datetime
+
+
+class GAGenerationMetricCreate(GAGenerationMetricBase):
+    pass
+
+
+class GAGenerationMetric(GAGenerationMetricBase):
+    id: int
 
     class Config:
         from_attributes = True

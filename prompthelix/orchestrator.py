@@ -23,9 +23,18 @@ import importlib # Added for dynamic class loading
 from typing import List, Optional, Dict, Type # Added Type
 from prompthelix.enums import ExecutionMode
 from prompthelix.utils.config_utils import update_settings # Assuming a utility for deep merging configs
+
 from prompthelix import config as global_ph_config # Renamed to avoid conflict with local 'config' variable
 from prompthelix.config import settings as global_settings_obj # Added import, renamed for clarity
 from prompthelix.genetics.fitness_base import BaseFitnessEvaluator # For type hinting
+
+from prompthelix.utils import start_exporter_if_enabled, update_generation, update_best_fitness
+from prompthelix import config as global_ph_config  # renamed to avoid clash with local `config`
+from prompthelix.config import settings as global_settings_obj  # for mutation / selection / crossover strategy classes
+from prompthelix.config import settings  # for WANDB / MLflow keys, etc.
+from prompthelix.genetics.fitness_base import BaseFitnessEvaluator  # fitness-evaluator ABC
+
+
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +51,8 @@ def main_ga_loop(
     parallel_workers: Optional[int] = None,
     return_best: bool = True,
     population_path: Optional[str] = None,
-    save_frequency_override: Optional[int] = None
+    save_frequency_override: Optional[int] = None,
+    metrics_file_path: Optional[str] = None,
 ):
     """
     Main orchestration loop for running the PromptHelix Genetic Algorithm.
@@ -61,12 +71,14 @@ def main_ga_loop(
         return_best: If True, return the best chromosome at the end.
         population_path: Optional path for loading/saving population. If None, uses config default.
         save_frequency_override: Optional override for population save frequency. If None, uses config default.
+        metrics_file_path: Optional path to write generation metrics as JSON lines.
     """
     logger.info("--- main_ga_loop started ---")
     logger.info(f"Task Description: {task_desc}")
     logger.info(f"Keywords: {keywords}")
     logger.info(f"Num Generations: {num_generations}, Population Size: {population_size}, Elitism Count: {elitism_count}")
     logger.info(f"Execution Mode: {execution_mode.name}")
+    start_exporter_if_enabled()
     if initial_prompt_str:
         logger.info(f"Initial Prompt String provided: '{initial_prompt_str[:100]}...'")
     if agent_settings_override:
@@ -88,6 +100,8 @@ def main_ga_loop(
 
     logger.info(f"Effective Population Persistence Path: {actual_population_path}")
     logger.info(f"Effective Save Population Frequency: Every {actual_save_frequency} generations (0 means periodic saving disabled)")
+    if metrics_file_path:
+        logger.info(f"Generation metrics will be written to: {metrics_file_path}")
 
     # 0. Instantiate Message Bus
     logger.debug("Initializing Message Bus...")
@@ -98,6 +112,7 @@ def main_ga_loop(
     current_llm_settings = update_settings(global_ph_config.LLM_UTILS_SETTINGS.copy(), llm_settings_override)
     if llm_settings_override:
         logger.info("LLM settings have been updated with overrides for this session.")
+
 
     # 1. Instantiate Agents from AGENT_PIPELINE_CONFIG
     logger.info("Initializing agents from AGENT_PIPELINE_CONFIG...")
@@ -115,6 +130,25 @@ def main_ga_loop(
 
         logger.info(f"Loading agent '{agent_id}' from class path '{class_path}' using settings key '{settings_key}'.")
 
+"""
+
+    # 1. Instantiate Agents from AGENT_PIPELINE_CONFIG
+    logger.info("Initializing agents from AGENT_PIPELINE_CONFIG...")
+    loaded_agents: Dict[str, BaseAgent] = {}
+    agent_names: List[str] = []
+
+    for agent_conf in global_settings_obj.AGENT_PIPELINE_CONFIG:
+        class_path = agent_conf.get("class_path")
+        agent_id = agent_conf.get("id")
+        settings_key = agent_conf.get("settings_key")
+
+        if not all([class_path, agent_id, settings_key]):
+            logger.error(f"Invalid agent configuration: {agent_conf}. Skipping.")
+            continue
+
+        logger.info(f"Loading agent '{agent_id}' from class path '{class_path}' using settings key '{settings_key}'.")
+
+"""
         try:
             module_path_str, class_name_str = class_path.rsplit('.', 1)
             module = importlib.import_module(module_path_str)
@@ -224,6 +258,7 @@ def main_ga_loop(
         parallel_workers=parallel_workers,
         message_bus=message_bus,  # Added
         agents_used=agent_names,  # Pass the collected agent names/IDs
+        metrics_file_path=metrics_file_path,
 
 
         # TODO: Pass agent_settings_override or specific agent configs if PopulationManager
