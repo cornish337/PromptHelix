@@ -23,10 +23,17 @@ def test_create_and_complete_run(db_session: SQLAlchemySession):
 
 def test_add_and_fetch_chromosome(db_session: SQLAlchemySession):
     run = create_experiment_run(db_session)
-    chromo = PromptChromosome(genes=["a"], fitness_score=0.5)
+    chromo = PromptChromosome(
+        genes=["a"],
+        fitness_score=0.5,
+        parents=["p1", "p2"],
+        mutation_operator="TestOp",
+    )
     record = add_chromosome_record(db_session, run, generation_number=1, chromosome=chromo)
     assert record.id == str(chromo.id)
     assert record.generation_number == 1
+    assert record.parent_ids == ["p1", "p2"]
+    assert record.mutation_operator == "TestOp"
 
     retrieved = get_chromosomes_for_run(db_session, run.id)
     assert len(retrieved) == 1

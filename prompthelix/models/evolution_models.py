@@ -25,6 +25,8 @@ class GAChromosome(Base):
     genes = Column(JSON, nullable=False)
     fitness_score = Column(Float, nullable=False)
     evaluation_details = Column(JSON, nullable=True)
+    parent_ids = Column(JSON, nullable=True)
+    mutation_operator = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     run = relationship("GAExperimentRun", back_populates="chromosomes")
