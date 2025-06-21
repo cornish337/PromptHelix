@@ -58,6 +58,7 @@ The application requires certain environment variables to be set, especially for
 *   `ANTHROPIC_API_KEY`: Your API key for Anthropic services.
 *   `GOOGLE_API_KEY`: Your API key for Google AI services.
 *   `DATABASE_URL`: The connection string for your database (e.g., `postgresql://user:password@host:port/database` for PostgreSQL, or `sqlite:///./prompthelix.db` for SQLite).
+*   `DEBUG`: Set to `true` to enable verbose debug logging.
 
 **Agent Overrides:**
 
@@ -283,6 +284,17 @@ python -m prompthelix.cli check-llm --provider openai --model gpt-3.5-turbo
 ```
 
 The command sends a short test prompt and prints the returned text or any error message. Debug logging output is shown to help diagnose connectivity issues.
+
+### Debug Logging
+
+Set the `DEBUG` environment variable to `true` before starting the CLI or server to enable verbose logging:
+
+```bash
+export DEBUG=true
+python -m prompthelix.cli run ga
+```
+
+Modules may also call `setup_logging(json_format=True)` from `prompthelix.utils.logging_utils` to output logs in JSON format.
 
 ### API
 
