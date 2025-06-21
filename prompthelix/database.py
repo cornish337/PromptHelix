@@ -1,5 +1,5 @@
 import os
-import logging # Added import
+import logging
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from prompthelix.models.base import Base
@@ -9,6 +9,8 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./prompthelix.db")
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 print(f"DEBUG: database.py: SessionLocal defined at module level, bound to engine: {engine}")
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "DATABASE_URL",
@@ -28,8 +30,6 @@ def get_db():
         db.close()
 
 def init_db():
-    logging.basicConfig(level=logging.INFO)  # Added logging config
-    logger = logging.getLogger(__name__)  # Added logger instance
     logger.info("Initializing database...")  # Added log message
     logger.info(f"Using database URL: {DATABASE_URL}") # Added log message
     Base.metadata.create_all(bind=engine)

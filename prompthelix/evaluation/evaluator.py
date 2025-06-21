@@ -213,8 +213,6 @@ class Evaluator:
             logger.info(f"Metric {metric_func.__name__} already present in evaluator.")
 
 if __name__ == '__main__':
-    # Configure basic logging for the example
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
     # Create a dummy evaluation data file for the example
     dummy_data = [

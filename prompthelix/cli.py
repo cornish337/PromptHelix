@@ -9,7 +9,7 @@ import subprocess
 import sys
 import os
 import unittest
-import logging # Added for logging configuration
+import logging
 try:
     import openai  # Used for catching openai.RateLimitError during GA runs
 except ModuleNotFoundError:  # pragma: no cover - optional dependency
@@ -22,27 +22,17 @@ import json # For parsing settings overrides
 logger = logging.getLogger(__name__)
 
 
+from prompthelix.utils import setup_logging
+
+
 def main_cli():
     """
     Main function for the PromptHelix CLI.
     Parses arguments and dispatches commands.
     """
-    # Configure logging for CLI visibility
-    # Set up basic configuration for the root logger.
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        stream=sys.stdout  # Ensure logs go to stdout
-    )
-    # Control verbosity of noisy libraries
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("openai._base_client").setLevel(logging.WARNING)
-
     parser = argparse.ArgumentParser(description="PromptHelix CLI")
-    parser.add_argument(
-        "--version", action="version", version="%(prog)s 0.1.0"
-    )
-
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    parser.add_argument("--version", action="version", version="%(prog)s 0.1.0")
     subparsers = parser.add_subparsers(title="commands", dest="command")
 
     # Subcommand for "test"
@@ -99,6 +89,9 @@ def main_cli():
 
 
     args = parser.parse_args()
+    setup_logging(debug=args.debug or None)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("openai._base_client").setLevel(logging.WARNING)
 
     if args.command == "test":
         loader = unittest.TestLoader()
