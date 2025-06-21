@@ -21,6 +21,7 @@ from prompthelix.genetics.engine import (
 from typing import List, Optional, Dict
 from prompthelix.enums import ExecutionMode
 from prompthelix.utils.config_utils import update_settings # Assuming a utility for deep merging configs
+from prompthelix.utils import start_exporter_if_enabled, update_generation, update_best_fitness
 from prompthelix import config as global_config # To access global default settings
 from prompthelix.config import settings # Added import
 
@@ -64,6 +65,7 @@ def main_ga_loop(
     logger.info(f"Keywords: {keywords}")
     logger.info(f"Num Generations: {num_generations}, Population Size: {population_size}, Elitism Count: {elitism_count}")
     logger.info(f"Execution Mode: {execution_mode.name}")
+    start_exporter_if_enabled()
     if initial_prompt_str:
         logger.info(f"Initial Prompt String provided: '{initial_prompt_str[:100]}...'")
     if agent_settings_override:
