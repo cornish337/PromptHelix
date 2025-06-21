@@ -173,7 +173,7 @@ async def metrics():
 # Include API routes
 app.include_router(api_routes.router)
 # Include UI routes
-app.include_router(ui_router)
+app.include_router(ui_router, prefix="/ui", tags=["UI"])
 
 if __name__ == "__main__":
     # This block is for when you run the application directly, e.g., using `python -m prompthelix.main`
