@@ -24,6 +24,7 @@ AI prompts through innovative techniques inspired by genetic algorithms and mult
         *   Real-time metrics and logs streamed via WebSockets.
         *   Line chart visualizing max, mean, and min fitness across generations.
         *   Agent metrics and conversation events are displayed to show how interactions influence GA evolution.
+*   Prometheus metrics exported at `/metrics` for monitoring
 *   Performance tracking and evaluation of prompts
 *   API for programmatic access and integration
 *   User interface for managing and experimenting with prompts (basic HTML interface available)
@@ -58,6 +59,7 @@ The application requires certain environment variables to be set, especially for
 *   `ANTHROPIC_API_KEY`: Your API key for Anthropic services.
 *   `GOOGLE_API_KEY`: Your API key for Google AI services.
 *   `DATABASE_URL`: The connection string for your database (e.g., `postgresql://user:password@host:port/database` for PostgreSQL, or `sqlite:///./prompthelix.db` for SQLite).
+*   `WANDB_API_KEY`: Optional key for logging metrics to Weights & Biases.
 
 **Agent Overrides:**
 
@@ -316,6 +318,11 @@ PromptHelix also provides an API endpoint to trigger the genetic algorithm.
     }
     ```
     Note: The actual prompt and fitness score will vary with each run due to the nature of the genetic algorithm.
+
+## Metrics and Monitoring
+
+The application exposes Prometheus metrics at `/metrics`. When the optional `wandb` package is installed and `WANDB_API_KEY` is set, these metrics are also logged to Weights & Biases.
+
 
 ### Running Tests
 

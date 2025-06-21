@@ -2,24 +2,28 @@
 Main application file for the PromptHelix API.
 Initializes the FastAPI application and includes the root endpoint.
 """
+
 import traceback
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+
 # from fastapi.templating import Jinja2Templates # Moved to templating.py
 from fastapi.staticfiles import StaticFiles
-from prompthelix.templating import templates # Import templates object
+from prompthelix.templating import templates  # Import templates object
 from prompthelix.api import routes as api_routes
-from prompthelix.ui_routes import router as ui_router # Import the UI router
+from prompthelix.ui_routes import router as ui_router  # Import the UI router
+from prompthelix import metrics as ph_metrics
+
 # from prompthelix.websocket_manager import ConnectionManager # No longer imported directly for instantiation
-from prompthelix.globals import websocket_manager # Import the global instance
+from prompthelix.globals import websocket_manager  # Import the global instance
 from prompthelix.database import init_db
 
 # Call init_db to create database tables on startup
 # For production, you'd likely use Alembic migrations separately.
 # init_db() # This should be commented out for tests; conftest.py handles DB setup.
-            # For running the app directly (e.g. `python -m prompthelix.main`),
-            # it might be called below if __name__ == "__main__".
+# For running the app directly (e.g. `python -m prompthelix.main`),
+# it might be called below if __name__ == "__main__".
 
 # Initialize FastAPI application
 app = FastAPI()
@@ -59,8 +63,8 @@ async def generic_exception_handler(request: Request, exc: Exception):
 
     # For now, always include traceback as per user request for easier debugging in current context.
     # Consider adding a DEBUG flag check for production.
-    print(f"Unhandled exception: {exc}") # Basic logging
-    traceback.print_exc() # Print traceback to server console
+    print(f"Unhandled exception: {exc}")  # Basic logging
+    traceback.print_exc()  # Print traceback to server console
 
     return JSONResponse(
         status_code=500,
@@ -88,11 +92,15 @@ async def websocket_dashboard_endpoint(websocket: WebSocket):
         while True:
             data = await websocket.receive_text()
             print(f"WebSocket dashboard received: {data}")
-            await websocket_manager.send_personal_json({"response": f"You wrote: {data}"}, websocket)
+            await websocket_manager.send_personal_json(
+                {"response": f"You wrote: {data}"}, websocket
+            )
     except WebSocketDisconnect:
         websocket_manager.disconnect(websocket)
         print("WebSocket dashboard disconnected")
-        await websocket_manager.broadcast_json({"message": "A client has disconnected."})
+        await websocket_manager.broadcast_json(
+            {"message": "A client has disconnected."}
+        )
     except Exception as e:
         websocket_manager.disconnect(websocket)
         print(f"WebSocket dashboard error: {e}")
@@ -101,7 +109,9 @@ async def websocket_dashboard_endpoint(websocket: WebSocket):
         # Depending on the error, the websocket might already be closed or in an unusable state.
         # For now, we'll rely on the client or server to eventually clean up the connection.
         # Consider await websocket.close(code=1011) if appropriate for specific errors.
-        await websocket_manager.broadcast_json({"message": f"A client connection had an error: {type(e).__name__}"})
+        await websocket_manager.broadcast_json(
+            {"message": f"A client connection had an error: {type(e).__name__}"}
+        )
 
 
 @app.get("/")
@@ -115,6 +125,7 @@ async def root():
 
 # Include API routes
 app.include_router(api_routes.router)
+app.include_router(ph_metrics.router)
 # Include UI routes
 app.include_router(ui_router)
 
@@ -122,11 +133,11 @@ if __name__ == "__main__":
     # This block is for when you run the application directly, e.g., using `python -m prompthelix.main`
     # It's a good place to initialize the database if it hasn't been set up by other means (like Alembic).
     # init_db() # Uncomment if you want to ensure DB is created/checked when running directly.
-                # However, be cautious if you use Alembic for migrations, as this might conflict.
-                # For development, manually running `init_db()` via a script or an initial check might be safer.
+    # However, be cautious if you use Alembic for migrations, as this might conflict.
+    # For development, manually running `init_db()` via a script or an initial check might be safer.
 
     # Note: Uvicorn is typically used to run the app, e.g., `uvicorn prompthelix.main:app --reload`
     # In that case, this __main__ block might not be executed depending on how uvicorn imports/runs the app.
     # If `init_db()` is critical on every startup when not testing, ensure it's called appropriately,
     # possibly earlier in the script if not managed by a migration tool or separate startup script.
-    pass # Placeholder if no direct run actions are needed here right now.
+    pass  # Placeholder if no direct run actions are needed here right now.
