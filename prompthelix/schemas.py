@@ -246,6 +246,8 @@ class GAChromosomeBase(BaseModel):
     genes: List[Any]
     fitness_score: float
     evaluation_details: Optional[Dict[str, Any]] = None
+    parent_ids: Optional[List[str]] = None
+    mutation_strategy: Optional[str] = None
 
 
 class GAChromosomeCreate(GAChromosomeBase):

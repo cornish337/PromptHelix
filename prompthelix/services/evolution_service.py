@@ -32,6 +32,8 @@ def add_chromosome_record(db: DbSession, run: GAExperimentRun, generation_number
         genes=chromosome.genes,
         fitness_score=chromosome.fitness_score,
         evaluation_details=getattr(chromosome, "evaluation_details", None),
+        parent_ids=getattr(chromosome, "parent_ids", None),
+        mutation_strategy=getattr(chromosome, "mutation_strategy", None),
     )
     db.add(record)
     db.commit()
