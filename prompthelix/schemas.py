@@ -149,8 +149,21 @@ class GAExperimentParams(BaseModel):
     parent_prompt_id: Optional[int] = None
     prompt_name: Optional[str] = None # Name for the new prompt created by GA
     prompt_description: Optional[str] = None # Description for the new prompt
+    # Additional parameters for main_ga_loop
+    initial_prompt_str: Optional[str] = None
+    agent_settings_override: Optional[Dict[str, Any]] = None
+    llm_settings_override: Optional[Dict[str, Any]] = None
+    parallel_workers: Optional[int] = None
+    population_path: Optional[str] = None
+    save_frequency: Optional[int] = None # Corresponds to save_frequency_override in main_ga_loop
 
 # GAExperimentResult can be represented by schemas.PromptVersion.
+
+# Response schema for starting a GA run
+class GARunResponse(BaseModel):
+    message: str
+    task_id: str
+    status_endpoint: Optional[str] = None
 
 # --- LLM Testing and Statistics Schemas ---
 class LLMTestRequest(BaseModel):
@@ -247,7 +260,11 @@ class GAChromosomeBase(BaseModel):
     fitness_score: float
     evaluation_details: Optional[Dict[str, Any]] = None
     parent_ids: Optional[List[str]] = None
+
     mutation_operator: Optional[str] = None
+
+    mutation_strategy: Optional[str] = None
+
 
 
 class GAChromosomeCreate(GAChromosomeBase):
@@ -257,6 +274,26 @@ class GAChromosomeCreate(GAChromosomeBase):
 class GAChromosome(GAChromosomeBase):
     id: str
     created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class GAGenerationMetricBase(BaseModel):
+    run_id: int
+    generation_number: int
+    best_fitness: float
+    avg_fitness: float
+    population_diversity: float
+    timestamp: datetime
+
+
+class GAGenerationMetricCreate(GAGenerationMetricBase):
+    pass
+
+
+class GAGenerationMetric(GAGenerationMetricBase):
+    id: int
 
     class Config:
         from_attributes = True

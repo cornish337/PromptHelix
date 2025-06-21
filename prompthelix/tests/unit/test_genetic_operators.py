@@ -2,6 +2,7 @@ import unittest
 import random
 from unittest.mock import patch, Mock
 from prompthelix.genetics.engine import GeneticOperators, PromptChromosome
+from prompthelix.genetics.mutation_strategies import MutationStrategy
 
 class TestGeneticOperators(unittest.TestCase):
     """Test suite for the GeneticOperators class."""
@@ -213,6 +214,35 @@ class TestGeneticOperators(unittest.TestCase):
 
         style_mock.process_request.assert_called_once()
         self.assertEqual(result.genes, ["styled"])
+
+    @patch('random.random')
+    @patch('random.randint')
+    def test_crossover_sets_parents(self, mock_randint, mock_random):
+        mock_random.return_value = 0.0
+        mock_randint.return_value = 0
+        child1, child2 = self.operators.crossover(self.parent1, self.parent2, crossover_rate=1.0)
+        self.assertEqual(child1.parents, [str(self.parent1.id), str(self.parent2.id)])
+        self.assertEqual(child2.parents, [str(self.parent1.id), str(self.parent2.id)])
+
+    @patch('random.choice')
+    @patch('random.random')
+    def test_mutate_sets_mutation_op_and_logs(self, mock_random, mock_choice):
+        class DummyStrategy(MutationStrategy):
+            def mutate(self, chromosome: PromptChromosome) -> PromptChromosome:
+                c = chromosome.clone()
+                c.genes.append('x')
+                return c
+
+        strategy = DummyStrategy()
+        mock_choice.return_value = strategy
+        mock_random.return_value = 0.0
+        self.chromosome_to_mutate.parents = ['p1', 'p2']
+        operators = GeneticOperators(mutation_strategies=[strategy])
+        with self.assertLogs('prompthelix.genetics.engine', level='INFO') as log_watcher:
+            result = operators.mutate(self.chromosome_to_mutate, mutation_rate=1.0)
+        self.assertEqual(result.mutation_op, 'DummyStrategy')
+        self.assertEqual(result.parents, ['p1', 'p2'])
+        self.assertTrue(any('offspring_created' in msg for msg in log_watcher.output))
 
 if __name__ == '__main__':
     unittest.main()
