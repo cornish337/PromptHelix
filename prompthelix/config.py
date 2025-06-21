@@ -51,8 +51,14 @@ class Settings:
     ANTHROPIC_API_KEY: str | None = os.getenv("ANTHROPIC_API_KEY")
     GOOGLE_API_KEY: str | None = os.getenv("GOOGLE_API_KEY") # For Gemini or other Google models
 
+
+    # Optional experiment tracking integrations
+    WANDB_API_KEY: str | None = os.getenv("WANDB_API_KEY")
+    MLFLOW_TRACKING_URI: str | None = os.getenv("MLFLOW_TRACKING_URI")
+
     # Debug flag controlling log verbosity
     DEBUG: bool = os.getenv("DEBUG", "false").lower() in {"1", "true", "yes"}
+
 
     # Caching (e.g., Redis)
     REDIS_HOST: str = os.getenv("REDIS_HOST", "localhost")

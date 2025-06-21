@@ -917,6 +917,8 @@ class PopulationManager:
         self.is_paused: bool = False  # Added
         self.should_stop: bool = False  # Added
         self.status: str = "IDLE"  # Added
+        self._wandb_run = None
+        self._mlflow_run = None
 
         if self.population_path:
             self.load_population(self.population_path)
@@ -1469,6 +1471,45 @@ class PopulationManager:
             },
             selected_parent_ids=unique_parent_ids, # Pass unique parent IDs
         )  # Added
+
+        # Update Prometheus metrics and optional experiment trackers
+        from prompthelix.metrics import record_generation
+        from prompthelix.config import settings
+
+        best = self.get_fittest_individual()
+        best_fitness = best.fitness_score if best else 0.0
+        record_generation(
+            self.generation_number,
+            len(self.population),
+            best_fitness,
+            evaluated_chromosomes_count,
+        )
+
+        if settings.WANDB_API_KEY:
+            try:
+                import wandb
+                if self._wandb_run is None:
+                    wandb.login(key=settings.WANDB_API_KEY)
+                    self._wandb_run = wandb.init(project="prompthelix", reinit=True)
+                if self._wandb_run:
+                    wandb.log({
+                        "generation": self.generation_number,
+                        "best_fitness": best_fitness,
+                        "population_size": len(self.population),
+                    })
+            except Exception as exc:
+                logger.error(f"WandB logging failed: {exc}")
+
+        if settings.MLFLOW_TRACKING_URI:
+            try:
+                import mlflow
+                mlflow.set_tracking_uri(settings.MLFLOW_TRACKING_URI)
+                if self._mlflow_run is None:
+                    self._mlflow_run = mlflow.start_run(run_name="prompthelix_ga")
+                mlflow.log_metric("best_fitness", best_fitness, step=self.generation_number)
+                mlflow.log_metric("population_size", len(self.population), step=self.generation_number)
+            except Exception as exc:
+                logger.error(f"MLflow logging failed: {exc}")
 
     def get_fittest_individual(self) -> PromptChromosome | None:
         """
