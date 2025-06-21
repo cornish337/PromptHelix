@@ -5,12 +5,17 @@ Initializes the FastAPI application and includes the root endpoint.
 
 import traceback
 from fastapi import Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 # from fastapi.templating import Jinja2Templates # Moved to templating.py
 from fastapi.staticfiles import StaticFiles
-from prompthelix.templating import templates  # Import templates object
+
+# Logging configuration must be initialized early
+from prompthelix.config import settings
+from prompthelix.logging_config import configure_logging
+from prompthelix.templating import templates # Import templates object
+
 from prompthelix.api import routes as api_routes
 from prompthelix.ui_routes import router as ui_router  # Import the UI router
 from prompthelix import metrics as ph_metrics
@@ -18,6 +23,10 @@ from prompthelix import metrics as ph_metrics
 # from prompthelix.websocket_manager import ConnectionManager # No longer imported directly for instantiation
 from prompthelix.globals import websocket_manager  # Import the global instance
 from prompthelix.database import init_db
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+
+# Configure logging as soon as possible
+configure_logging(settings.DEBUG)
 
 # Call init_db to create database tables on startup
 # For production, you'd likely use Alembic migrations separately.
@@ -87,6 +96,11 @@ async def websocket_dashboard_endpoint(websocket: WebSocket):
     WebSocket endpoint for dashboard real-time updates.
     """
     await websocket_manager.connect(websocket)
+    try:
+        from prompthelix import globals as ph_globals
+        await websocket_manager.send_personal_json({"type": "ga_history", "data": ph_globals.ga_history}, websocket)
+    except Exception as e:  # pragma: no cover - simple log
+        print(f"Failed to send GA history: {e}")
     await websocket_manager.broadcast_json({"message": "A new client has connected!"})
     try:
         while True:
@@ -112,6 +126,12 @@ async def websocket_dashboard_endpoint(websocket: WebSocket):
         await websocket_manager.broadcast_json(
             {"message": f"A client connection had an error: {type(e).__name__}"}
         )
+
+
+@app.get("/metrics")
+async def metrics_endpoint():
+    """Expose Prometheus metrics."""
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 @app.get("/")

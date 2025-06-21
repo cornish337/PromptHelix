@@ -19,3 +19,6 @@ textstat>=0.7.7
 setuptools>=80
 bcrypt
 prometheus_client==0.20.0
+prometheus_client
+wandb
+mlflow

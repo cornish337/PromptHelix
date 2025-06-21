@@ -6,30 +6,35 @@ from typing import TYPE_CHECKING, Type, Dict, List
 
 logger = logging.getLogger(__name__) # Added logger
 
+from typing import TYPE_CHECKING, Type, Dict, List, Optional # Added Optional
+from prompthelix.genetics.strategy_base import BaseMutationStrategy # Import new ABC
+
+logger = logging.getLogger(__name__) # Added logger
+
 if TYPE_CHECKING: # pragma: no cover - only for type hints
     from prompthelix.genetics.engine import PromptChromosome
 
 # Registry for mutation strategy classes
-strategy_registry: Dict[str, Type["MutationStrategy"]] = {}
+strategy_registry: Dict[str, Type[BaseMutationStrategy]] = {} # Use new ABC
 
 
-def register_strategy(cls: Type["MutationStrategy"]) -> Type["MutationStrategy"]:
-    """Register a MutationStrategy class in the global registry."""
+def register_strategy(cls: Type[BaseMutationStrategy]) -> Type[BaseMutationStrategy]: # Use new ABC
+    """Register a BaseMutationStrategy class in the global registry."""
     strategy_registry[cls.__name__] = cls
     return cls
 
 
-def load_strategies(paths: List[str]) -> List["MutationStrategy"]:
-    """Dynamically load MutationStrategy implementations from modules.
+def load_strategies(paths: List[str]) -> List[BaseMutationStrategy]: # Use new ABC
+    """Dynamically load BaseMutationStrategy implementations from modules.
 
     Args:
         paths: List of module paths to import. Each module is scanned for
-            classes that subclass :class:`MutationStrategy`.
+            classes that subclass :class:`BaseMutationStrategy`.
 
     Returns:
         List of instantiated strategy objects found in the provided modules.
     """
-    strategies: List["MutationStrategy"] = []
+    strategies: List[BaseMutationStrategy] = [] # Use new ABC
     for module_path in paths:
         try:
             module = __import__(module_path, fromlist=["dummy"])
@@ -41,49 +46,33 @@ def load_strategies(paths: List[str]) -> List["MutationStrategy"]:
             attr = getattr(module, attr_name)
             if (
                 isinstance(attr, type)
-                and issubclass(attr, MutationStrategy)
-                and attr is not MutationStrategy
+                and issubclass(attr, BaseMutationStrategy) # Use new ABC
+                and attr is not BaseMutationStrategy     # Use new ABC
             ):
                 register_strategy(attr)
                 try:
-                    strategies.append(attr())
+                    # Pass settings=None or an empty dict if strategies expect it
+                    strategies.append(attr(settings=None))
                 except Exception as inst_err:  # pragma: no cover - instantiation errors logged
                     logger.error(
                         f"Could not instantiate strategy '{attr.__name__}' from '{module_path}': {inst_err}"
                     )
     return strategies
 
-class MutationStrategy(abc.ABC):
-    """
-    Abstract base class for defining mutation strategies.
-    """
-
-    @abc.abstractmethod
-    def mutate(self, chromosome: PromptChromosome) -> PromptChromosome:
-        """
-        Applies a mutation to the given chromosome.
-
-        Args:
-            chromosome (PromptChromosome): The chromosome to mutate.
-
-        Returns:
-            PromptChromosome: The mutated chromosome.
-                           Note: Implementations should decide whether to modify
-                           the original chromosome in-place or return a new instance.
-                           Returning a new instance is generally safer.
-        """
-        pass
+# Old MutationStrategy ABC is removed. Strategies will inherit from BaseMutationStrategy.
 
 @register_strategy
-class AppendCharStrategy(MutationStrategy):
+class AppendCharStrategy(BaseMutationStrategy): # Inherit from new ABC
     """
     Mutates a gene by appending a random character.
     """
-    def __init__(self, chars_to_append: str = "!*?_"):
-        self.chars_to_append = chars_to_append
+    def __init__(self, settings: Optional[Dict] = None, **kwargs):
+        super().__init__(settings=settings, **kwargs)
+        # Specific initialization for this strategy
+        self.chars_to_append = self.settings.get("chars_to_append", "!*?_") if self.settings else "!*?_"
+
 
     def mutate(self, chromosome: PromptChromosome) -> PromptChromosome:
-        # It's often better to work on a clone to avoid side effects
         # It's often better to work on a clone to avoid side effects
         mutated_chromosome = chromosome.clone()
         mutated_chromosome.fitness_score = 0.0 # Reset fitness for the new mutated version
@@ -110,10 +99,14 @@ class AppendCharStrategy(MutationStrategy):
         return mutated_chromosome
 
 @register_strategy
-class ReverseSliceStrategy(MutationStrategy):
+class ReverseSliceStrategy(BaseMutationStrategy): # Inherit from new ABC
     """
     Mutates a gene by reversing a random slice of it.
     """
+    def __init__(self, settings: Optional[Dict] = None, **kwargs):
+        super().__init__(settings=settings, **kwargs)
+        # No specific settings for this strategy in this example, but structure is here
+
     def mutate(self, chromosome: PromptChromosome) -> PromptChromosome:
         mutated_chromosome = chromosome.clone()
         mutated_chromosome.fitness_score = 0.0
@@ -152,12 +145,13 @@ class ReverseSliceStrategy(MutationStrategy):
         return mutated_chromosome
 
 @register_strategy
-class PlaceholderReplaceStrategy(MutationStrategy):
+class PlaceholderReplaceStrategy(BaseMutationStrategy): # Inherit from new ABC
     """
     Mutates a gene by replacing it or a part of it with a placeholder.
     """
-    def __init__(self, placeholder: str = "[MUTATED_GENE_SEGMENT]"):
-        self.placeholder = placeholder
+    def __init__(self, settings: Optional[Dict] = None, **kwargs):
+        super().__init__(settings=settings, **kwargs)
+        self.placeholder = self.settings.get("placeholder", "[MUTATED_GENE_SEGMENT]") if self.settings else "[MUTATED_GENE_SEGMENT]"
 
     def mutate(self, chromosome: PromptChromosome) -> PromptChromosome:
         mutated_chromosome = chromosome.clone()
@@ -180,10 +174,14 @@ class PlaceholderReplaceStrategy(MutationStrategy):
 
 # Example of a NoOperationMutation strategy, could be useful
 @register_strategy
-class NoOperationMutationStrategy(MutationStrategy):
+class NoOperationMutationStrategy(BaseMutationStrategy): # Inherit from new ABC
     """
     A strategy that performs no mutation. Can be useful in some scenarios.
     """
+    def __init__(self, settings: Optional[Dict] = None, **kwargs):
+        super().__init__(settings=settings, **kwargs)
+        # No specific settings for this strategy
+
     def mutate(self, chromosome: PromptChromosome) -> PromptChromosome:
         # Returns a clone but without any changes to genes
         # Or, if mutations are expected to sometimes not happen, could return original

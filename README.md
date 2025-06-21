@@ -59,7 +59,15 @@ The application requires certain environment variables to be set, especially for
 *   `ANTHROPIC_API_KEY`: Your API key for Anthropic services.
 *   `GOOGLE_API_KEY`: Your API key for Google AI services.
 *   `DATABASE_URL`: The connection string for your database (e.g., `postgresql://user:password@host:port/database` for PostgreSQL, or `sqlite:///./prompthelix.db` for SQLite).
+
 *   `WANDB_API_KEY`: Optional key for logging metrics to Weights & Biases.
+
+*   `WANDB_API_KEY` *(optional)*: Enables logging metrics to Weights & Biases when set.
+*   `MLFLOW_TRACKING_URI` *(optional)*: URI of your MLflow server for metric logging.
+
+*   `DEBUG`: Set to `true` to enable verbose debug logging.
+
+
 
 **Agent Overrides:**
 
@@ -286,6 +294,17 @@ python -m prompthelix.cli check-llm --provider openai --model gpt-3.5-turbo
 
 The command sends a short test prompt and prints the returned text or any error message. Debug logging output is shown to help diagnose connectivity issues.
 
+### Debug Logging
+
+Set the `DEBUG` environment variable to `true` before starting the CLI or server to enable verbose logging:
+
+```bash
+export DEBUG=true
+python -m prompthelix.cli run ga
+```
+
+Modules may also call `setup_logging(json_format=True)` from `prompthelix.utils.logging_utils` to output logs in JSON format.
+
 ### API
 
 PromptHelix also provides an API endpoint to trigger the genetic algorithm.
@@ -342,6 +361,15 @@ python -m prompthelix.cli test --path tests/unit/test_architect_agent.py
 
 The output will show the progress of the tests and a summary of the results.
 
+### Metrics and Experiment Tracking
+
+PromptHelix exposes Prometheus metrics at the `/metrics` route which report
+generation number, best fitness and other GA stats. Configure a Prometheus
+server to scrape this endpoint.
+
+If the optional `WANDB_API_KEY` is set, these metrics are logged to Weights &
+Biases. Setting `MLFLOW_TRACKING_URI` enables logging to an MLflow server.  Both
+integrations activate only when the environment variables are provided.
 
 To execute interactive tests, use the `--interactive` flag. Tests will be discovered under `prompthelix/tests/interactive`:
 
@@ -366,3 +394,15 @@ python -m prompthelix.cli test --interactive
 ```
 
 
+
+## Metrics Exporter
+
+PromptHelix can expose basic Prometheus metrics to monitor GA progress. Set
+`PROMETHEUS_METRICS_ENABLED=true` in your environment to enable the exporter.
+By default metrics are served on port defined by `PROMETHEUS_METRICS_PORT`
+(default `8001`).
+
+Once enabled, start a GA run normally and scrape `http://localhost:8001/metrics`.
+You can add this scrape target in Prometheus and visualize values like
+`prompthelix_current_generation` and `prompthelix_best_fitness` in Grafana or
+forward them to an experiment tracker such as W&B.
