@@ -1,7 +1,11 @@
 from prompthelix.message_bus import MessageBus
 import logging
-import time # Added
-from prompthelix.database import SessionLocal # Added
+import time  # Added
+
+logger = logging.getLogger(__name__)
+
+# Set a default for SessionLocal so references outside main_ga_loop do not fail
+SessionLocal = None
 from prompthelix.globals import websocket_manager  # Use the global connection manager
 from prompthelix.agents.architect import PromptArchitectAgent
 from prompthelix.agents.results_evaluator import ResultsEvaluatorAgent
@@ -36,11 +40,6 @@ from prompthelix import config as global_ph_config  # renamed to avoid clash wit
 from prompthelix.config import settings as global_settings_obj  # for mutation / selection / crossover strategy classes
 from prompthelix.config import settings  # for WANDB / MLflow keys, etc.
 from prompthelix.genetics.fitness_base import BaseFitnessEvaluator  # fitness-evaluator ABC
-
-
-#
-
-logger = logging.getLogger(__name__)
 
 try:
     import wandb
@@ -86,6 +85,20 @@ def main_ga_loop(
         save_frequency_override: Optional override for population save frequency. If None, uses config default.
         metrics_file_path: Optional path to write generation metrics as JSON lines.
     """
+    # Import SessionLocal lazily so that SQLAlchemy is only required when
+    # database features are used.
+    try:
+        from prompthelix.database import SessionLocal as _SessionLocal  # type: ignore
+    except ModuleNotFoundError:
+        logger.error(
+            "SQLAlchemy is required for database logging. Install it with 'pip install SQLAlchemy'."
+        )
+        _SessionLocal = None
+
+    # Local reference used throughout this function and update module-level
+    global SessionLocal
+    SessionLocal = _SessionLocal
+
     logger.info("--- main_ga_loop started ---")
     logger.info(f"Task Description: {task_desc}")
     logger.info(f"Keywords: {keywords}")
@@ -146,7 +159,15 @@ def main_ga_loop(
 
     # 0. Instantiate Message Bus
     logger.debug("Initializing Message Bus...")
-    message_bus = MessageBus(db_session_factory=SessionLocal, connection_manager=websocket_manager)
+    if SessionLocal is not None:
+        message_bus = MessageBus(
+            db_session_factory=SessionLocal, connection_manager=websocket_manager
+        )
+    else:
+        logger.warning(
+            "SessionLocal is not available. MessageBus will run without database logging."
+        )
+        message_bus = MessageBus(connection_manager=websocket_manager)
     logger.debug("Message Bus initialized.")
 
     # Handle LLM settings override (used by default FitnessEvaluator and potentially others)
@@ -485,7 +506,15 @@ if __name__ == "__main__":
             print(f"DemoAgent '{self.agent_id}' is sending a ping to '{target_agent_id}'.")
             self.send_message(target_agent_id, {"ping_data": data}, "direct_request") # Use direct_request for demo
 
-    demo_bus = MessageBus(db_session_factory=SessionLocal, connection_manager=websocket_manager)
+    if SessionLocal is not None:
+        demo_bus = MessageBus(
+            db_session_factory=SessionLocal, connection_manager=websocket_manager
+        )
+    else:
+        print(
+            "Warning: SessionLocal not available. Demo MessageBus will not log to the database."
+        )
+        demo_bus = MessageBus(connection_manager=websocket_manager)
     agent_X = DemoAgent(agent_id="AgentX", message_bus=demo_bus)
     agent_Y = DemoAgent(agent_id="AgentY", message_bus=demo_bus)
     demo_bus.register(agent_X.agent_id, agent_X)
@@ -574,7 +603,15 @@ if __name__ == "__main__":
     # --- MetaLearnerAgent Persistence Demonstration ---
     print("\n--- MetaLearnerAgent Persistence Demonstration ---")
     # MetaLearnerAgent needs a message bus to be instantiated, even if not used in this simple demo part
-    meta_learner_bus = MessageBus(db_session_factory=SessionLocal, connection_manager=websocket_manager) # Using demo_bus for consistency if preferred, or a new one.
+    if SessionLocal is not None:
+        meta_learner_bus = MessageBus(
+            db_session_factory=SessionLocal, connection_manager=websocket_manager
+        )  # Using demo_bus for consistency if preferred, or a new one.
+    else:
+        print(
+            "Warning: SessionLocal not available. MetaLearner MessageBus will not log to the database."
+        )
+        meta_learner_bus = MessageBus(connection_manager=websocket_manager)
     meta_learner_agent = MetaLearnerAgent(message_bus=meta_learner_bus, knowledge_file_path="meta_learner_knowledge_orchestrator_demo.json")
 
     print(f"Initial knowledge base keys: {list(meta_learner_agent.knowledge_base.keys())}")

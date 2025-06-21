@@ -24,22 +24,17 @@ class WebSocketLogHandler(logging.Handler):
                     "lineno": record.lineno,
                 }
             }
-            # Schedule async broadcast; handle cases where no loop is running
+            # Schedule async broadcast; use running loop if available
+            coro = self.connection_manager.broadcast_json(log_data)
             try:
-                loop = asyncio.get_running_loop()
-                if loop.is_running():
-                    asyncio.create_task(self.connection_manager.broadcast_json(log_data))
-                else:
-                    # Fallback if loop exists but isn't running (e.g., during test collection)
-                    print(
-                        f"LOGGING_HANDLER_NO_LOOP (loop not running): "
-                        f"{log_data['data']['message'][:100]}..."
-                    )
+                asyncio.get_running_loop()
+                asyncio.create_task(coro)
             except RuntimeError:
-                # Fallback if get_running_loop() fails entirely
-                print(
-                    f"LOGGING_HANDLER_NO_LOOP (RuntimeError): "
-                    f"{log_data['data']['message'][:100]}..."
-                )
+                # If no running loop, create one and execute the coroutine
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                task = loop.create_task(coro)
+                loop.run_until_complete(task)
+                loop.close()
         except Exception:
             self.handleError(record)

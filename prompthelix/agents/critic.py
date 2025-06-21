@@ -32,21 +32,17 @@ class PromptCriticAgent(BaseAgent):
         self.load_knowledge()
 
     def _get_default_critique_rules(self):
-        """Returns the default critique rules."""
-        # Provide a simple default rule to satisfy tests expecting non-empty defaults.
-        return [
-            {
-                "name": "Default Placeholder Rule",
-                "pattern": ".*", # Matches anything, effectively a no-op for critique
-                "feedback": "This is a default placeholder critique rule. Consider defining specific rules.",
-                "penalty": 0
-            }
-        ]
+        """Return default critique rules.
+
+        The critic agent should not impose any rules when no knowledge file is
+        present, so the default is simply an empty list.
+        """
+        return []
 
     def load_knowledge(self):
         """
         Loads critique rules from the specified JSON file.
-        If the file is not found or is invalid, it loads default rules and attempts to save them.
+        If the file is not found or is invalid, no rules are loaded for those cases.
         """
         try:
             effective_path = self.knowledge_file_path
@@ -55,17 +51,18 @@ class PromptCriticAgent(BaseAgent):
             self.critique_rules = self.rules # Keep backwards compatibility reference
             logger.info(f"Agent '{self.agent_id}': Rules loaded successfully from '{effective_path}'.")
         except FileNotFoundError:
-            logger.warning(f"Agent '{self.agent_id}': Knowledge file '{effective_path}' not found. Loading default rules.")
-            self.rules = self._get_default_critique_rules()
-            self.critique_rules = self.rules
-            self.save_knowledge() # Attempt to save defaults
+            logger.warning(
+                f"Agent '{self.agent_id}': Knowledge file '{effective_path}' not found. No critique rules loaded."
+            )
+            self.rules = []
+            self.critique_rules = []
         except json.JSONDecodeError as e:
             logger.error(
-                f"Agent '{self.agent_id}': Error decoding JSON from '{effective_path}': {e}. Loading default rules.",
+                f"Agent '{self.agent_id}': Error decoding JSON from '{effective_path}': {e}. No critique rules loaded.",
                 exc_info=True,
             )
-            self.rules = self._get_default_critique_rules()
-            self.critique_rules = self.rules
+            self.rules = []
+            self.critique_rules = []
         except Exception as e:
             logger.error(
                 f"Agent '{self.agent_id}': Failed to load rules from '{effective_path}': {e}. Loading default rules.",
@@ -130,14 +127,16 @@ class PromptCriticAgent(BaseAgent):
         for rule in self.rules:
             pattern = rule.get("pattern")
             if not pattern:
-                logger.warning( # Changed to warning as it's a data issue, not critical error
+                # Treat missing rule keys as errors since the rule cannot be evaluated
+                logger.error(
                     f"Agent '{self.agent_id}': Invalid rule structure for rule '{rule.get('name', 'Unnamed')}'. Missing key: 'pattern'. Skipping rule."
                 )
                 continue
             try:
                 regex = re.compile(pattern)
             except re.error as e:
-                logger.warning( # Changed to warning
+                # A broken regex means the rule is unusable
+                logger.error(
                     f"Agent '{self.agent_id}': Regex error in rule '{rule.get('name', 'Unnamed')}': {e}. Skipping rule."
                 )
                 continue
@@ -150,7 +149,8 @@ class PromptCriticAgent(BaseAgent):
                     feedback_message = feedback_template.replace("{pattern}", pattern)
                     issues.append(feedback_message)
                 else:
-                    logger.warning( # Changed to warning
+                    # Without feedback the user cannot act on the rule violation
+                    logger.error(
                         f"Agent '{self.agent_id}': Invalid rule structure for rule '{rule.get('name', 'Unnamed')}'. Missing key: 'feedback'."
                     )
                 score -= penalty

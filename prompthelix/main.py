@@ -50,6 +50,7 @@ init_db() # Initialize database and tables on startup
 
 # Initialize FastAPI application
 app = FastAPI()
+print(">>> FastAPI app object created in main.py <<<" )
 # websocket_manager = ConnectionManager() # websocket_manager is now imported from globals
 
 # Mount static files
@@ -175,7 +176,26 @@ app.include_router(api_routes.router)
 # Include UI routes
 app.include_router(ui_router, prefix="/ui", tags=["UI"])
 
+
 # The /debug-routes endpoint has been removed.
+'''
+@app.get("/debug-routes")
+async def debug_routes():
+    """
+    Temporary endpoint to list all registered routes for debugging.
+    """
+    routes = []
+    for route in app.routes:
+        routes.append(
+            {
+                "path": getattr(route, "path", "N/A"),
+                "name": getattr(route, "name", "N/A"),
+                "methods": sorted(list(getattr(route, "methods", []))),
+            }
+        )
+    return JSONResponse(content={"routes": routes})
+"""
+'''
 
 if __name__ == "__main__":
     # This block is for when you run the application directly, e.g., using `python -m prompthelix.main`
@@ -189,3 +209,4 @@ if __name__ == "__main__":
     # If `init_db()` is critical on every startup when not testing, ensure it's called appropriately,
     # possibly earlier in the script if not managed by a migration tool or separate startup script.
     pass  # Placeholder if no direct run actions are needed here right now.
+print(">>> PROMPTHELIX.MAIN.PY EXECUTION COMPLETED TO THE END <<<" )

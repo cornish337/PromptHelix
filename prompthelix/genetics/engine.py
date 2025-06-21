@@ -140,6 +140,12 @@ class PopulationManager:
         if self.population:
             self.population_size = len(self.population)
 
+    def get_fittest_individual(self) -> Optional[PromptChromosome]:
+        """Return the chromosome with the highest fitness or None."""
+        if not self.population:
+            return None
+        return max(self.population, key=lambda c: c.fitness_score)
+
     def broadcast_ga_update(
         self,
         event_type: str,
