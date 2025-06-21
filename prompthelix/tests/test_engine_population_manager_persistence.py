@@ -10,7 +10,8 @@ from prompthelix.genetics.engine import PopulationManager, PromptChromosome, Gen
 from prompthelix.agents.architect import PromptArchitectAgent
 from prompthelix.agents.results_evaluator import ResultsEvaluatorAgent # Import the base class
 from prompthelix.enums import ExecutionMode
-from prompthelix.genetics.mutation_strategies import MutationStrategy, NoOperationMutationStrategy
+from prompthelix.genetics.strategy_base import BaseMutationStrategy # Changed import
+from prompthelix.genetics.mutation_strategies import NoOperationMutationStrategy
 
 
 # Configure a logger to capture log messages for verification if needed
@@ -47,7 +48,7 @@ class MockPromptArchitectAgent(PromptArchitectAgent):
     def process_request(self, request_data: dict) -> PromptChromosome:
         return PromptChromosome(genes=[f"architected_gene_{random.randint(1,1000)}"], fitness_score=0.1)
 
-class MockMutationStrategy(MutationStrategy):
+class MockMutationStrategy(BaseMutationStrategy): # Changed inheritance
     def mutate(self, chromosome: PromptChromosome) -> PromptChromosome:
         mutated_chromosome = chromosome.clone()
         mutated_chromosome.genes.append("mutated_gene")

@@ -8,9 +8,9 @@ from prompthelix.genetics.mutation_strategies import (
     AppendCharStrategy,
     ReverseSliceStrategy,
     PlaceholderReplaceStrategy,
-    NoOperationMutationStrategy,
-    MutationStrategy # For type hinting if needed
+    NoOperationMutationStrategy
 )
+from prompthelix.genetics.strategy_base import BaseMutationStrategy # For type hinting if needed
 
 class TestMutationStrategies(unittest.TestCase):
 

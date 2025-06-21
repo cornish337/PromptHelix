@@ -16,13 +16,14 @@ FALLBACK_KNOWLEDGE_FILE = "architect_knowledge.json"
 
 
 class PromptArchitectAgent(BaseAgent):
-    agent_id = "PromptArchitect"
+    # agent_id class variable can serve as a default if not overridden by pipeline config.
+    agent_id_default = "PromptArchitect"
     agent_description = "Designs initial prompt structures based on requirements or patterns."
     """
     Designs initial prompt structures based on user requirements, 
     system goals, or existing successful prompt patterns.
     """
-    def __init__(self, message_bus=None, settings: Optional[Dict] = None, knowledge_file_path: Optional[str] = None): # Modified signature
+    def __init__(self, agent_id: Optional[str] = None, message_bus=None, settings: Optional[Dict] = None, knowledge_file_path: Optional[str] = None):
         """
         Initializes the PromptArchitectAgent.
         Loads prompt templates and configuration.
@@ -34,10 +35,14 @@ class PromptArchitectAgent(BaseAgent):
                 This is kept for backward compatibility or direct specification,
                 but `settings` dictionary can also provide it via 'knowledge_file_path'.
         """
-        super().__init__(agent_id=self.agent_id, message_bus=message_bus, settings=settings)
+        # Use provided agent_id from orchestrator, fallback to class default if None
+        effective_agent_id = agent_id if agent_id is not None else self.agent_id_default
+        super().__init__(agent_id=effective_agent_id, message_bus=message_bus, settings=settings)
 
         # Load defaults from global AGENT_SETTINGS in case settings dict is missing keys
-        global_defaults = AGENT_SETTINGS.get("PromptArchitectAgent", {})
+        # The settings_key for this agent type is typically "PromptArchitectAgent"
+        settings_key_for_globals = self.settings.get("settings_key_from_pipeline", "PromptArchitectAgent")
+        global_defaults = AGENT_SETTINGS.get(settings_key_for_globals, {})
         llm_provider_default = global_defaults.get("default_llm_provider", "openai")
         llm_model_default = global_defaults.get("default_llm_model", "gpt-3.5-turbo")
 
