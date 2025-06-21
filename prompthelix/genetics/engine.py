@@ -5,7 +5,7 @@ import copy
 import json
 import os
 import random
-import statistics # Added import
+import statistics  # Added import
 
 from typing import TYPE_CHECKING, Optional, Dict  # Ensure Optional is here
 import asyncio  # Added
@@ -845,6 +845,7 @@ class PopulationManager:
         # Allow duck-typed objects in tests by skipping strict isinstance checks
         # Tests often pass MagicMock instances for these dependencies
         from prompthelix.agents.architect import PromptArchitectAgent
+
         if population_size <= 0:
             raise ValueError("Population size must be positive.")
         if elitism_count < 0 or elitism_count > population_size:
@@ -907,7 +908,7 @@ class PopulationManager:
         self,
         event_type: str = "ga_status_update",
         additional_data: Optional[dict] = None,
-        selected_parent_ids: Optional[list[str]] = None, # Added
+        selected_parent_ids: Optional[list[str]] = None,  # Added
     ):  # Added
         if not self.message_bus or not self.message_bus.connection_manager:
             # logger.debug("Message bus or connection manager not available for GA update broadcast.")
@@ -916,32 +917,42 @@ class PopulationManager:
         fittest = self.get_fittest_individual()
         fitness_scores = []
         if self.population:
-            fitness_scores = [c.fitness_score for c in self.population if hasattr(c, 'fitness_score')]
+            fitness_scores = [
+                c.fitness_score for c in self.population if hasattr(c, "fitness_score")
+            ]
 
         # --- Begin added logic for population sample ---
         population_sample_data = []
         if self.population:
             # Ensure population is sorted by fitness (descending)
             # get_fittest_individual might have already sorted it, but to be sure:
-            sorted_population_for_sample = sorted(self.population, key=lambda chromo: chromo.fitness_score, reverse=True)
+            sorted_population_for_sample = sorted(
+                self.population, key=lambda chromo: chromo.fitness_score, reverse=True
+            )
 
-            sample_size = min(len(sorted_population_for_sample), 5) # Take top 5 or fewer
+            sample_size = min(
+                len(sorted_population_for_sample), 5
+            )  # Take top 5 or fewer
             for chromo in sorted_population_for_sample[:sample_size]:
                 processed_genes = []
                 for gene in chromo.genes:
                     gene_str = str(gene)
-                    if len(gene_str) > 50: # Truncate long gene strings
+                    if len(gene_str) > 50:  # Truncate long gene strings
                         gene_str = gene_str[:47] + "..."
                     processed_genes.append(gene_str)
 
-                if len(processed_genes) > 3: # Limit number of genes shown per chromosome
+                if (
+                    len(processed_genes) > 3
+                ):  # Limit number of genes shown per chromosome
                     processed_genes = processed_genes[:3] + ["... (more genes)"]
 
-                population_sample_data.append({
-                    "id": str(chromo.id), # Ensure UUID is string
-                    "genes": processed_genes, # List of strings
-                    "fitness_score": chromo.fitness_score # Float
-                })
+                population_sample_data.append(
+                    {
+                        "id": str(chromo.id),  # Ensure UUID is string
+                        "genes": processed_genes,  # List of strings
+                        "fitness_score": chromo.fitness_score,  # Float
+                    }
+                )
         # --- End added logic for population sample ---
 
         payload = {
@@ -959,10 +970,18 @@ class PopulationManager:
             "fitness_min": min(fitness_scores) if fitness_scores else None,
             "fitness_max": max(fitness_scores) if fitness_scores else None,
             "fitness_mean": statistics.mean(fitness_scores) if fitness_scores else None,
-            "fitness_median": statistics.median(fitness_scores) if fitness_scores else None,
-            "fitness_std_dev": statistics.stdev(fitness_scores) if len(fitness_scores) > 1 else (0.0 if fitness_scores else None),
-            "population_sample": population_sample_data, # Add the new sample data to the payload
-            "selected_parent_ids": selected_parent_ids if selected_parent_ids is not None else [], # Added
+            "fitness_median": (
+                statistics.median(fitness_scores) if fitness_scores else None
+            ),
+            "fitness_std_dev": (
+                statistics.stdev(fitness_scores)
+                if len(fitness_scores) > 1
+                else (0.0 if fitness_scores else None)
+            ),
+            "population_sample": population_sample_data,  # Add the new sample data to the payload
+            "selected_parent_ids": (
+                selected_parent_ids if selected_parent_ids is not None else []
+            ),  # Added
         }
         if additional_data:
             payload.update(additional_data)
@@ -970,10 +989,15 @@ class PopulationManager:
         # Store history for API retrieval
         try:
             from prompthelix import globals as ph_globals
-            ph_globals.ga_history.append({
-                "generation": self.generation_number,
-                "best_fitness": payload.get("best_fitness")
-            })
+
+            ph_globals.ga_history.append(
+                {
+                    "generation": self.generation_number,
+                    "best_fitness": payload.get("best_fitness"),
+                    "fitness_mean": payload.get("fitness_mean"),
+                    "fitness_min": payload.get("fitness_min"),
+                }
+            )
         except Exception:
             pass
 
@@ -1109,8 +1133,8 @@ class PopulationManager:
         task_description: str,
         success_criteria: dict | None = None,
         target_style: str | None = None,
-        db_session: 'DbSession' | None = None,
-        experiment_run: 'GAExperimentRun' | None = None,
+        db_session: "DbSession" | None = None,
+        experiment_run: "GAExperimentRun" | None = None,
     ):
         """
         Orchestrates one generation of evolution: evaluation, selection, crossover, and mutation.
@@ -1122,6 +1146,7 @@ class PopulationManager:
                 StyleOptimizerAgent is available. Defaults to None.
         """
         from prompthelix.services import add_chromosome_record
+
         if self.should_stop:  # Moved this check up, and modified its behavior
             logger.info(
                 f"PopulationManager.evolve_population: Stop requested before starting generation {self.generation_number + 1}. Aborting evolution for this generation."
@@ -1140,7 +1165,7 @@ class PopulationManager:
         self.broadcast_ga_update(
             event_type="ga_generation_started",
             additional_data={"generation": self.generation_number + 1},
-            selected_parent_ids=None, # Explicitly None
+            selected_parent_ids=None,  # Explicitly None
         )  # Added
 
         if not self.population:
@@ -1251,16 +1276,19 @@ class PopulationManager:
         )
         # failed_evaluations_count is correct
 
-
         # Log fitness statistics before sorting
-        if self.population: # Ensure population is not empty
-            fitness_scores = [c.fitness_score for c in self.population if hasattr(c, 'fitness_score')] # Added check for attribute
-            if fitness_scores: # Ensure we have scores to process
+        if self.population:  # Ensure population is not empty
+            fitness_scores = [
+                c.fitness_score for c in self.population if hasattr(c, "fitness_score")
+            ]  # Added check for attribute
+            if fitness_scores:  # Ensure we have scores to process
                 min_fitness = min(fitness_scores)
                 max_fitness = max(fitness_scores)
                 mean_fitness = statistics.mean(fitness_scores)
                 median_fitness = statistics.median(fitness_scores)
-                std_dev_fitness = statistics.stdev(fitness_scores) if len(fitness_scores) > 1 else 0.0
+                std_dev_fitness = (
+                    statistics.stdev(fitness_scores) if len(fitness_scores) > 1 else 0.0
+                )
 
                 logger.info(
                     f"Generation {current_generation_number}: Fitness Stats - "
@@ -1270,10 +1298,13 @@ class PopulationManager:
                     f"StdDev: {std_dev_fitness:.4f}"
                 )
             else:
-                logger.info(f"Generation {current_generation_number}: No valid fitness scores found in population to report statistics.")
+                logger.info(
+                    f"Generation {current_generation_number}: No valid fitness scores found in population to report statistics."
+                )
         else:
-            logger.info(f"Generation {current_generation_number}: Population is empty, no fitness statistics to report.")
-
+            logger.info(
+                f"Generation {current_generation_number}: Population is empty, no fitness statistics to report."
+            )
 
         logger.info(
             f"PopulationManager: Fitness evaluation complete for generation {current_generation_number}."
@@ -1293,7 +1324,7 @@ class PopulationManager:
                 "evaluated_count": successful_evaluations,
                 "failed_count": failed_evaluations_count,
             },
-            selected_parent_ids=None, # Explicitly None
+            selected_parent_ids=None,  # Explicitly None
         )  # Added
 
         # 2. Sort Population by fitness (descending)
@@ -1332,16 +1363,22 @@ class PopulationManager:
         num_offspring_needed = self.population_size - len(new_population)
 
         generated_offspring_count = 0
-        current_generation_selected_parent_ids = [] # Initialize list to store parent IDs
+        current_generation_selected_parent_ids = (
+            []
+        )  # Initialize list to store parent IDs
 
         # Ensure there's a viable population to select from for breeding
         if sorted_population:  # Check if sorted_population is not empty
             while generated_offspring_count < num_offspring_needed:
                 # Selection - logging is inside genetic_operators.selection
                 parent1 = self.genetic_operators.selection(sorted_population)
-                current_generation_selected_parent_ids.append(str(parent1.id)) # Add parent1 ID
+                current_generation_selected_parent_ids.append(
+                    str(parent1.id)
+                )  # Add parent1 ID
                 parent2 = self.genetic_operators.selection(sorted_population)
-                current_generation_selected_parent_ids.append(str(parent2.id)) # Add parent2 ID
+                current_generation_selected_parent_ids.append(
+                    str(parent2.id)
+                )  # Add parent2 ID
 
                 # Crossover - logging is inside genetic_operators.crossover
                 child1, child2 = self.genetic_operators.crossover(parent1, parent2)
@@ -1381,12 +1418,14 @@ class PopulationManager:
         logger.info(
             f"PopulationManager: Evolution complete for generation {self.generation_number}. New population size: {len(self.population)}. Status: {self.status}"
         )
-        unique_parent_ids = list(set(current_generation_selected_parent_ids)) # Get unique parent IDs
+        unique_parent_ids = list(
+            set(current_generation_selected_parent_ids)
+        )  # Get unique parent IDs
 
         self.broadcast_ga_update(
             event_type="ga_generation_complete",
             additional_data={"generation": self.generation_number},
-            selected_parent_ids=unique_parent_ids, # Pass unique parent IDs
+            selected_parent_ids=unique_parent_ids,  # Pass unique parent IDs
         )  # Added
 
     def get_fittest_individual(self) -> PromptChromosome | None:

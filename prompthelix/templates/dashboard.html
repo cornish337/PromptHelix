@@ -183,6 +183,20 @@
                     backgroundColor: 'rgba(99,102,241,0.3)',
                     data: [],
                     tension: 0.1
+                },
+                {
+                    label: 'Average Fitness',
+                    borderColor: 'rgb(16,185,129)',
+                    backgroundColor: 'rgba(16,185,129,0.3)',
+                    data: [],
+                    tension: 0.1
+                },
+                {
+                    label: 'Min Fitness',
+                    borderColor: 'rgb(234,88,12)',
+                    backgroundColor: 'rgba(234,88,12,0.3)',
+                    data: [],
+                    tension: 0.1
                 }
             ]
         };
@@ -316,8 +330,12 @@
 
                 if (currentLabelIndex === chartData.datasets[0].data.length) { // New data point
                     chartData.datasets[0].data.push(parseFloat(data.best_fitness));
+                    chartData.datasets[1].data.push(parseFloat(data.fitness_mean));
+                    chartData.datasets[2].data.push(parseFloat(data.fitness_min));
                 } else if (currentLabelIndex !== -1 && currentLabelIndex < chartData.datasets[0].data.length) { // Update existing data point
                     chartData.datasets[0].data[currentLabelIndex] = parseFloat(data.best_fitness);
+                    chartData.datasets[1].data[currentLabelIndex] = parseFloat(data.fitness_mean);
+                    chartData.datasets[2].data[currentLabelIndex] = parseFloat(data.fitness_min);
                 }
 
 
@@ -496,6 +514,8 @@
                     const history = await response.json();
                     chartData.labels = history.map(h => h.generation);
                     chartData.datasets[0].data = history.map(h => h.best_fitness);
+                    chartData.datasets[1].data = history.map(h => h.fitness_mean);
+                    chartData.datasets[2].data = history.map(h => h.fitness_min);
                 } else {
                     console.error('Failed to fetch GA history:', response.status);
                 }
