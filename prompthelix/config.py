@@ -71,6 +71,10 @@ class Settings:
     DEFAULT_POPULATION_PERSISTENCE_PATH: str = os.getenv("DEFAULT_POPULATION_PERSISTENCE_PATH", os.path.join(KNOWLEDGE_DIR, "ga_population.json"))
     DEFAULT_SAVE_POPULATION_FREQUENCY: int = int(os.getenv("DEFAULT_SAVE_POPULATION_FREQUENCY", "10"))
 
+    # Prometheus metrics
+    PROMETHEUS_METRICS_ENABLED: bool = os.getenv("PROMETHEUS_METRICS_ENABLED", "false").lower() == "true"
+    PROMETHEUS_METRICS_PORT: int = int(os.getenv("PROMETHEUS_METRICS_PORT", "8001"))
+
     # Security settings
     # TODO: Uncomment and set a strong, unique SECRET_KEY for production environments.
     # SECRET_KEY: str = os.getenv("SECRET_KEY", "a_very_secret_key") # For JWT, session management etc.

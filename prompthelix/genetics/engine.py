@@ -967,13 +967,20 @@ class PopulationManager:
         if additional_data:
             payload.update(additional_data)
 
-        # Store history for API retrieval
+        # Store history for API retrieval and update metrics
         try:
             from prompthelix import globals as ph_globals
             ph_globals.ga_history.append({
                 "generation": self.generation_number,
                 "best_fitness": payload.get("best_fitness")
             })
+        except Exception:
+            pass
+
+        try:
+            from prompthelix.utils import update_generation, update_best_fitness
+            update_generation(self.generation_number)
+            update_best_fitness(payload.get("best_fitness"))
         except Exception:
             pass
 
