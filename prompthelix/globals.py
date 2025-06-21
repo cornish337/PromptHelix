@@ -5,7 +5,12 @@ This module should be kept lightweight and free of complex imports
 to avoid circular dependencies.
 """
 from typing import Optional
-from prometheus_client import Gauge
+try:
+    from prometheus_client import Gauge
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
+    class Gauge:  # type: ignore
+        def __init__(self, *args, **kwargs):
+            pass
 # Forward reference for GeneticAlgorithmRunner to avoid circular import issues
 # as experiment_runners.ga_runner will import this file.
 if False: # TYPE_CHECKING can also be used here if preferred
