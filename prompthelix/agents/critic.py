@@ -32,16 +32,12 @@ class PromptCriticAgent(BaseAgent):
         self.load_knowledge()
 
     def _get_default_critique_rules(self):
-        """Returns the default critique rules."""
-        # Provide a simple default rule to satisfy tests expecting non-empty defaults.
-        return [
-            {
-                "name": "Default Placeholder Rule",
-                "pattern": ".*", # Matches anything, effectively a no-op for critique
-                "feedback": "This is a default placeholder critique rule. Consider defining specific rules.",
-                "penalty": 0
-            }
-        ]
+        """Return default critique rules.
+
+        The critic agent should not impose any rules when no knowledge file is
+        present, so the default is simply an empty list.
+        """
+        return []
 
     def load_knowledge(self):
         """
