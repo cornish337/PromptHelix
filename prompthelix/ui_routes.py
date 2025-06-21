@@ -310,6 +310,7 @@ async def view_prompt_ui(request: Request, prompt_id: int, db: Session = Depends
     )
 
 @router.get("/ui/settings", name="view_settings_ui")
+@router.get("/ui/settings/", name="view_settings_ui_alt")
 async def view_settings_ui(
     request: Request,
     db: Session = Depends(get_db),
