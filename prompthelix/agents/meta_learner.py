@@ -251,10 +251,6 @@ class MetaLearnerAgent(BaseAgent):
                 f"Agent '{self.agent_id}' failed to load knowledge due to JSON decoding error: {e}. Starting with an empty knowledge base.",
                 exc_info=True,
             )
-            logging.error(
-                f"Agent '{self.agent_id}' failed to load knowledge due to JSON decoding error: {e}. Starting with an empty knowledge base.",
-                exc_info=True,
-            )
             self.knowledge_base = self._default_knowledge_base_structure.copy()
             self.data_log = []
         except IOError as e:
@@ -262,18 +258,10 @@ class MetaLearnerAgent(BaseAgent):
                 f"Agent '{self.agent_id}' failed to load knowledge due to IOError: {e}. Starting with an empty knowledge base.",
                 exc_info=True,
             )
-            logging.error(
-                f"Agent '{self.agent_id}' failed to load knowledge due to IOError: {e}. Starting with an empty knowledge base.",
-                exc_info=True,
-            )
             self.knowledge_base = self._default_knowledge_base_structure.copy()
             self.data_log = []
         except Exception as e:
             logger.error(
-                f"Agent '{self.agent_id}' encountered an unexpected error while loading knowledge: {e}. Starting with an empty knowledge base.",
-                exc_info=True,
-            )
-            logging.error(
                 f"Agent '{self.agent_id}' encountered an unexpected error while loading knowledge: {e}. Starting with an empty knowledge base.",
                 exc_info=True,
             )

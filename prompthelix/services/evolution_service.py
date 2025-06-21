@@ -42,3 +42,19 @@ def add_chromosome_record(db: DbSession, run: GAExperimentRun, generation_number
 def get_chromosomes_for_run(db: DbSession, run_id: int) -> List[GAChromosome]:
     return db.query(GAChromosome).filter(GAChromosome.run_id == run_id).all()
 
+
+def get_experiment_runs(db: DbSession, skip: int = 0, limit: int = 100) -> List[GAExperimentRun]:
+    """Retrieve a paginated list of GA experiment runs ordered by creation time."""
+    return (
+        db.query(GAExperimentRun)
+        .order_by(GAExperimentRun.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
+
+def get_experiment_run(db: DbSession, run_id: int) -> Optional[GAExperimentRun]:
+    """Return a single GA experiment run by ID, if it exists."""
+    return db.query(GAExperimentRun).filter(GAExperimentRun.id == run_id).first()
+

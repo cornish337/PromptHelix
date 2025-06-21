@@ -29,8 +29,15 @@ class BaseAgent(abc.ABC):
         self.agent_id = agent_id
         self.message_bus = message_bus
         self.settings: Dict = settings if settings is not None else {}
-        self.messages_processed: int = 0 # Added
-        self.errors_encountered: int = 0 # Added
+        self.messages_processed: int = 0  # Added
+        self.errors_encountered: int = 0  # Added
+        # Track the last operation an agent performed. Subclasses should update
+        # this value when meaningful actions occur.
+        self.last_operation_type: Optional[str] = None
+        # Maintain running totals for fitness change contributions so an average
+        # can be reported via publish_metrics.
+        self._total_fitness_change: float = 0.0
+        self._fitness_change_events: int = 0
 
     @abc.abstractmethod
     def process_request(self, request_data: dict) -> dict:
@@ -99,16 +106,31 @@ class BaseAgent(abc.ABC):
         else:
             logger.warning(f"Agent '{self.agent_id}': No message bus available to subscribe to '{message_type}'.")
 
+    def record_fitness_change(self, delta: float, operation_type: Optional[str] = None):
+        """Record a change in fitness attributable to this agent."""
+        self._total_fitness_change += delta
+        self._fitness_change_events += 1
+        if operation_type:
+            self.last_operation_type = operation_type
+
     def publish_metrics(self):
         # Publishes current agent metrics via the message bus's connection manager.
         if hasattr(self, 'message_bus') and self.message_bus and \
            hasattr(self.message_bus, 'connection_manager') and self.message_bus.connection_manager:
 
+            avg_fitness_change = (
+                self._total_fitness_change / self._fitness_change_events
+                if self._fitness_change_events
+                else 0.0
+            )
+
             payload_data = {
                 "agent_id": self.agent_id,
                 "messages_processed": self.messages_processed,
                 "errors_encountered": self.errors_encountered,
-                "timestamp": datetime.utcnow().isoformat() # Add a timestamp for the metric update
+                "last_operation_type": self.last_operation_type,
+                "average_fitness_change": avg_fitness_change,
+                "timestamp": datetime.utcnow().isoformat(),  # Timestamp for the metric update
             }
 
             try:

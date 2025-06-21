@@ -53,6 +53,11 @@ def main_cli():
         "-p",
         help="Optional directory or pattern to discover tests under",
     )
+    test_parser.add_argument(
+        "--interactive",
+        action="store_true",
+        help="Run interactive tests located under prompthelix/tests/interactive",
+    )
 
     # "run" command
     run_parser = subparsers.add_parser("run", help="Run the PromptHelix application or a specific module")
@@ -82,6 +87,16 @@ def main_cli():
     check_parser.add_argument("--provider", default="openai", help="LLM provider name")
     check_parser.add_argument("--model", help="Model name for the provider")
 
+    # "interactive" command for running interactive pytest sessions
+    interactive_parser = subparsers.add_parser(
+        "interactive", help="Run interactive tests that require user input"
+    )
+    interactive_parser.add_argument(
+        "--path",
+        "-p",
+        help="Optional directory or file containing interactive tests",
+    )
+
 
     args = parser.parse_args()
 
@@ -91,7 +106,10 @@ def main_cli():
             print(f"CLI: Running tests from {args.path}...")
             suite = loader.discover(start_dir=args.path)
         else:
-            print("CLI: Running all tests...")
+            if args.interactive:
+                print("CLI: Running interactive tests...")
+            else:
+                print("CLI: Running all tests...")
             # Determine the correct start_dir relative to the project root
             # Assuming cli.py is in prompthelix/ and tests are in prompthelix/tests
             # For the discover method, the path should be relative to the project root if running `python -m prompthelix.cli`
@@ -112,7 +130,10 @@ def main_cli():
 
             # Determine the project root path (parent of the 'prompthelix' directory)
             project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-            start_dir = os.path.join(project_root, 'prompthelix', 'tests')
+            if args.interactive:
+                start_dir = os.path.join(project_root, 'prompthelix', 'tests', 'interactive')
+            else:
+                start_dir = os.path.join(project_root, 'prompthelix', 'tests')
 
             # A more common way if 'prompthelix' is a package and tests are inside it:
             # suite = loader.discover('prompthelix.tests', pattern='test_*.py', top_level_dir=project_root)
@@ -123,7 +144,7 @@ def main_cli():
                 print(f"Project root detected as: {project_root}", file=sys.stderr)
                 print(f"Current __file__ is: {__file__}", file=sys.stderr)
                 # Fallback if the structure is different, e.g., /app/tests
-                alt_start_dir = os.path.join(project_root, 'tests')
+                alt_start_dir = os.path.join(project_root, 'tests', 'interactive') if args.interactive else os.path.join(project_root, 'tests')
                 if os.path.isdir(alt_start_dir):
                     start_dir = alt_start_dir
                 else:
@@ -152,7 +173,8 @@ def main_cli():
                             file=sys.stderr,
                         )
                         # This assumes CWD is project root
-                        suite = loader.discover(start_dir='prompthelix/tests')
+                        package_dir = 'prompthelix/tests/interactive' if args.interactive else 'prompthelix/tests'
+                        suite = loader.discover(start_dir=package_dir)
 
             else:  # start_dir (e.g. /app/prompthelix/tests) was found
                 print(f"Using path discovery from: {start_dir}")
@@ -298,6 +320,19 @@ def main_cli():
             logging.exception("CLI: LLM connectivity check failed")
             print(f"CLI: Failed to contact {args.provider}: {e}", file=sys.stderr)
             sys.exit(1)
+
+    elif args.command == "interactive":
+        try:
+            import pytest
+        except ImportError:
+            print("pytest is required for interactive tests", file=sys.stderr)
+            sys.exit(1)
+
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        target = args.path if args.path else os.path.join(project_root, "tests", "interactive")
+        print(f"CLI: Running interactive tests from {target}...")
+        exit_code = pytest.main([target, "-s"])
+        sys.exit(exit_code)
 
     # No specific action needed for --version as argparse handles it
     elif hasattr(args, 'version') and args.version:
