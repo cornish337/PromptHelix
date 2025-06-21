@@ -34,7 +34,9 @@ class GAChromosome(Base):
     fitness_score = Column(Float, nullable=False)
     evaluation_details = Column(JSON, nullable=True)
     parent_ids = Column(JSON, nullable=True)
-    mutation_strategy = Column(String, nullable=True)
+    codex/extend-promptchromosome-and-update-related-logic
+    mutation_operator = Column(String, nullable=True)
+
     created_at = Column(DateTime, default=datetime.utcnow)
 
     run = relationship("GAExperimentRun", back_populates="chromosomes")

@@ -40,8 +40,10 @@ def add_chromosome_record(db: DbSession, run: GAExperimentRun, generation_number
         genes=chromosome.genes,
         fitness_score=chromosome.fitness_score,
         evaluation_details=getattr(chromosome, "evaluation_details", None),
-        parent_ids=getattr(chromosome, "parent_ids", None),
-        mutation_strategy=getattr(chromosome, "mutation_strategy", None),
+
+        parent_ids=getattr(chromosome, "parents", []),
+        mutation_operator=getattr(chromosome, "mutation_operator", None),
+
     )
     db.add(record)
     db.commit()
@@ -59,6 +61,7 @@ def add_generation_metrics(
         avg_fitness=metrics.get("avg_fitness"),
         population_size=metrics.get("population_size"),
         diversity=metrics.get("diversity"),
+
     )
     db.add(record)
     db.commit()

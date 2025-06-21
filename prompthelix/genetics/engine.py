@@ -60,6 +60,11 @@ class PromptChromosome:
         self,
         genes: list | None = None,
         fitness_score: float = 0.0,
+
+        parents: Optional[list[str]] | None = None,
+        mutation_operator: str | None = None,
+    ):
+
         parents: list[str] | None = None,
         mutation_op: str | None = None,
     ):
@@ -83,6 +88,7 @@ class PromptChromosome:
         self.mutation_op: str | None = mutation_op
 """
 
+
         """
         Initializes a PromptChromosome.
 
@@ -100,13 +106,20 @@ class PromptChromosome:
         self.genes: list = [] if genes is None else genes
         self.fitness_score: float = fitness_score
 
+
+        self.parents: list[str] = parents or []
+        self.mutation_operator: str | None = mutation_operator
+
+""" Old
         self.parent_ids: list[str] | None = parent_ids
         self.mutation_strategy_applied: str | None = mutation_strategy_applied
         self.evaluation_details: dict = {} # Already present, just noting
-""" Old
+
+
         self.parent_ids: list[str] = parent_ids or []
         self.mutation_strategy: str | None = mutation_strategy
-""" Old
+"""
+
 
 
     def calculate_fitness(self) -> float:
@@ -156,13 +169,20 @@ class PromptChromosome:
             genes=cloned_genes,
             fitness_score=self.fitness_score,
 
+
+            parents=list(self.parents),
+            mutation_operator=self.mutation_operator,
+
+""" Old
             parent_ids=copy.deepcopy(self.parent_ids) if self.parent_ids else None, # Deepcopy list
             mutation_strategy_applied=self.mutation_strategy_applied
         )
         # The clone gets a new ID, so it's distinct from its source.
-""" Old
+
+
             parent_ids=list(self.parent_ids),
             mutation_strategy=self.mutation_strategy,
+
         )
         cloned_chromosome.mutation_op = None
 """
@@ -353,15 +373,25 @@ class GeneticOperators:
                 genes=child1_genes,
                 fitness_score=0.0,
 
+                parents=[str(parent1.id), str(parent2.id)],
+                mutation_operator=None,
+
+
                 parent_ids=[str(parent1.id), str(parent2.id)],
                 mutation_strategy_applied="crossover"
+
 
             )
             child2 = PromptChromosome(
                 genes=child2_genes,
                 fitness_score=0.0,
+
+                parents=[str(parent1.id), str(parent2.id)],
+                mutation_operator=None,
+=======
                 parent_ids=[str(parent1.id), str(parent2.id)],
                 mutation_strategy_applied="crossover"
+
 
             )
             log_msg = f"Crossover performed between Parent {parent1.id} and Parent {parent2.id}. Child1 ID {child1.id}, Child2 ID {child2.id}."
@@ -396,6 +426,19 @@ class GeneticOperators:
             child2 = parent2.clone()
             child2.fitness_score = 0.0
 
+
+            child1.parents = [str(parent1.id), str(parent2.id)]
+            child2.parents = [str(parent1.id), str(parent2.id)]
+            child1.mutation_operator = None
+            child2.mutation_operator = None
+"""
+            child1.parent_ids = [str(parent1.id)]
+            child2.parent_ids = [str(parent2.id)]
+"""
+            logger.debug(
+                f"Crossover skipped (rate {crossover_rate}). Cloned Parent {parent1.id} to Child {child1.id}, Parent {parent2.id} to Child {child2.id}."
+            )
+"""old
             log_msg = f"Crossover skipped (rate {crossover_rate}). Cloned Parent {parent1.id} to Child {child1.id}, Parent {parent2.id} to Child {child2.id}."
             logger.debug(log_msg)
             # Logging for "clone" operation if desired, distinct from crossover
@@ -416,6 +459,7 @@ class GeneticOperators:
                 "details": log_msg
             })
 
+"""
         return child1, child2
 
 
@@ -503,6 +547,10 @@ class GeneticOperators:
                 mutated_chromosome_overall.mutation_strategy_applied = selected_strategy.__class__.__name__
 
                 mutation_applied_this_cycle = True  # A strategy was applied
+                mutated_chromosome_overall.parents = list(chromosome.parents)
+                mutated_chromosome_overall.mutation_operator = (
+                    selected_strategy.__class__.__name__
+                )
 
                 log_msg = f"Mutation strategy '{selected_strategy.__class__.__name__}' applied to chromosome {chromosome.id} (clone ID: {working_chromosome_clone.id}). New/mutated chromosome ID: {mutated_chromosome_overall.id}"
                 logger.debug(log_msg)
@@ -526,12 +574,15 @@ class GeneticOperators:
                 logger.warning(
                     "Mutation selected to occur, but no mutation strategies are defined in GeneticOperators."
                 )
-                mutated_chromosome_overall = (
-                    chromosome.clone()
-                )  # Still clone, reset fitness
+                mutated_chromosome_overall = chromosome.clone()
                 mutated_chromosome_overall.fitness_score = 0.0
+
+                mutated_chromosome_overall.parents = list(chromosome.parents)
+                mutated_chromosome_overall.mutation_operator = None
+
                 mutated_chromosome_overall.parent_ids = list(chromosome.parent_ids)
                 mutated_chromosome_overall.mutation_op = None
+
 
 
         # If no mutation was applied by random chance (missed mutation_rate),
@@ -539,9 +590,13 @@ class GeneticOperators:
         if not mutation_applied_this_cycle:
             mutated_chromosome_overall = chromosome.clone()
             mutated_chromosome_overall.fitness_score = 0.0
+            mutated_chromosome_overall.parents = list(chromosome.parents)
+            mutated_chromosome_overall.mutation_operator = None
+
             mutated_chromosome_overall.parent_ids = list(chromosome.parent_ids)
             mutated_chromosome_overall.mutation_strategy = None
             mutated_chromosome_overall.mutation_op = None
+
 
             # No specific mutation strategy was chosen via mutation_rate
 
@@ -576,6 +631,11 @@ class GeneticOperators:
                         else getattr(chromosome, "mutation_strategy", None)
                     )
 
+                    mutated_chromosome_overall.parents = list(chromosome.parents)
+                    # Preserve chosen mutation operator if any
+                    if mutation_applied_this_cycle:
+                        mutated_chromosome_overall.mutation_operator = selected_strategy.__class__.__name__
+
                     logger.info(
                         f"Chromosome {mutated_chromosome_overall.id} successfully style-optimized to target style '{target_style}'."
                     )
@@ -595,6 +655,19 @@ class GeneticOperators:
                 f"Target style '{target_style}' provided for mutation, but StyleOptimizerAgent is not available. Skipping style optimization."
             )
 
+
+"""        logger.info(
+            json.dumps(
+                {
+                    "child": str(mutated_chromosome_overall.id),
+                    "parents": mutated_chromosome_overall.parents,
+                    "mutation": mutated_chromosome_overall.mutation_operator,
+                }
+            )
+        )
+
+=======
+"""
         mutated_chromosome_overall.parents = list(chromosome.parents)
         if mutation_applied_this_cycle:
             mutated_chromosome_overall.mutation_op = selected_strategy_name
@@ -608,6 +681,7 @@ class GeneticOperators:
                 }
             )
         )
+
         return mutated_chromosome_overall
 
 
