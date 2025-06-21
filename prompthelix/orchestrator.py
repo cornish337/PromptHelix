@@ -32,7 +32,7 @@ from prompthelix.config import settings, ENABLE_WANDB_LOGGING, WANDB_PROJECT_NAM
 # "old"
 
 from prompthelix import config as global_ph_config # Renamed to avoid conflict with local 'config' variable
-from prompthelix.config import settings as global_settings_obj # Added import, renamed for clarity
+from prompthelix.config import settings as global_settings_obj, AGENT_PIPELINE_CONFIG # Import AGENT_PIPELINE_CONFIG directly
 from prompthelix.genetics.fitness_base import BaseFitnessEvaluator # For type hinting
 
 from prompthelix.utils import start_exporter_if_enabled, update_generation, update_best_fitness
@@ -181,7 +181,7 @@ def main_ga_loop(
     loaded_agents: Dict[str, BaseAgent] = {}
     agent_names: List[str] = []
 
-    for agent_conf in global_settings_obj.AGENT_PIPELINE_CONFIG:
+    for agent_conf in AGENT_PIPELINE_CONFIG: # Use the directly imported AGENT_PIPELINE_CONFIG
         class_path = agent_conf.get("class_path")
         agent_id = agent_conf.get("id")
         settings_key = agent_conf.get("settings_key")
@@ -199,7 +199,10 @@ def main_ga_loop(
     loaded_agents: Dict[str, BaseAgent] = {}
     agent_names: List[str] = []
 
-    for agent_conf in global_settings_obj.AGENT_PIPELINE_CONFIG:
+    # This loop appears to be a duplicate of the one starting around line 184.
+    # It should also use the directly imported AGENT_PIPELINE_CONFIG.
+    # TODO: Investigate if this entire block is redundant.
+    for agent_conf in AGENT_PIPELINE_CONFIG: # Use the directly imported AGENT_PIPELINE_CONFIG
         class_path = agent_conf.get("class_path")
         agent_id = agent_conf.get("id")
         settings_key = agent_conf.get("settings_key")

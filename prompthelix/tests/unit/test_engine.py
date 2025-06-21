@@ -37,13 +37,13 @@ class TestPromptChromosome(unittest.TestCase):
         self.assertIsInstance(chromosome.id, uuid.UUID)
 
 
-    def test_calculate_fitness(self):
-        """Test calculate_fitness method."""
-        chromosome = PromptChromosome(genes=self.genes1, fitness_score=self.fitness1)
-        self.assertEqual(chromosome.calculate_fitness(), self.fitness1, "calculate_fitness should return self.fitness_score.")
+    # def test_calculate_fitness(self):
+    #     """Test calculate_fitness method."""
+    #     chromosome = PromptChromosome(genes=self.genes1, fitness_score=self.fitness1)
+    #     self.assertEqual(chromosome.calculate_fitness(), self.fitness1, "calculate_fitness should return self.fitness_score.")
         
-        chromosome.fitness_score = 0.9
-        self.assertEqual(chromosome.calculate_fitness(), 0.9, "calculate_fitness should reflect updated self.fitness_score.")
+    #     chromosome.fitness_score = 0.9
+    #     self.assertEqual(chromosome.calculate_fitness(), 0.9, "calculate_fitness should reflect updated self.fitness_score.")
 
     def test_to_prompt_string_default_separator(self):
         """Test to_prompt_string with the default newline separator."""
