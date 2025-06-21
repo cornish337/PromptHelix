@@ -33,24 +33,12 @@ def get_db():
         db.close()
 
 def init_db():
+    """Initialize database tables if they do not exist."""
 
     # Logging is configured centrally by setup_logging() in main.py or cli.py
     logger = logging.getLogger(__name__)
     logger.info("Initializing database...")
     logger.info(f"Using database URL: {DATABASE_URL}")
-
-
-""" old
-    logger = logging.getLogger(__name__)  # Added logger instance
-
-    if not logging.getLogger().hasHandlers():
-        setup_logging(debug=settings.DEBUG)
-    logger = logging.getLogger(__name__)
-
-
-    logger.info("Initializing database...")  # Added log message
-    logger.info(f"Using database URL: {DATABASE_URL}") # Added log message
-"""
 
     Base.metadata.create_all(bind=engine)
     logger.info("Database tables checked/created.")
