@@ -1,4 +1,12 @@
-from sqlalchemy import Column, Integer, DateTime, Float, ForeignKey, String, JSON
+from sqlalchemy import (
+    Column,
+    Integer,
+    DateTime,
+    Float,
+    ForeignKey,
+    String,
+    JSON,
+)
 from sqlalchemy.orm import relationship
 from datetime import datetime
 
@@ -30,4 +38,20 @@ class GAChromosome(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     run = relationship("GAExperimentRun", back_populates="chromosomes")
+
+
+class GAGenerationMetrics(Base):
+    """Stores summary metrics for each GA generation."""
+
+    __tablename__ = "ga_generation_metrics"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    run_id = Column(Integer, ForeignKey("ga_experiment_runs.id"), nullable=False)
+    generation_number = Column(Integer, nullable=False)
+    best_fitness = Column(Float, nullable=False)
+    avg_fitness = Column(Float, nullable=False)
+    population_size = Column(Integer, nullable=False)
+    diversity = Column(JSON, nullable=True)
+
+    run = relationship("GAExperimentRun")
 

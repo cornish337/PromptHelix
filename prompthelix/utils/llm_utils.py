@@ -17,6 +17,7 @@ from openai import (
     RateLimitError as OpenAIRateLimitError,
     AuthenticationError as OpenAIAuthenticationError,
     APIConnectionError as OpenAIAPIConnectionError,
+    AsyncOpenAI, # Added AsyncOpenAI
 )
 try:  # pragma: no cover – support both old and new OpenAI SDKs
     from openai import InvalidRequestError as OpenAIInvalidRequestError
@@ -26,7 +27,8 @@ except ImportError:  # pragma: no cover
 
 import anthropic
 # Renamed Anthropic client import to avoid conflict with the error type
-from anthropic import Anthropic as AnthropicClient, AnthropicError, APIError as AnthropicAPIError, RateLimitError as AnthropicRateLimitError, AuthenticationError as AnthropicAuthenticationError, APIStatusError as AnthropicAPIStatusError, APIConnectionError as AnthropicAPIConnectionError
+from anthropic import AnthropicError, APIError as AnthropicAPIError, RateLimitError as AnthropicRateLimitError, AuthenticationError as AnthropicAuthenticationError, APIStatusError as AnthropicAPIStatusError, APIConnectionError as AnthropicAPIConnectionError
+from anthropic import AsyncAnthropic as AsyncAnthropicClient # Added AsyncAnthropicClient
 
 import google.generativeai as genai
 from google.api_core import exceptions as google_exceptions
@@ -53,24 +55,24 @@ def list_available_llms(db: Session | None = None) -> list[str]:
             services.append("GOOGLE")
     return services
 
-def call_openai_api(prompt: str, model: str = "gpt-3.5-turbo", db: Session = None) -> str:
+async def call_openai_api(prompt: str, model: str = "gpt-3.5-turbo", db: Session = None) -> str: # Changed to async def
     api_key = get_openai_api_key(db)
 
     if not api_key:
         logger.warning("OpenAI API key not configured.")
         return "API_KEY_MISSING_ERROR"
 
-    client = openai.OpenAI(api_key=api_key)
-    logger.info(f"Calling OpenAI API with model {model}. Prompt snippet: {prompt[:100]}...")
+    client = AsyncOpenAI(api_key=api_key) # Changed to AsyncOpenAI
+    logger.info(f"Calling AsyncOpenAI API with model {model}. Prompt snippet: {prompt[:100]}...")
     try:
-        response = client.chat.completions.create(
+        response = await client.chat.completions.acreate( # Changed to acreate and added await
             model=model,
             messages=[{"role": "user", "content": prompt}],
         )
         content = response.choices[0].message.content.strip()
         return content
     except OpenAIRateLimitError as e:
-        logger.error(f"OpenAI API RateLimitError: {e}")
+        logger.error(f"AsyncOpenAI API RateLimitError: {e}")
         return "RATE_LIMIT_ERROR"
     except OpenAIAuthenticationError as e:
         logger.error(f"OpenAI API AuthenticationError: {e}")
@@ -91,19 +93,19 @@ def call_openai_api(prompt: str, model: str = "gpt-3.5-turbo", db: Session = Non
         logger.error(f"An unexpected error occurred during OpenAI API call: {e}", exc_info=True)
         return "UNEXPECTED_OPENAI_CALL_ERROR"
 
-def call_claude_api(prompt: str, model: str = "claude-2", db: Session = None) -> str:
+async def call_claude_api(prompt: str, model: str = "claude-2", db: Session = None) -> str: # Changed to async def
     api_key = get_anthropic_api_key(db)
 
     if not api_key:
         logger.warning("Anthropic API key not configured.")
         return "API_KEY_MISSING_ERROR"
 
-    client = AnthropicClient(api_key=api_key) # Use aliased client
-    logger.info(f"Calling Anthropic Claude API with model {model}. Prompt snippet: {prompt[:100]}...")
+    client = AsyncAnthropicClient(api_key=api_key) # Changed to AsyncAnthropicClient
+    logger.info(f"Calling AsyncAnthropic Claude API with model {model}. Prompt snippet: {prompt[:100]}...")
     try:
-        response = client.messages.create(
+        response = await client.messages.acreate( # Changed to acreate and added await
             model=model,
-            max_tokens=1024,
+            max_tokens=1024, # Assuming acreate supports max_tokens directly, or it's part of model config
             messages=[{"role": "user", "content": prompt}],
         )
         if response.content and isinstance(response.content, list) and len(response.content) > 0:
@@ -137,18 +139,18 @@ def call_claude_api(prompt: str, model: str = "claude-2", db: Session = None) ->
         logger.error(f"An unexpected error occurred during Anthropic API call: {e}", exc_info=True)
         return "UNEXPECTED_ANTHROPIC_CALL_ERROR"
 
-def call_google_api(prompt: str, model: str = "gemini-pro", db: Session = None) -> str:
+async def call_google_api(prompt: str, model: str = "gemini-pro", db: Session = None) -> str: # Changed to async def
     api_key = get_google_api_key(db)
 
     if not api_key:
         logger.warning("Google API key not configured.")
         return "API_KEY_MISSING_ERROR"
 
-    genai.configure(api_key=api_key)
+    genai.configure(api_key=api_key) # This is synchronous, should be fine to call once.
     model_client = genai.GenerativeModel(model)
-    logger.info(f"Calling Google Generative AI with model {model}. Prompt snippet: {prompt[:100]}...")
+    logger.info(f"Calling Async Google Generative AI with model {model}. Prompt snippet: {prompt[:100]}...")
     try:
-        response = model_client.generate_content(prompt)
+        response = await model_client.generate_content_async(prompt) # Changed to generate_content_async
         # Check response content and prompt feedback carefully
         if not response.parts: # No parts usually means blocked or empty
             if hasattr(response, 'prompt_feedback') and response.prompt_feedback.block_reason:
@@ -201,8 +203,8 @@ def call_google_api(prompt: str, model: str = "gemini-pro", db: Session = None) 
             return "GOOGLE_SDK_ERROR"
         return "UNEXPECTED_GOOGLE_CALL_ERROR"
 
-def call_llm_api(prompt: str, provider: str, model: Optional[str] = None, db: Session = None) -> str:
-    logger.info(f"call_llm_api invoked with provider: {provider}, model: {model}")
+async def call_llm_api(prompt: str, provider: str, model: Optional[str] = None, db: Session = None) -> str: # Changed to async def
+    logger.info(f"Async call_llm_api invoked with provider: {provider}, model: {model}")
     provider_lower = provider.lower()
     timestamp = datetime.datetime.now().isoformat()
 
@@ -230,15 +232,15 @@ def call_llm_api(prompt: str, provider: str, model: Optional[str] = None, db: Se
 
     try:
         if provider_lower == "openai":
-            result = call_openai_api(prompt, model=determined_model, db=db)
+            result = await call_openai_api(prompt, model=determined_model, db=db) # Added await
             if result in ["API_KEY_MISSING_ERROR", "RATE_LIMIT_ERROR", "AUTHENTICATION_ERROR", "API_CONNECTION_ERROR", "INVALID_REQUEST_ERROR", "API_ERROR", "OPENAI_ERROR", "UNEXPECTED_OPENAI_CALL_ERROR"]:
                 error_message_for_log = result
         elif provider_lower == "anthropic":
-            result = call_claude_api(prompt, model=determined_model, db=db)
+            result = await call_claude_api(prompt, model=determined_model, db=db) # Added await
             if result in ["API_KEY_MISSING_ERROR", "RATE_LIMIT_ERROR", "AUTHENTICATION_ERROR", "API_STATUS_ERROR", "API_CONNECTION_ERROR", "API_ERROR", "ANTHROPIC_ERROR", "UNEXPECTED_ANTHROPIC_CALL_ERROR", "MALFORMED_CLAUDE_RESPONSE_CONTENT", "EMPTY_CLAUDE_RESPONSE"]:
                 error_message_for_log = result
         elif provider_lower == "google":
-            result = call_google_api(prompt, model=determined_model, db=db)
+            result = await call_google_api(prompt, model=determined_model, db=db) # Added await
             google_error_conditions = [
                 "API_KEY_MISSING_ERROR", "RATE_LIMIT_ERROR", "AUTHENTICATION_ERROR",
                 "INVALID_ARGUMENT_ERROR", "API_SERVER_ERROR", "API_ERROR",
@@ -282,5 +284,5 @@ def call_llm_api(prompt: str, provider: str, model: Optional[str] = None, db: Se
 
 
 # Backwards compatibility for older tests
-def call_llm_api_directly(prompt: str, provider: str, model: Optional[str] = None, db: Session = None) -> str:
-    return call_llm_api(prompt, provider, model, db)
+async def call_llm_api_directly(prompt: str, provider: str, model: Optional[str] = None, db: Session = None) -> str: # Changed to async def
+    return await call_llm_api(prompt, provider, model, db) # Added await
