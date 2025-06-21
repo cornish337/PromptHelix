@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Create New User</h1>
+{% if message %}
+<p class="success-message">{{ message }}</p>
+{% endif %}
+{% if error %}
+<p class="error-message">{{ error }}</p>
+{% endif %}
+<form method="post" action="{{ url_for('admin_create_user_submit') }}">
+    <div>
+        <label for="username">Username:</label>
+        <input type="text" id="username" name="username" required>
+    </div>
+    <div>
+        <label for="email">Email:</label>
+        <input type="email" id="email" name="email" required>
+    </div>
+    <div>
+        <label for="password">Password:</label>
+        <input type="password" id="password" name="password" required>
+    </div>
+    <div>
+        <button type="submit">Create User</button>
+    </div>
+</form>
+{% endblock %}

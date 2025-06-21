@@ -372,6 +372,42 @@ async def view_settings_ui(
 async def view_settings_ui_alias(request: Request):
     return RedirectResponse(url=str(request.url_for("view_settings_ui")))
 
+
+@router.get("/admin/users/new", response_class=HTMLResponse, name="admin_create_user_form")
+async def admin_create_user_form(
+    request: Request,
+    current_user: UserModel = Depends(get_current_user_ui),
+    message: Optional[str] = Query(None),
+    error: Optional[str] = Query(None)
+):
+    return templates.TemplateResponse(
+        "create_user.html",
+        {"request": request, "message": message, "error": error}
+    )
+
+
+@router.post("/admin/users/new", name="admin_create_user_submit")
+async def admin_create_user_submit(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user_ui),
+    username: str = Form(...),
+    email: str = Form(...),
+    password: str = Form(...)
+):
+    if user_service.get_user_by_username(db, username=username):
+        redirect_url = str(request.url_for("admin_create_user_form")) + "?error=Username already exists."
+        return RedirectResponse(url=redirect_url, status_code=HTTP_303_SEE_OTHER)
+    if user_service.get_user_by_email(db, email=email):
+        redirect_url = str(request.url_for("admin_create_user_form")) + "?error=Email already exists."
+        return RedirectResponse(url=redirect_url, status_code=HTTP_303_SEE_OTHER)
+
+    user_data = schemas.UserCreate(username=username, email=email, password=password)
+    user_service.create_user(db, user_create=user_data)
+
+    redirect_url = str(request.url_for("admin_create_user_form")) + f"?message=User {username} created successfully."
+    return RedirectResponse(url=redirect_url, status_code=HTTP_303_SEE_OTHER)
+
 @router.post("/settings/api_keys", name="save_api_keys_settings")
 async def save_api_keys_settings(
     request: Request,
