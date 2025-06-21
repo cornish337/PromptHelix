@@ -23,11 +23,17 @@ import importlib # Added for dynamic class loading
 from typing import List, Optional, Dict, Type # Added Type
 from prompthelix.enums import ExecutionMode
 from prompthelix.utils.config_utils import update_settings # Assuming a utility for deep merging configs
+
+from prompthelix import config as global_ph_config # Renamed to avoid conflict with local 'config' variable
+from prompthelix.config import settings as global_settings_obj # Added import, renamed for clarity
+from prompthelix.genetics.fitness_base import BaseFitnessEvaluator # For type hinting
+
 from prompthelix.utils import start_exporter_if_enabled, update_generation, update_best_fitness
 from prompthelix import config as global_ph_config  # renamed to avoid clash with local `config`
 from prompthelix.config import settings as global_settings_obj  # for mutation / selection / crossover strategy classes
 from prompthelix.config import settings  # for WANDB / MLflow keys, etc.
 from prompthelix.genetics.fitness_base import BaseFitnessEvaluator  # fitness-evaluator ABC
+
 
 
 logger = logging.getLogger(__name__)
@@ -107,6 +113,7 @@ def main_ga_loop(
     if llm_settings_override:
         logger.info("LLM settings have been updated with overrides for this session.")
 
+
     # 1. Instantiate Agents from AGENT_PIPELINE_CONFIG
     logger.info("Initializing agents from AGENT_PIPELINE_CONFIG...")
     loaded_agents: Dict[str, BaseAgent] = {}
@@ -123,6 +130,25 @@ def main_ga_loop(
 
         logger.info(f"Loading agent '{agent_id}' from class path '{class_path}' using settings key '{settings_key}'.")
 
+"""
+
+    # 1. Instantiate Agents from AGENT_PIPELINE_CONFIG
+    logger.info("Initializing agents from AGENT_PIPELINE_CONFIG...")
+    loaded_agents: Dict[str, BaseAgent] = {}
+    agent_names: List[str] = []
+
+    for agent_conf in global_settings_obj.AGENT_PIPELINE_CONFIG:
+        class_path = agent_conf.get("class_path")
+        agent_id = agent_conf.get("id")
+        settings_key = agent_conf.get("settings_key")
+
+        if not all([class_path, agent_id, settings_key]):
+            logger.error(f"Invalid agent configuration: {agent_conf}. Skipping.")
+            continue
+
+        logger.info(f"Loading agent '{agent_id}' from class path '{class_path}' using settings key '{settings_key}'.")
+
+"""
         try:
             module_path_str, class_name_str = class_path.rsplit('.', 1)
             module = importlib.import_module(module_path_str)

@@ -271,17 +271,19 @@ class GeneticOperators:
     def selection(self, population: list[PromptChromosome], **kwargs) -> PromptChromosome:
         """
         Selects an individual from the population using the configured selection strategy.
+
         """
         # Pass through kwargs like tournament_size to the strategy's select method
         return self.selection_strategy.select(population, **kwargs)
 
-
     def crossover(self, parent1: PromptChromosome, parent2: PromptChromosome, **kwargs) -> tuple[PromptChromosome, PromptChromosome]:
         """
+
         Performs crossover using the configured crossover strategy.
         """
         # Pass through kwargs like crossover_rate
         return self.crossover_strategy.crossover(parent1, parent2, **kwargs)
+
 """
                 child1_genes.extend(parent1.genes[:crossover_point])
                 child1_genes.extend(parent2.genes[crossover_point:])
@@ -318,6 +320,7 @@ class GeneticOperators:
             )
         return child1, child2
 """
+
 
     def mutate(
         self,
