@@ -154,6 +154,15 @@ Key configuration options include:
 
 Please refer to the comments and structure within `prompthelix/config.py` for more detailed information on specific configuration options.
 
+### Debugging and Logging
+
+PromptHelix uses a centralized logging configuration defined in `prompthelix/config.py`.
+Logging is initialized automatically when running the web app or CLI. To enable
+debug-level logs set the environment variable `PROMPTHELIX_DEBUG=1` or pass
+`--debug` to the CLI. Logs follow a consistent format with timestamps and module
+names. You can also provide a filename via `setup_logging()` in your own scripts
+to write logs to a file.
+
 ## Deployment
 
 You can deploy PromptHelix using Docker or by setting it up manually in a production environment.

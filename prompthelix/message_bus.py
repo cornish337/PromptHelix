@@ -19,6 +19,9 @@ if TYPE_CHECKING:  # Added
     from prompthelix.websocket_manager import ConnectionManager  # For type hinting
 
 
+logger = logging.getLogger(__name__)
+
+
 # Configure logging if root logger has no handlers
 if not logging.getLogger().hasHandlers():
     setup_logging(debug=settings.DEBUG)

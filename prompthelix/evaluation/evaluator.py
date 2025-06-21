@@ -214,6 +214,7 @@ class Evaluator:
 
 if __name__ == '__main__':
 
+
     from prompthelix.logging_config import configure_logging
     from prompthelix.config import settings
 
@@ -226,6 +227,7 @@ if __name__ == '__main__':
     # Configure logging for the example script
     setup_logging(debug=settings.DEBUG)
 """
+
 
     # Create a dummy evaluation data file for the example
     dummy_data = [

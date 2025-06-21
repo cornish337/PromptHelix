@@ -9,11 +9,13 @@ import subprocess
 import sys
 import os
 import unittest
+
 import logging # Added for logging configuration
 
 from prompthelix.logging_config import configure_logging
 from prompthelix.utils.logging_utils import setup_logging
 from prompthelix.config import settings
+
 
 try:
     import openai  # Used for catching openai.RateLimitError during GA runs
@@ -27,11 +29,15 @@ import json # For parsing settings overrides
 logger = logging.getLogger(__name__)
 
 
+from prompthelix.utils import setup_logging
+
+
 def main_cli():
     """
     Main function for the PromptHelix CLI.
     Parses arguments and dispatches commands.
     """
+
 
     # Configure logging according to settings
     configure_logging(settings.DEBUG)
@@ -43,11 +49,10 @@ def main_cli():
     logging.getLogger("openai._base_client").setLevel(logging.WARNING)
 """
 
-    parser = argparse.ArgumentParser(description="PromptHelix CLI")
-    parser.add_argument(
-        "--version", action="version", version="%(prog)s 0.1.0"
-    )
 
+    parser = argparse.ArgumentParser(description="PromptHelix CLI")
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    parser.add_argument("--version", action="version", version="%(prog)s 0.1.0")
     subparsers = parser.add_subparsers(title="commands", dest="command")
 
     # Subcommand for "test"
@@ -109,6 +114,9 @@ def main_cli():
 
 
     args = parser.parse_args()
+    setup_logging(debug=args.debug or None)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("openai._base_client").setLevel(logging.WARNING)
 
     if args.command == "test":
         loader = unittest.TestLoader()

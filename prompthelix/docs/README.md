@@ -172,6 +172,8 @@ python -m prompthelix.cli check-llm --provider openai --model gpt-3.5-turbo
 ```
 
 Debug logs are printed to the console to aid troubleshooting.
+Set the environment variable `PROMPTHELIX_DEBUG=1` or pass `--debug` to the CLI
+to see verbose output for any command.
 
 ## Genetic Algorithm Engine
 
