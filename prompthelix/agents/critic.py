@@ -46,7 +46,7 @@ class PromptCriticAgent(BaseAgent):
     def load_knowledge(self):
         """
         Loads critique rules from the specified JSON file.
-        If the file is not found or is invalid, it loads default rules and attempts to save them.
+        If the file is not found or is invalid, no rules are loaded for those cases.
         """
         try:
             effective_path = self.knowledge_file_path
@@ -55,17 +55,18 @@ class PromptCriticAgent(BaseAgent):
             self.critique_rules = self.rules # Keep backwards compatibility reference
             logger.info(f"Agent '{self.agent_id}': Rules loaded successfully from '{effective_path}'.")
         except FileNotFoundError:
-            logger.warning(f"Agent '{self.agent_id}': Knowledge file '{effective_path}' not found. Loading default rules.")
-            self.rules = self._get_default_critique_rules()
-            self.critique_rules = self.rules
-            self.save_knowledge() # Attempt to save defaults
+            logger.warning(
+                f"Agent '{self.agent_id}': Knowledge file '{effective_path}' not found. No critique rules loaded."
+            )
+            self.rules = []
+            self.critique_rules = []
         except json.JSONDecodeError as e:
             logger.error(
-                f"Agent '{self.agent_id}': Error decoding JSON from '{effective_path}': {e}. Loading default rules.",
+                f"Agent '{self.agent_id}': Error decoding JSON from '{effective_path}': {e}. No critique rules loaded.",
                 exc_info=True,
             )
-            self.rules = self._get_default_critique_rules()
-            self.critique_rules = self.rules
+            self.rules = []
+            self.critique_rules = []
         except Exception as e:
             logger.error(
                 f"Agent '{self.agent_id}': Failed to load rules from '{effective_path}': {e}. Loading default rules.",
