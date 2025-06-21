@@ -31,15 +31,44 @@
                     <span class="font-semibold text-gray-700">Fittest Chromosome:</span>
                     <pre id="ga-fittest-chromosome" class="text-gray-900 bg-gray-100 p-2 rounded mt-1 overflow-x-auto">-</pre>
                 </div>
+                <!-- New Fitness Statistics -->
+                <div>
+                    <span class="font-semibold text-gray-700">Min Fitness:</span>
+                    <span id="ga-min-fitness" class="text-gray-900">-</span>
+                </div>
+                <div>
+                    <span class="font-semibold text-gray-700">Max Fitness:</span>
+                    <span id="ga-max-fitness" class="text-gray-900">-</span>
+                </div>
+                <div>
+                    <span class="font-semibold text-gray-700">Mean Fitness:</span>
+                    <span id="ga-mean-fitness" class="text-gray-900">-</span>
+                </div>
+                <div>
+                    <span class="font-semibold text-gray-700">Median Fitness:</span>
+                    <span id="ga-median-fitness" class="text-gray-900">-</span>
+                </div>
+                <div>
+                    <span class="font-semibold text-gray-700">Std Dev Fitness:</span>
+                    <span id="ga-stddev-fitness" class="text-gray-900">-</span>
+                </div>
             </div>
             <div class="mt-4 flex space-x-2">
                 <button id="ga-pause-btn" class="bg-amber-500 hover:bg-amber-600 text-white font-bold py-2 px-4 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150 ease-in-out">Pause</button>
                 <button id="ga-resume-btn" class="bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 px-4 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150 ease-in-out">Resume</button>
                 <button id="ga-cancel-btn" class="bg-rose-500 hover:bg-rose-600 text-white font-bold py-2 px-4 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150 ease-in-out">Cancel</button>
             </div>
-            <!-- Placeholder for charts -->
-            <div id="ga-charts-placeholder" class="mt-4 p-8 bg-gray-50 border border-gray-300 border-dashed rounded-md text-center text-gray-500">
-                Chart will appear here.
+            <!-- Chart.js Canvas -->
+            <div class="mt-4">
+                <canvas id="fitnessTrendChart"></canvas>
+            </div>
+
+            <!-- Population Snapshot Section -->
+            <div id="population-snapshot" class="mt-6">
+                <h3 class="text-lg font-semibold mb-2">Population Snapshot (Top 5)</h3>
+                <div id="population-sample-container" class="space-y-2">
+                    <p class="text-gray-500">Waiting for population data...</p>
+                </div>
             </div>
         </div>
     </section>
@@ -79,13 +108,62 @@
 
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
+    function escapeHtml(unsafe) {
+        if (unsafe === null || typeof unsafe === 'undefined') {
+            return '';
+        }
+        return unsafe
+             .replace(/&/g, "&amp;")
+             .replace(/</g, "&lt;")
+             .replace(/>/g, "&gt;")
+             .replace(/"/g, "&quot;")
+             .replace(/'/g, "&#039;");
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
+        // Helper logic for agent colors in conversation logs
+        const agentColors = {};
+        const predefinedColors = [
+            { bg: 'bg-sky-50', text: 'text-sky-700', border: 'border-sky-300' },
+            { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-300' },
+            { bg: 'bg-violet-50', text: 'text-violet-700', border: 'border-violet-300' },
+            { bg: 'bg-lime-50', text: 'text-lime-700', border: 'border-lime-300' },
+            { bg: 'bg-pink-50', text: 'text-pink-700', border: 'border-pink-300' },
+            { bg: 'bg-teal-50', text: 'text-teal-700', border: 'border-teal-300' },
+            { bg: 'bg-fuchsia-50', text: 'text-fuchsia-700', border: 'border-fuchsia-300' },
+            { bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-300' }
+        ];
+        let nextColorIndex = 0;
+
+        function getAgentColorStyle(agentId) {
+            if (!agentId || agentId === 'SYSTEM' || agentId.toLowerCase().includes('user')) {
+                // Specific styling for SYSTEM or user messages
+                if (agentId === 'SYSTEM') {
+                    return { bg: 'bg-yellow-50', text: 'text-yellow-700', border: 'border-yellow-300' };
+                }
+                // Default for user or unspecified non-agent senders
+                return { bg: 'bg-gray-100', text: 'text-gray-700', border: 'border-gray-300' };
+            }
+            if (!agentColors[agentId]) {
+                agentColors[agentId] = predefinedColors[nextColorIndex % predefinedColors.length];
+                nextColorIndex++;
+            }
+            return agentColors[agentId];
+        }
+
         const gaStatus = document.getElementById('ga-status');
         const gaGeneration = document.getElementById('ga-generation');
         const gaBestFitness = document.getElementById('ga-best-fitness');
-        const gaAgentsUsed = document.getElementById('ga-agents-used'); // Added
-        const gaFittestChromosome = document.getElementById('ga-fittest-chromosome'); // Added
+        const gaMinFitness = document.getElementById('ga-min-fitness'); // New
+        const gaMaxFitness = document.getElementById('ga-max-fitness'); // New
+        const gaMeanFitness = document.getElementById('ga-mean-fitness'); // New
+        const gaMedianFitness = document.getElementById('ga-median-fitness'); // New
+        const gaStdDevFitness = document.getElementById('ga-stddev-fitness'); // New
+        const gaAgentsUsed = document.getElementById('ga-agents-used');
+        const gaFittestChromosome = document.getElementById('ga-fittest-chromosome');
+        const populationSampleContainer = document.getElementById('population-sample-container'); // Added
         const logsContainer = document.getElementById('logs-container');
         const agentMetricsData = document.getElementById('agent-metrics-data');
         const debugLogsContainer = document.getElementById('debug-logs-container'); // Add this
@@ -95,12 +173,87 @@
         const gaResumeBtn = document.getElementById('ga-resume-btn');
         const gaCancelBtn = document.getElementById('ga-cancel-btn');
 
+        let fitnessChart = null;
+        const chartData = {
+            labels: [],
+            datasets: [
+                {
+                    label: 'Max Fitness',
+                    borderColor: 'rgb(75, 192, 192)',
+                    backgroundColor: 'rgba(75, 192, 192, 0.5)',
+                    data: [],
+                    tension: 0.1
+                },
+                {
+                    label: 'Mean Fitness',
+                    borderColor: 'rgb(54, 162, 235)',
+                    backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                    data: [],
+                    tension: 0.1
+                },
+                {
+                    label: 'Min Fitness',
+                    borderColor: 'rgb(255, 99, 132)',
+                    backgroundColor: 'rgba(255, 99, 132, 0.5)',
+                    data: [],
+                    tension: 0.1
+                }
+            ]
+        };
+
+        function initializeFitnessChart() {
+            const ctx = document.getElementById('fitnessTrendChart').getContext('2d');
+            if (fitnessChart) {
+                fitnessChart.destroy(); // Destroy existing chart if any
+            }
+            fitnessChart = new Chart(ctx, {
+                type: 'line',
+                data: chartData,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Generation'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Fitness Score'
+                            },
+                            beginAtZero: true // Adjust as needed
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        title: {
+                            display: true,
+                            text: 'Fitness Trend Over Generations'
+                        }
+                    }
+                }
+            });
+        }
+
+
         // Function to handle GA data updates from WebSocket
         function handleGaDataUpdate(data) {
             gaStatus.textContent = data.status || 'N/A';
             updateStatusBadge(gaStatus.textContent);
-            gaGeneration.textContent = data.generation || '-';
-            gaBestFitness.textContent = data.best_fitness ? parseFloat(data.best_fitness).toFixed(4) : '-';
+            gaGeneration.textContent = data.generation !== undefined ? data.generation : '-';
+            gaBestFitness.textContent = data.best_fitness !== null && data.best_fitness !== undefined ? parseFloat(data.best_fitness).toFixed(4) : '-';
+
+            // Update new fitness stats
+            gaMinFitness.textContent = data.fitness_min !== null && data.fitness_min !== undefined ? parseFloat(data.fitness_min).toFixed(4) : '-';
+            gaMaxFitness.textContent = data.fitness_max !== null && data.fitness_max !== undefined ? parseFloat(data.fitness_max).toFixed(4) : '-';
+            gaMeanFitness.textContent = data.fitness_mean !== null && data.fitness_mean !== undefined ? parseFloat(data.fitness_mean).toFixed(4) : '-';
+            gaMedianFitness.textContent = data.fitness_median !== null && data.fitness_median !== undefined ? parseFloat(data.fitness_median).toFixed(4) : '-';
+            gaStdDevFitness.textContent = data.fitness_std_dev !== null && data.fitness_std_dev !== undefined ? parseFloat(data.fitness_std_dev).toFixed(4) : '-';
 
             if (data.agents_used && Array.isArray(data.agents_used)) {
                 gaAgentsUsed.textContent = data.agents_used.join(', ') || 'N/A';
@@ -109,7 +262,134 @@
             }
             gaFittestChromosome.textContent = data.fittest_chromosome_string || 'N/A';
             updateGaControlButtons(data.status);
-            console.log("GA Data Processed for event type, data:", data); // Modified console log
+
+            if (data.agent_metrics) {
+                const metricsContainer = document.getElementById('agent-metrics-data');
+                let table = document.getElementById('agent-metrics-table');
+                if (!table) {
+                    table = document.createElement('table');
+                    table.id = 'agent-metrics-table';
+                    table.classList.add('min-w-full', 'text-sm', 'table-auto', 'border-collapse');
+                    table.innerHTML = `
+                        <thead>
+                            <tr>
+                                <th class="border px-2">Agent</th>
+                                <th class="border px-2">Messages</th>
+                                <th class="border px-2">Errors</th>
+                                <th class="border px-2">Last Operation</th>
+                                <th class="border px-2">Avg Fitness Δ</th>
+                                <th class="border px-2">Updated</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>`;
+                    metricsContainer.innerHTML = '';
+                    metricsContainer.appendChild(table);
+                }
+
+                const tbody = table.querySelector('tbody');
+                Object.entries(data.agent_metrics).forEach(([id, m]) => {
+                    let row = tbody.querySelector(`tr[data-agent-id="${id}"]`);
+                    if (!row) {
+                        row = document.createElement('tr');
+                        row.dataset.agentId = id;
+                        tbody.appendChild(row);
+                    }
+                    const avgDelta = m.average_fitness_change !== undefined && m.average_fitness_change !== null
+                        ? parseFloat(m.average_fitness_change).toFixed(4)
+                        : '-';
+                    row.innerHTML = `
+                        <td class="border px-2">${id}</td>
+                        <td class="border px-2">${m.messages_processed}</td>
+                        <td class="border px-2">${m.errors_encountered}</td>
+                        <td class="border px-2">${m.last_operation_type || '-'}</td>
+                        <td class="border px-2">${avgDelta}</td>
+                        <td class="border px-2">${new Date(m.timestamp).toLocaleTimeString()}</td>
+                    `;
+                });
+            }
+
+            // Update chart if generation data is present and it's a relevant event
+            // Consider "ga_evaluation_complete" or "ga_generation_complete" as good points to update chart
+            // For simplicity, updating if generation and fitness_mean are present
+            if (data.generation !== undefined && data.fitness_mean !== null && data.fitness_mean !== undefined) {
+                // Avoid duplicate generation numbers in labels if data comes too rapidly for same generation
+                if (!chartData.labels.includes(data.generation)) {
+                    chartData.labels.push(data.generation);
+                } else {
+                    // If generation already exists, find its index to update data instead of pushing
+                    // This handles cases where multiple updates for the same generation might arrive
+                    // For simplicity here, we'll assume unique generation updates or let Chart.js handle it
+                    // A more robust way would be to map generations to indices.
+                }
+
+                // Ensure data arrays are appended to correctly or updated if generation label already existed
+                // This basic implementation assumes new generation data comes sequentially
+                // For a new generation, push data. If updating existing, replace at index.
+                // Current logic: always appends if generation is new, which is typical for GA progress.
+                const currentLabelIndex = chartData.labels.indexOf(data.generation);
+
+                if (currentLabelIndex === chartData.datasets[0].data.length) { // New data point
+                    chartData.datasets[0].data.push(data.fitness_max !== null && data.fitness_max !== undefined ? parseFloat(data.fitness_max) : null);
+                    chartData.datasets[1].data.push(data.fitness_mean !== null && data.fitness_mean !== undefined ? parseFloat(data.fitness_mean) : null);
+                    chartData.datasets[2].data.push(data.fitness_min !== null && data.fitness_min !== undefined ? parseFloat(data.fitness_min) : null);
+                } else if (currentLabelIndex !== -1 && currentLabelIndex < chartData.datasets[0].data.length) { // Update existing data point
+                    chartData.datasets[0].data[currentLabelIndex] = data.fitness_max !== null && data.fitness_max !== undefined ? parseFloat(data.fitness_max) : null;
+                    chartData.datasets[1].data[currentLabelIndex] = data.fitness_mean !== null && data.fitness_mean !== undefined ? parseFloat(data.fitness_mean) : null;
+                    chartData.datasets[2].data[currentLabelIndex] = data.fitness_min !== null && data.fitness_min !== undefined ? parseFloat(data.fitness_min) : null;
+                }
+
+
+                if (fitnessChart) {
+                    fitnessChart.update();
+                }
+            }
+
+            // Handle population sample display
+            if (populationSampleContainer) { // Check if the container exists
+                if (data.population_sample && Array.isArray(data.population_sample)) {
+                    populationSampleContainer.innerHTML = ''; // Clear previous content
+                    const selectedParentIds = (data.selected_parent_ids && Array.isArray(data.selected_parent_ids)) ? data.selected_parent_ids : [];
+
+                    if (data.population_sample.length > 0) {
+                        data.population_sample.forEach(chromosome => {
+                            const chromosomeDiv = document.createElement('div');
+                            const isParent = selectedParentIds.includes(chromosome.id);
+                            const parentClass = isParent ? 'is-selected-parent' : '';
+                            const parentBadge = isParent ? '<span class="parent-badge ml-2 text-xs bg-green-200 text-green-800 px-1.5 py-0.5 rounded-full">Parent</span>' : '';
+
+                            chromosomeDiv.className = `chromosome-entry p-2 border rounded bg-gray-50 text-xs ${parentClass}`;
+
+                            let genesHtml = '<ul class="list-disc list-inside pl-4 mt-1">';
+                            chromosome.genes.forEach(gene => {
+                                genesHtml += `<li>${escapeHtml(gene)}</li>`;
+                            });
+                            genesHtml += '</ul>';
+
+                            chromosomeDiv.innerHTML = `
+                                <p class="text-xs font-medium">ID: <span class="font-normal">${escapeHtml(chromosome.id)}</span> | Fitness: <span class="font-normal">${parseFloat(chromosome.fitness_score).toFixed(4)}</span>${parentBadge}</p>
+                                <p class="text-xs font-medium mt-1">Genes:</p>
+                                ${genesHtml}
+                            `;
+                            populationSampleContainer.appendChild(chromosomeDiv);
+                        });
+                    } else {
+                        populationSampleContainer.innerHTML = '<p class="text-gray-500">Population sample is empty.</p>';
+                    }
+                } else if (data.hasOwnProperty('population_sample') &&
+                           (data.population_sample === null || data.population_sample === undefined || (Array.isArray(data.population_sample) && data.population_sample.length === 0)) ) {
+                    // This condition ensures that if 'population_sample' is explicitly sent as null, undefined, or an empty array,
+                    // we update the container, rather than leaving stale data.
+                    if (populationSampleContainer.innerHTML.includes("Waiting for population data...")) {
+                        // It's fine, initial state or no data yet. Message will be updated if sample is empty.
+                    } else if (Array.isArray(data.population_sample) && data.population_sample.length === 0) {
+                        populationSampleContainer.innerHTML = '<p class="text-gray-500">Population sample is empty.</p>';
+                    } else {
+                         populationSampleContainer.innerHTML = '<p class="text-gray-500">Population sample data not available.</p>';
+                    }
+                }
+                // If data.population_sample key is not in the message at all, the "Waiting..." message (or previous content) remains.
+            }
+            // console.log("GA Data Processed for event type, data:", data);
         }
 
         function updateStatusBadge(statusText) {
@@ -180,10 +460,18 @@
                     const statusData = await response.json();
                     console.log('Initial GA Status:', statusData);
                     // Update UI elements based on this initial status
-                    gaStatus.textContent = statusData.status || 'N/A'; // Set text first
-                    updateStatusBadge(gaStatus.textContent); // Then update badge based on the new text
-                    gaGeneration.textContent = statusData.generation || '-';
-                    gaBestFitness.textContent = statusData.best_fitness ? parseFloat(statusData.best_fitness).toFixed(4) : '-';
+                    gaStatus.textContent = statusData.status || 'N/A';
+                    updateStatusBadge(gaStatus.textContent);
+                    gaGeneration.textContent = statusData.generation !== undefined ? statusData.generation : '-';
+                    gaBestFitness.textContent = statusData.best_fitness !== null && statusData.best_fitness !== undefined ? parseFloat(statusData.best_fitness).toFixed(4) : '-';
+
+                    // Update new fitness stats from initial fetch
+                    gaMinFitness.textContent = statusData.fitness_min !== null && statusData.fitness_min !== undefined ? parseFloat(statusData.fitness_min).toFixed(4) : '-';
+                    gaMaxFitness.textContent = statusData.fitness_max !== null && statusData.fitness_max !== undefined ? parseFloat(statusData.fitness_max).toFixed(4) : '-';
+                    gaMeanFitness.textContent = statusData.fitness_mean !== null && statusData.fitness_mean !== undefined ? parseFloat(statusData.fitness_mean).toFixed(4) : '-';
+                    gaMedianFitness.textContent = statusData.fitness_median !== null && statusData.fitness_median !== undefined ? parseFloat(statusData.fitness_median).toFixed(4) : '-';
+                    gaStdDevFitness.textContent = statusData.fitness_std_dev !== null && statusData.fitness_std_dev !== undefined ? parseFloat(statusData.fitness_std_dev).toFixed(4) : '-';
+
                     if (statusData.agents_used && Array.isArray(statusData.agents_used)) {
                         gaAgentsUsed.textContent = statusData.agents_used.join(', ') || 'N/A';
                     } else {
@@ -192,6 +480,19 @@
                     gaFittestChromosome.textContent = statusData.fittest_chromosome_string || 'N/A';
 
                     updateGaControlButtons(statusData.status);
+
+                    // Initialize chart with potentially empty data from initial status,
+                    // or if historical data was part of statusData (not assumed here)
+                    // For now, chart is initialized empty and populates with WebSocket data.
+                    // If statusData contains initial points for the chart:
+                    // if (statusData.generation !== undefined && statusData.fitness_mean !== null) {
+                    //    chartData.labels.push(statusData.generation);
+                    //    chartData.datasets[0].data.push(parseFloat(statusData.fitness_max));
+                    //    chartData.datasets[1].data.push(parseFloat(statusData.fitness_mean));
+                    //    chartData.datasets[2].data.push(parseFloat(statusData.fitness_min));
+                    // }
+                    // initializeFitnessChart(); // Call after potentially populating chartData
+
                 } else {
                     console.error('Failed to fetch initial GA status:', response.status);
                     gaStatus.textContent = 'Error'; // Update text before badge
@@ -225,29 +526,34 @@
 
             if (message.type === 'new_conversation_log' && message.data) {
                 const logEntry = document.createElement('div');
-                logEntry.classList.add('log-entry', 'p-2', 'rounded', 'text-xs', 'mb-1');
 
-                // Basic styling based on sender/recipient (can be refined)
-                if (message.data.sender_id && message.data.sender_id.toLowerCase().includes('agent')) {
-                    logEntry.classList.add('bg-blue-50');
-                } else if (message.data.sender_id === 'SYSTEM') {
-                    logEntry.classList.add('bg-yellow-50');
-                } else {
-                    logEntry.classList.add('bg-gray-100');
-                }
+                const senderId = message.data.sender_id || 'SYSTEM'; // Default if sender_id is null/undefined
+                const agentStyle = getAgentColorStyle(senderId);
+
+                logEntry.classList.add('log-entry', 'p-2', 'rounded', 'text-xs', 'mb-1', 'border', agentStyle.bg, agentStyle.border);
 
                 const timestamp = new Date(message.data.timestamp || Date.now()).toLocaleTimeString();
                 let contentHtml = '';
+                // Ensure content is escaped
+                const escapedContent = escapeHtml(typeof message.data.content === 'string' ? message.data.content : JSON.stringify(message.data.content, null, 2));
+
                 if (typeof message.data.content === 'object') {
-                    contentHtml = `<pre class="whitespace-pre-wrap">${JSON.stringify(message.data.content, null, 2)}</pre>`;
+                    contentHtml = `<pre class="whitespace-pre-wrap text-xs ${agentStyle.text}">${escapedContent}</pre>`;
                 } else {
-                    contentHtml = `<p class="whitespace-pre-wrap">${message.data.content}</p>`;
+                    // For plain string content, decide if specific text styling from agentStyle is desired or use a default.
+                    // Using agentStyle.text for consistency here.
+                    contentHtml = `<p class="whitespace-pre-wrap text-sm ${agentStyle.text}">${escapedContent}</p>`;
                 }
 
                 logEntry.innerHTML = `
-                    <div class="font-semibold">${timestamp} | ${message.data.sender_id} &rarr; ${message.data.recipient_id || 'BROADCAST'} (${message.data.message_type})</div>
-                    <div class="pl-2">${contentHtml}</div>
-                    <div class="text-gray-500 text-right text-xs">Session: ${message.data.session_id}</div>
+                    <div class="font-semibold ${agentStyle.text}">
+                        ${escapeHtml(timestamp)} |
+                        <strong class="${agentStyle.text}">${escapeHtml(senderId)}</strong>
+                        &rarr; ${escapeHtml(message.data.recipient_id || 'BROADCAST')}
+                        (${escapeHtml(message.data.message_type)})
+                    </div>
+                    <div class="pl-2 mt-1">${contentHtml}</div>
+                    <div class="text-gray-500 text-right text-xs mt-1">Session: ${escapeHtml(message.data.session_id)}</div>
                 `;
 
                 // If it was "Waiting for logs...", remove it
@@ -409,9 +715,10 @@
         }
 
         // Set initial state for buttons and fetch initial status
-        // updateGaControlButtons('IDLE'); // This will be set by fetchInitialGaStatus
-        // updateStatusBadge('IDLE'); // Also set by fetchInitialGaStatus
-        fetchInitialGaStatus(); // Fetch current status on load
+        // updateGaControlButtons('IDLE');
+        // updateStatusBadge('IDLE');
+        fetchInitialGaStatus();
+        initializeFitnessChart(); // Initialize chart on page load
 
     });
 </script>

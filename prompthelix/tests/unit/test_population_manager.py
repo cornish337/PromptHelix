@@ -201,6 +201,7 @@ class TestPopulationManager(unittest.TestCase):
             self.mock_genetic_ops, self.mock_fitness_eval, self.mock_architect_agent,
             population_size=pop_size, elitism_count=elitism_count
         )
+        manager.parallel_workers = 1 # Force serial execution for this test to use the mock
 
         # Setup initial population
         initial_chromosomes = [
@@ -330,6 +331,176 @@ class TestPopulationManager(unittest.TestCase):
         self.assertEqual(manager.status, "STOPPING")
         mock_broadcast_ga_update.assert_called_once_with(event_type="ga_stopping")
 
+    # --- Tests for broadcast_ga_update payload and calls ---
+
+    def test_broadcast_ga_update_payload_with_data(self):
+        """Test the payload of broadcast_ga_update with a populated list of chromosomes."""
+        manager = PopulationManager(
+            self.mock_genetic_ops, self.mock_fitness_eval, self.mock_architect_agent,
+            message_bus=self.mock_message_bus, population_size=3
+        )
+        manager.population = [
+            PromptChromosome(genes=["g1"], fitness_score=0.1),
+            PromptChromosome(genes=["g2"], fitness_score=0.5),
+            PromptChromosome(genes=["g3"], fitness_score=0.9)
+        ]
+        manager.generation_number = 5
+        manager.status = "TESTING_PAYLOAD"
+
+        manager.broadcast_ga_update(event_type="test_payload_event", additional_data={"test_key": "test_value"})
+
+        self.mock_message_bus.connection_manager.broadcast_json.assert_called_once()
+        args, _ = self.mock_message_bus.connection_manager.broadcast_json.call_args
+        payload_sent = args[0]
+
+        self.assertEqual(payload_sent["type"], "test_payload_event")
+        data = payload_sent["data"]
+        self.assertEqual(data["status"], "TESTING_PAYLOAD")
+        self.assertEqual(data["generation"], 5)
+        self.assertEqual(data["population_size"], 3)
+        self.assertAlmostEqual(data["best_fitness"], 0.9) # Fittest is g3 after sorting in get_fittest_individual
+        self.assertAlmostEqual(data["fitness_min"], 0.1)
+        self.assertAlmostEqual(data["fitness_max"], 0.9)
+        self.assertAlmostEqual(data["fitness_mean"], 0.5)
+        self.assertAlmostEqual(data["fitness_median"], 0.5)
+        self.assertAlmostEqual(data["fitness_std_dev"], 0.4) # statistics.stdev([0.1, 0.5, 0.9])
+        self.assertIn("fittest_chromosome_string", data)
+        self.assertEqual(data["test_key"], "test_value")
+
+
+    def test_broadcast_ga_update_payload_empty_population(self):
+        """Test the payload of broadcast_ga_update with an empty population."""
+        manager = PopulationManager(
+            self.mock_genetic_ops, self.mock_fitness_eval, self.mock_architect_agent,
+            message_bus=self.mock_message_bus
+        )
+        # manager.population is []
+        manager.broadcast_ga_update(event_type="empty_pop_event")
+
+        self.mock_message_bus.connection_manager.broadcast_json.assert_called_once()
+        args, _ = self.mock_message_bus.connection_manager.broadcast_json.call_args
+        data = args[0]["data"]
+
+        self.assertIsNone(data["best_fitness"])
+        self.assertIsNone(data["fitness_min"])
+        self.assertIsNone(data["fitness_max"])
+        self.assertIsNone(data["fitness_mean"])
+        self.assertIsNone(data["fitness_median"])
+        self.assertIsNone(data["fitness_std_dev"]) # Changed from 0.0 to None as per implementation for empty list
+        self.assertIsNone(data["fittest_chromosome_string"])
+
+    def test_broadcast_ga_update_payload_single_chromosome(self):
+        """Test the payload of broadcast_ga_update with a single chromosome."""
+        manager = PopulationManager(
+            self.mock_genetic_ops, self.mock_fitness_eval, self.mock_architect_agent,
+            message_bus=self.mock_message_bus, population_size=1
+        )
+        manager.population = [PromptChromosome(genes=["g1"], fitness_score=0.7)]
+
+        manager.broadcast_ga_update(event_type="single_chrom_event")
+
+        self.mock_message_bus.connection_manager.broadcast_json.assert_called_once()
+        args, _ = self.mock_message_bus.connection_manager.broadcast_json.call_args
+        data = args[0]["data"]
+
+        self.assertAlmostEqual(data["best_fitness"], 0.7)
+        self.assertAlmostEqual(data["fitness_min"], 0.7)
+        self.assertAlmostEqual(data["fitness_max"], 0.7)
+        self.assertAlmostEqual(data["fitness_mean"], 0.7)
+        self.assertAlmostEqual(data["fitness_median"], 0.7)
+        self.assertAlmostEqual(data["fitness_std_dev"], 0.0) # stdev of a single value is 0 or not well-defined, implementation returns 0.0
+
+    @patch('prompthelix.genetics.engine.PopulationManager.broadcast_ga_update')
+    def test_initialize_population_broadcast_calls(self, mock_broadcast):
+        """Test that initialize_population calls broadcast_ga_update correctly."""
+        pop_size = 2
+        manager = PopulationManager(
+            self.mock_genetic_ops, self.mock_fitness_eval, self.mock_architect_agent,
+            population_size=pop_size, message_bus=self.mock_message_bus
+        )
+        self.mock_architect_agent.process_request.side_effect = [
+            PromptChromosome(genes=[f"GeneSet{i}"]) for i in range(pop_size)
+        ]
+
+        manager.initialize_population("task_desc")
+
+        expected_calls = [
+            call(event_type="ga_manager_initialized"), # From __init__
+            call(event_type="ga_initialization_started"),
+            call(event_type="ga_initialization_complete")
+        ]
+        # Check if all expected calls are present in the actual calls
+        # We need to check the call list directly from the mock object
+        # Direct assert_has_calls might be tricky if __init__ also calls it.
+
+        # Get actual calls from the mock
+        actual_call_args_list = [c[1]['event_type'] for c in mock_broadcast.call_args_list]
+
+        # The first call is from __init__
+        self.assertEqual(actual_call_args_list[0], "ga_manager_initialized")
+        # The calls from initialize_population
+        self.assertEqual(actual_call_args_list[1], "ga_initialization_started")
+        self.assertEqual(actual_call_args_list[2], "ga_initialization_complete")
+        self.assertEqual(mock_broadcast.call_count, 3)
+
+
+    @patch('prompthelix.genetics.engine.PopulationManager.broadcast_ga_update')
+    def test_evolve_population_broadcast_calls(self, mock_broadcast):
+        """Test that evolve_population calls broadcast_ga_update at key stages."""
+        pop_size = 2
+        manager = PopulationManager(
+            self.mock_genetic_ops, self.mock_fitness_eval, self.mock_architect_agent,
+            population_size=pop_size, elitism_count=1, message_bus=self.mock_message_bus,
+            parallel_workers=1 # Force serial execution for easier mocking
+        )
+        manager.population = [
+            PromptChromosome(genes=["P1"], fitness_score=0.5),
+            PromptChromosome(genes=["P2"], fitness_score=0.8)
+        ]
+        manager.generation_number = 0 # Set initial generation
+
+        # Mock dependent methods to allow evolve_population to run through
+        self.mock_fitness_eval.evaluate.side_effect = lambda c, td, sc: c.fitness_score
+        self.mock_genetic_ops.selection.return_value = PromptChromosome(genes=["Selected"])
+        self.mock_genetic_ops.crossover.return_value = (PromptChromosome(genes=["ChildA"]), PromptChromosome(genes=["ChildB"]))
+        self.mock_genetic_ops.mutate.side_effect = lambda c, **kwargs: c # Return as is
+
+        manager.evolve_population("evolution_task")
+
+        # Check the sequence of broadcast calls
+        # The first call is from __init__
+        # Subsequent calls are from evolve_population
+        # event_type, additional_data
+
+        # Call 0: __init__ -> "ga_manager_initialized"
+        # Call 1: evolve_population start -> "ga_generation_started"
+        # Call 2: evolve_population after eval -> "ga_evaluation_complete"
+        # Call 3: evolve_population end -> "ga_generation_complete"
+
+        # Extract event types from actual calls
+        actual_event_types = [c[1]['event_type'] for c in mock_broadcast.call_args_list]
+
+        self.assertEqual(mock_broadcast.call_count, 4) # __init__ + 3 in evolve
+        self.assertEqual(actual_event_types[0], "ga_manager_initialized")
+        self.assertEqual(actual_event_types[1], "ga_generation_started")
+        self.assertEqual(actual_event_types[2], "ga_evaluation_complete")
+        self.assertEqual(actual_event_types[3], "ga_generation_complete")
+
+        # Optionally, check additional_data for some calls
+        # For 'ga_generation_started', additional_data should contain 'generation': 1
+        generation_started_call_args = mock_broadcast.call_args_list[1]
+        self.assertEqual(generation_started_call_args[1]['additional_data']['generation'], 1)
+
+        # For 'ga_evaluation_complete', additional_data includes counts
+        evaluation_complete_call_args = mock_broadcast.call_args_list[2]
+        self.assertIn('evaluated_count', evaluation_complete_call_args[1]['additional_data'])
+        self.assertEqual(evaluation_complete_call_args[1]['additional_data']['evaluated_count'], pop_size)
+
+        # For 'ga_generation_complete', additional_data includes new generation number
+        generation_complete_call_args = mock_broadcast.call_args_list[3]
+        self.assertEqual(generation_complete_call_args[1]['additional_data']['generation'], 1)
+
+
     def test_pause_evolution_no_message_bus(self):
         """Test pause_evolution when message_bus is None."""
         manager = PopulationManager(
@@ -345,6 +516,9 @@ class TestPopulationManager(unittest.TestCase):
 
         self.assertTrue(manager.is_paused)
         self.assertEqual(manager.status, "PAUSED")
+
+    # test_resume_evolution_no_message_bus, test_stop_evolution_no_message_bus
+    # are correctly placed after the new tests. Let's ensure they are still here.
 
     def test_resume_evolution_no_message_bus(self):
         """Test resume_evolution when message_bus is None."""

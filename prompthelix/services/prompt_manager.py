@@ -1,10 +1,19 @@
 import uuid
+import warnings
 from typing import Dict, List, Optional
 
 class PromptManager:
-    """Simple in-memory manager for storing prompts."""
+    """Deprecated in-memory manager for storing prompts.
+
+    Use :class:`prompthelix.services.prompt_service.PromptService` instead.
+    """
 
     def __init__(self) -> None:
+        warnings.warn(
+            "PromptManager is deprecated. Use PromptService for persistence.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._prompts: Dict[str, str] = {}
 
     def add_prompt(self, content: str) -> dict:

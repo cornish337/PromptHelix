@@ -2,12 +2,56 @@ from __future__ import annotations
 import abc
 import random
 import logging # Added logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Type, Dict, List
 
 logger = logging.getLogger(__name__) # Added logger
 
 if TYPE_CHECKING: # pragma: no cover - only for type hints
     from prompthelix.genetics.engine import PromptChromosome
+
+# Registry for mutation strategy classes
+strategy_registry: Dict[str, Type["MutationStrategy"]] = {}
+
+
+def register_strategy(cls: Type["MutationStrategy"]) -> Type["MutationStrategy"]:
+    """Register a MutationStrategy class in the global registry."""
+    strategy_registry[cls.__name__] = cls
+    return cls
+
+
+def load_strategies(paths: List[str]) -> List["MutationStrategy"]:
+    """Dynamically load MutationStrategy implementations from modules.
+
+    Args:
+        paths: List of module paths to import. Each module is scanned for
+            classes that subclass :class:`MutationStrategy`.
+
+    Returns:
+        List of instantiated strategy objects found in the provided modules.
+    """
+    strategies: List["MutationStrategy"] = []
+    for module_path in paths:
+        try:
+            module = __import__(module_path, fromlist=["dummy"])
+        except Exception as e:  # pragma: no cover - import errors logged
+            logger.error(f"Failed to import mutation strategy module '{module_path}': {e}")
+            continue
+
+        for attr_name in dir(module):
+            attr = getattr(module, attr_name)
+            if (
+                isinstance(attr, type)
+                and issubclass(attr, MutationStrategy)
+                and attr is not MutationStrategy
+            ):
+                register_strategy(attr)
+                try:
+                    strategies.append(attr())
+                except Exception as inst_err:  # pragma: no cover - instantiation errors logged
+                    logger.error(
+                        f"Could not instantiate strategy '{attr.__name__}' from '{module_path}': {inst_err}"
+                    )
+    return strategies
 
 class MutationStrategy(abc.ABC):
     """
@@ -30,6 +74,7 @@ class MutationStrategy(abc.ABC):
         """
         pass
 
+@register_strategy
 class AppendCharStrategy(MutationStrategy):
     """
     Mutates a gene by appending a random character.
@@ -64,6 +109,7 @@ class AppendCharStrategy(MutationStrategy):
         )
         return mutated_chromosome
 
+@register_strategy
 class ReverseSliceStrategy(MutationStrategy):
     """
     Mutates a gene by reversing a random slice of it.
@@ -105,6 +151,7 @@ class ReverseSliceStrategy(MutationStrategy):
         )
         return mutated_chromosome
 
+@register_strategy
 class PlaceholderReplaceStrategy(MutationStrategy):
     """
     Mutates a gene by replacing it or a part of it with a placeholder.
@@ -132,6 +179,7 @@ class PlaceholderReplaceStrategy(MutationStrategy):
         return mutated_chromosome
 
 # Example of a NoOperationMutation strategy, could be useful
+@register_strategy
 class NoOperationMutationStrategy(MutationStrategy):
     """
     A strategy that performs no mutation. Can be useful in some scenarios.

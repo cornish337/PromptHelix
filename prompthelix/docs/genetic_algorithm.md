@@ -86,6 +86,16 @@ The GA engine is designed to leverage the specialized capabilities of other agen
 -   **`StyleOptimizerAgent` (Conceptual Interaction)**:
     -   The `GeneticOperators.mutate()` method includes a conceptual hook for a "smart" mutation. This placeholder (`style_optimization_placeholder`) indicates where the `StyleOptimizerAgent` could be called to perform more intelligent, context-aware mutations on individual genes or entire prompts, rather than just random character changes. This integration is planned for future development.
 
-Other agents like `PromptCriticAgent` and `DomainExpertAgent` are not directly called within the core GA loop as currently implemented in `engine.py` but are intended to be used by the `ResultsEvaluatorAgent` or potentially by more advanced versions of the `PromptArchitectAgent` or `FitnessEvaluator` to inform their processes. The `MetaLearnerAgent` would consume data produced by the GA run (fitness scores, successful prompts) to adapt strategies over time.Okay, I've created `prompthelix/docs/genetic_algorithm.md` with the detailed explanation of the GA engine.
+Other agents like `PromptCriticAgent` and `DomainExpertAgent` are not directly called within the core GA loop as currently implemented in `engine.py` but are intended to be used by the `ResultsEvaluatorAgent` or potentially by more advanced versions of the `PromptArchitectAgent` or `FitnessEvaluator` to inform their processes. The `MetaLearnerAgent` would consume data produced by the GA run (fitness scores, successful prompts) to adapt strategies over time.
 
-Now, I will update `prompthelix/docs/README.md` to add the "Genetic Algorithm Engine" section and the instructions for running the orchestrator.
+## GA Analytics Dashboard
+
+PromptHelix includes a web-based dashboard for observing GA runs in real time. After starting the FastAPI server with `uvicorn prompthelix.main:app --reload`, navigate to [http://127.0.0.1:8000/ui/dashboard](http://127.0.0.1:8000/ui/dashboard).
+
+The dashboard streams status updates over WebSockets and displays:
+
+* A line chart tracking max, mean, and min fitness across generations so you can see convergence.
+* Live agent metrics such as messages processed and errors encountered.
+* A feed of conversation log events, making it easier to relate agent dialogues to changes in fitness.
+
+You can open the separate Conversation Log viewer at `/ui/conversations` for a focused look at past exchanges.

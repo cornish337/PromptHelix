@@ -3,6 +3,9 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session as DbSession # Use DbSession for type hinting
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
+from pathlib import Path
+import asyncio
+import subprocess
 from datetime import datetime, timedelta
 import secrets
 
@@ -24,8 +27,16 @@ from . import conversation_routes # Added for conversation logs
 from .dependencies import get_current_user, oauth2_scheme
 
 # Import services (individual functions, not classes, based on previous service structure)
-from prompthelix.services import user_service, performance_service
-# PromptService is a class, so it's used via crud.py which instantiates it.
+from prompthelix.services import (
+    user_service,
+    performance_service,
+    get_experiment_runs,
+    get_experiment_run,
+    get_chromosomes_for_run,
+)
+from prompthelix.services.prompt_service import PromptService
+
+prompt_service = PromptService()
 
 router = APIRouter()
 
@@ -48,19 +59,34 @@ def create_user_route(user_data: schemas.UserCreate, db: DbSession = Depends(get
 
 @router.post("/auth/token", response_model=schemas.Token, tags=["Authentication"], summary="User login", description="Authenticates a user and returns an access token.")
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: DbSession = Depends(get_db)):
+    print(f"Attempting login for username: {form_data.username}")
     user = user_service.get_user_by_username(db, username=form_data.username)
-    if not user or not user_service.verify_password(form_data.password, user.hashed_password):
+    if not user:
+        print(f"User not found: {form_data.username}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    print(f"User found: {form_data.username}. Attempting password verification.")
+    password_verified = user_service.verify_password(form_data.password, user.hashed_password)
+    print(f"Password verification result for {form_data.username}: {password_verified}")
+    if not password_verified:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     from prompthelix.config import settings
+    session_duration = settings.DEFAULT_SESSION_EXPIRE_MINUTES
+    print(f"Authentication successful for {form_data.username}. Attempting session creation for user ID {user.id} with duration {session_duration} minutes.")
     session = user_service.create_session(
         db,
         user_id=user.id,
-        expires_delta_minutes=settings.DEFAULT_SESSION_EXPIRE_MINUTES,
+        expires_delta_minutes=session_duration,
     )
+    print(f"Session created successfully for user ID {user.id}. Session token (first 8 chars): {session.session_token[:8]}...")
     return {"access_token": session.session_token, "token_type": "bearer"}
 
 @router.post("/auth/logout", tags=["Authentication"], summary="User logout", description="Logs out the current user by invalidating their session token.")
@@ -85,68 +111,68 @@ def create_prompt_route(
     db: DbSession = Depends(get_db),
     current_user: UserModel = Depends(get_current_user),
 ):
-    return crud.create_prompt(db=db, prompt=prompt, owner_id=current_user.id)
+    return prompt_service.create_prompt(db=db, prompt_create=prompt, owner_id=current_user.id)
 
 @router.get("/api/prompts", response_model=List[schemas.Prompt], tags=["Prompts"], summary="List all prompts", description="Retrieves a list of all prompts, with optional pagination.")
 def read_prompts_route(skip: int = 0, limit: int = 100, db: DbSession = Depends(get_db)):
-    prompts = crud.get_prompts(db, skip=skip, limit=limit)
+    prompts = prompt_service.get_prompts(db, skip=skip, limit=limit)
     return prompts
 
 @router.get("/api/prompts/{prompt_id}", response_model=schemas.Prompt, tags=["Prompts"], summary="Get a specific prompt", description="Retrieves a single prompt by its ID.")
 def read_prompt_route(prompt_id: int, db: DbSession = Depends(get_db)):
-    db_prompt = crud.get_prompt(db, prompt_id=prompt_id)
+    db_prompt = prompt_service.get_prompt(db, prompt_id=prompt_id)
     if db_prompt is None:
         raise HTTPException(status_code=404, detail="Prompt not found")
     return db_prompt
 
 @router.put("/api/prompts/{prompt_id}", response_model=schemas.Prompt, tags=["Prompts"], summary="Update a prompt", description="Updates an existing prompt by its ID. User must be the owner.")
 def update_prompt_route(prompt_id: int, prompt_update_data: schemas.PromptUpdate, db: DbSession = Depends(get_db), current_user: UserModel = Depends(get_current_user)):
-    db_prompt_existing = crud.get_prompt(db, prompt_id=prompt_id)
+    db_prompt_existing = prompt_service.get_prompt(db, prompt_id=prompt_id)
     if db_prompt_existing is None:
         raise HTTPException(status_code=404, detail="Prompt not found")
     if db_prompt_existing.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to modify this prompt")
-    db_prompt = crud.update_prompt(db, prompt_id=prompt_id, prompt_update=prompt_update_data)
+    db_prompt = prompt_service.update_prompt(db, prompt_id=prompt_id, prompt_update=prompt_update_data)
     return db_prompt
 
 @router.delete("/api/prompts/{prompt_id}", response_model=schemas.Prompt, tags=["Prompts"], summary="Delete a prompt", description="Deletes a prompt by its ID. User must be the owner.")
 def delete_prompt_route(prompt_id: int, db: DbSession = Depends(get_db), current_user: UserModel = Depends(get_current_user)):
-    db_prompt_existing = crud.get_prompt(db, prompt_id=prompt_id)
+    db_prompt_existing = prompt_service.get_prompt(db, prompt_id=prompt_id)
     if db_prompt_existing is None:
         raise HTTPException(status_code=404, detail="Prompt not found")
     if db_prompt_existing.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to delete this prompt")
-    db_prompt = crud.delete_prompt(db, prompt_id=prompt_id)
+    db_prompt = prompt_service.delete_prompt(db, prompt_id=prompt_id)
     return db_prompt
 
 # --- PromptVersion Routes ---
 @router.post("/api/prompts/{prompt_id}/versions", response_model=schemas.PromptVersion, tags=["Prompt Versions"], summary="Create a new prompt version", description="Creates a new version for a specific prompt. User must be owner of the parent prompt or have appropriate permissions.")
 def create_prompt_version_route(prompt_id: int, version: schemas.PromptVersionCreate, db: DbSession = Depends(get_db), current_user: UserModel = Depends(get_current_user)):
     # TODO: Check if current_user can add versions to this prompt
-    db_prompt_check = crud.get_prompt(db, prompt_id=prompt_id) # Check prompt exists
+    db_prompt_check = prompt_service.get_prompt(db, prompt_id=prompt_id)  # Check prompt exists
     if db_prompt_check is None:
         raise HTTPException(status_code=404, detail="Prompt not found to associate version with")
-    created_version = crud.create_prompt_version(db=db, version=version, prompt_id=prompt_id)
+    created_version = prompt_service.create_prompt_version(db=db, prompt_id=prompt_id, version_create=version)
     if created_version is None:
         raise HTTPException(status_code=500, detail="Could not create prompt version")
     return created_version
 
 @router.get("/api/prompt_versions/{version_id}", response_model=schemas.PromptVersion, tags=["Prompt Versions"], summary="Get a specific prompt version", description="Retrieves a single prompt version by its ID.")
 def get_prompt_version_route(version_id: int, db: DbSession = Depends(get_db)):
-    db_version = crud.get_prompt_version(db, prompt_version_id=version_id)
+    db_version = prompt_service.get_prompt_version(db, prompt_version_id=version_id)
     if db_version is None:
         raise HTTPException(status_code=404, detail="Prompt version not found")
     return db_version
 
 @router.get("/api/prompts/{prompt_id}/versions", response_model=List[schemas.PromptVersion], tags=["Prompt Versions"], summary="List versions for a prompt", description="Retrieves all versions associated with a specific prompt ID, with optional pagination.")
 def get_versions_for_prompt_route(prompt_id: int, skip: int = 0, limit: int = 100, db: DbSession = Depends(get_db)):
-    versions = crud.get_prompt_versions_for_prompt(db, prompt_id=prompt_id, skip=skip, limit=limit)
+    versions = prompt_service.get_prompt_versions_for_prompt(db, prompt_id=prompt_id, skip=skip, limit=limit)
     return versions
 
 @router.put("/api/prompt_versions/{version_id}", response_model=schemas.PromptVersion, tags=["Prompt Versions"], summary="Update a prompt version", description="Updates an existing prompt version by its ID. User must have appropriate permissions (e.g., owner of parent prompt).")
 def update_prompt_version_route(version_id: int, version_update_data: schemas.PromptVersionUpdate, db: DbSession = Depends(get_db), current_user: UserModel = Depends(get_current_user)):
     # TODO: Check ownership/permissions
-    updated_version = crud.update_prompt_version(db, prompt_version_id=version_id, version_update=version_update_data)
+    updated_version = prompt_service.update_prompt_version(db, prompt_version_id=version_id, version_update=version_update_data)
     if updated_version is None:
         raise HTTPException(status_code=404, detail="Prompt version not found")
     return updated_version
@@ -154,7 +180,7 @@ def update_prompt_version_route(version_id: int, version_update_data: schemas.Pr
 @router.delete("/api/prompt_versions/{version_id}", response_model=schemas.PromptVersion, tags=["Prompt Versions"], summary="Delete a prompt version", description="Deletes a prompt version by its ID. User must have appropriate permissions (e.g., owner of parent prompt).")
 def delete_prompt_version_route(version_id: int, db: DbSession = Depends(get_db), current_user: UserModel = Depends(get_current_user)):
     # TODO: Check ownership/permissions
-    deleted_version = crud.delete_prompt_version(db, prompt_version_id=version_id)
+    deleted_version = prompt_service.delete_prompt_version(db, prompt_version_id=version_id)
     if deleted_version is None:
         raise HTTPException(status_code=404, detail="Prompt version not found")
     return deleted_version
@@ -164,7 +190,7 @@ def delete_prompt_version_route(version_id: int, db: DbSession = Depends(get_db)
 def create_performance_metric_route(metric_data: schemas.PerformanceMetricCreate, db: DbSession = Depends(get_db), current_user: UserModel = Depends(get_current_user)):
     # TODO: Authorization: Ensure user can submit metrics for this prompt_version_id
     # Check if prompt version exists
-    prompt_version = crud.get_prompt_version(db, prompt_version_id=metric_data.prompt_version_id)
+    prompt_version = prompt_service.get_prompt_version(db, prompt_version_id=metric_data.prompt_version_id)
     if not prompt_version:
         raise HTTPException(status_code=404, detail=f"PromptVersion with id {metric_data.prompt_version_id} not found.")
     return performance_service.record_performance_metric(db=db, metric_create=metric_data)
@@ -172,7 +198,7 @@ def create_performance_metric_route(metric_data: schemas.PerformanceMetricCreate
 @router.get("/api/prompt_versions/{prompt_version_id}/performance_metrics/", response_model=List[schemas.PerformanceMetric], tags=["Performance Metrics"], summary="Get performance metrics for a version", description="Retrieves all performance metrics recorded for a specific prompt version.")
 def get_metrics_for_version_route(prompt_version_id: int, db: DbSession = Depends(get_db)):
     # Check if prompt version exists
-    prompt_version = crud.get_prompt_version(db, prompt_version_id=prompt_version_id)
+    prompt_version = prompt_service.get_prompt_version(db, prompt_version_id=prompt_version_id)
     if not prompt_version:
         raise HTTPException(status_code=404, detail=f"PromptVersion with id {prompt_version_id} not found.")
     return performance_service.get_metrics_for_prompt_version(db=db, prompt_version_id=prompt_version_id)
@@ -196,16 +222,16 @@ def run_ga_experiment_route(params: schemas.GAExperimentParams, db: DbSession = 
 
     target_prompt = None
     if params.parent_prompt_id:
-        target_prompt = crud.get_prompt(db, prompt_id=params.parent_prompt_id)
+        target_prompt = prompt_service.get_prompt(db, prompt_id=params.parent_prompt_id)
         if not target_prompt:
             raise HTTPException(status_code=404, detail=f"Parent prompt with id {params.parent_prompt_id} not found.")
     elif params.prompt_name:
         prompt_create_data = schemas.PromptCreate(name=params.prompt_name, description=params.prompt_description)
-        target_prompt = crud.create_prompt(db, prompt=prompt_create_data, owner_id=current_user.id)
+        target_prompt = prompt_service.create_prompt(db, prompt_create=prompt_create_data, owner_id=current_user.id)
     else:
         default_name = f"GA Generated Prompt - {datetime.utcnow().isoformat()}"
         prompt_create_data = schemas.PromptCreate(name=default_name, description=params.prompt_description or "Generated by GA experiment")
-        target_prompt = crud.create_prompt(db, prompt=prompt_create_data, owner_id=current_user.id)
+        target_prompt = prompt_service.create_prompt(db, prompt_create=prompt_create_data, owner_id=current_user.id)
 
     if not target_prompt:
         raise HTTPException(status_code=500, detail="Could not determine or create target prompt for GA result.")
@@ -216,7 +242,7 @@ def run_ga_experiment_route(params: schemas.GAExperimentParams, db: DbSession = 
         parameters_used=ga_params_for_version,
         fitness_score=best_chromosome.fitness_score
     )
-    created_version = crud.create_prompt_version(db, version=version_create_data, prompt_id=target_prompt.id)
+    created_version = prompt_service.create_prompt_version(db, prompt_id=target_prompt.id, version_create=version_create_data)
     if not created_version:
         raise HTTPException(status_code=500, detail="Failed to save GA experiment result as a prompt version.")
     return created_version
@@ -306,6 +332,42 @@ def get_ga_experiment_status():
             should_stop=False
         )
 
+# --- GA Experiment History Routes ---
+
+@router.get(
+    "/api/experiments/runs",
+    response_model=List[schemas.GAExperimentRun],
+    tags=["Experiments"],
+    summary="List GA experiment runs",
+)
+def list_ga_experiment_runs(
+    skip: int = 0,
+    limit: int = 100,
+    db: DbSession = Depends(get_db),
+):
+    """Return a paginated list of recorded GA experiment runs."""
+    return get_experiment_runs(db=db, skip=skip, limit=limit)
+
+
+@router.get(
+    "/api/experiments/runs/{run_id}/chromosomes",
+    response_model=List[schemas.GAChromosome],
+    tags=["Experiments"],
+    summary="Get chromosomes for a GA run",
+)
+def list_chromosomes_for_run(
+    run_id: int,
+    skip: int = 0,
+    limit: int = 100,
+    db: DbSession = Depends(get_db),
+):
+    """Return chromosomes for the specified run, with optional pagination."""
+    run = get_experiment_run(db=db, run_id=run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Experiment run not found")
+    records = get_chromosomes_for_run(db=db, run_id=run_id)
+    return records[skip : skip + limit]
+
 # --- LLM Utility Routes (Verified, using CRUD layer for stats) ---
 
 @router.post("/api/llm/test_prompt", response_model=schemas.LLMTestResponse, name="test_llm_prompt", tags=["LLM Utilities"], summary="Test a prompt with an LLM", description="Sends a given prompt text to a specified LLM service and returns the response. Increments usage statistics for the LLM service.")
@@ -378,3 +440,23 @@ def get_api_key_route(service_name: str, db: DbSession = Depends(get_db), curren
         api_key_hint=f"**********{db_apikey.api_key[-4:]}" if db_apikey.api_key and len(db_apikey.api_key) >=4 else "Not Set", # Ensure api_key is not empty and long enough
         is_set=bool(db_apikey.api_key)
     )
+
+
+@router.post("/api/interactive_tests/run", tags=["Tests"])
+async def run_interactive_test(test_name: str):
+    """Run an interactive pytest file and return its output."""
+    root_dir = Path(__file__).resolve().parents[2]
+    test_file = root_dir / "tests" / "interactive" / test_name
+    if not test_file.is_file():
+        raise HTTPException(status_code=404, detail="Test not found")
+    try:
+        result = await asyncio.to_thread(
+            subprocess.run,
+            ["pytest", str(test_file)],
+            capture_output=True,
+            text=True,
+        )
+        output = result.stdout + result.stderr
+        return {"output": output, "returncode": result.returncode}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))

@@ -131,6 +131,7 @@ from prompthelix.genetics.mutation_strategies import (
     ReverseSliceStrategy,
     PlaceholderReplaceStrategy,
     NoOperationMutationStrategy,
+    load_strategies,
 )
 
 
@@ -145,6 +146,7 @@ class GeneticOperators:
         self,
         style_optimizer_agent: "StyleOptimizerAgent" | None = None,
         mutation_strategies: list[MutationStrategy] | None = None,
+        strategy_modules: list[str] | None = None,
     ):
         """
         Initializes the operator with an optional StyleOptimizerAgent and mutation strategies.
@@ -152,28 +154,45 @@ class GeneticOperators:
         Args:
             style_optimizer_agent (StyleOptimizerAgent | None, optional): Agent for style optimization.
             mutation_strategies (list[MutationStrategy] | None, optional):
-                A list of mutation strategies to use. If None, default strategies are initialized.
+                A list of mutation strategies to use. If None, strategies will be
+                loaded from ``strategy_modules`` if provided, otherwise defaults are used.
+            strategy_modules (list[str] | None, optional):
+                Module paths from which to dynamically load ``MutationStrategy``
+                implementations.
         """
         self.style_optimizer_agent = style_optimizer_agent
 
         if mutation_strategies is None:
-            # If no list is provided at all, use the default set of strategies
-            self.mutation_strategies = [
-                AppendCharStrategy(),
-                ReverseSliceStrategy(),
-                PlaceholderReplaceStrategy(),
-            ]
-            logger.info(
-                "GeneticOperators initialized with default mutation strategies."
-            )
+            loaded: list[MutationStrategy] = []
+            if strategy_modules:
+                loaded = load_strategies(strategy_modules)
+                if loaded:
+                    logger.info(
+                        f"GeneticOperators loaded {len(loaded)} mutation strategies from modules."
+                    )
+                else:
+                    logger.warning(
+                        "No mutation strategies found in given modules; falling back to defaults."
+                    )
+
+            if loaded:
+                self.mutation_strategies = loaded
+            else:
+                self.mutation_strategies = [
+                    AppendCharStrategy(),
+                    ReverseSliceStrategy(),
+                    PlaceholderReplaceStrategy(),
+                ]
+                logger.info(
+                    "GeneticOperators initialized with default mutation strategies."
+                )
         else:
             # If a list is provided (even if empty), use that list
             self.mutation_strategies = mutation_strategies
-            if self.mutation_strategies:  # Log if the provided list is not empty
+            if self.mutation_strategies:
                 logger.info(
                     f"GeneticOperators initialized with {len(self.mutation_strategies)} custom mutation strategies."
                 )
-            # If the provided list IS empty, the next check will handle it.
 
         # If, after the above, mutation_strategies is an empty list (e.g., user passed []),
         # then default to NoOperationMutationStrategy.
@@ -886,12 +905,43 @@ class PopulationManager:
         self,
         event_type: str = "ga_status_update",
         additional_data: Optional[dict] = None,
+        selected_parent_ids: Optional[list[str]] = None, # Added
     ):  # Added
         if not self.message_bus or not self.message_bus.connection_manager:
             # logger.debug("Message bus or connection manager not available for GA update broadcast.")
             return
 
         fittest = self.get_fittest_individual()
+        fitness_scores = []
+        if self.population:
+            fitness_scores = [c.fitness_score for c in self.population if hasattr(c, 'fitness_score')]
+
+        # --- Begin added logic for population sample ---
+        population_sample_data = []
+        if self.population:
+            # Ensure population is sorted by fitness (descending)
+            # get_fittest_individual might have already sorted it, but to be sure:
+            sorted_population_for_sample = sorted(self.population, key=lambda chromo: chromo.fitness_score, reverse=True)
+
+            sample_size = min(len(sorted_population_for_sample), 5) # Take top 5 or fewer
+            for chromo in sorted_population_for_sample[:sample_size]:
+                processed_genes = []
+                for gene in chromo.genes:
+                    gene_str = str(gene)
+                    if len(gene_str) > 50: # Truncate long gene strings
+                        gene_str = gene_str[:47] + "..."
+                    processed_genes.append(gene_str)
+
+                if len(processed_genes) > 3: # Limit number of genes shown per chromosome
+                    processed_genes = processed_genes[:3] + ["... (more genes)"]
+
+                population_sample_data.append({
+                    "id": str(chromo.id), # Ensure UUID is string
+                    "genes": processed_genes, # List of strings
+                    "fitness_score": chromo.fitness_score # Float
+                })
+        # --- End added logic for population sample ---
+
         payload = {
             "status": self.status,
             "generation": self.generation_number,
@@ -903,6 +953,14 @@ class PopulationManager:
             "fittest_chromosome_string": (
                 fittest.to_prompt_string() if fittest else None
             ),
+            # Fitness trends and population statistics
+            "fitness_min": min(fitness_scores) if fitness_scores else None,
+            "fitness_max": max(fitness_scores) if fitness_scores else None,
+            "fitness_mean": statistics.mean(fitness_scores) if fitness_scores else None,
+            "fitness_median": statistics.median(fitness_scores) if fitness_scores else None,
+            "fitness_std_dev": statistics.stdev(fitness_scores) if len(fitness_scores) > 1 else (0.0 if fitness_scores else None),
+            "population_sample": population_sample_data, # Add the new sample data to the payload
+            "selected_parent_ids": selected_parent_ids if selected_parent_ids is not None else [], # Added
         }
         if additional_data:
             payload.update(additional_data)
@@ -1067,6 +1125,7 @@ class PopulationManager:
         self.broadcast_ga_update(
             event_type="ga_generation_started",
             additional_data={"generation": self.generation_number + 1},
+            selected_parent_ids=None, # Explicitly None
         )  # Added
 
         if not self.population:
@@ -1205,6 +1264,7 @@ class PopulationManager:
                 "evaluated_count": successful_evaluations,
                 "failed_count": failed_evaluations_count,
             },
+            selected_parent_ids=None, # Explicitly None
         )  # Added
 
         # 2. Sort Population by fitness (descending)
@@ -1243,12 +1303,16 @@ class PopulationManager:
         num_offspring_needed = self.population_size - len(new_population)
 
         generated_offspring_count = 0
+        current_generation_selected_parent_ids = [] # Initialize list to store parent IDs
+
         # Ensure there's a viable population to select from for breeding
         if sorted_population:  # Check if sorted_population is not empty
             while generated_offspring_count < num_offspring_needed:
                 # Selection - logging is inside genetic_operators.selection
                 parent1 = self.genetic_operators.selection(sorted_population)
+                current_generation_selected_parent_ids.append(str(parent1.id)) # Add parent1 ID
                 parent2 = self.genetic_operators.selection(sorted_population)
+                current_generation_selected_parent_ids.append(str(parent2.id)) # Add parent2 ID
 
                 # Crossover - logging is inside genetic_operators.crossover
                 child1, child2 = self.genetic_operators.crossover(parent1, parent2)
@@ -1288,9 +1352,12 @@ class PopulationManager:
         logger.info(
             f"PopulationManager: Evolution complete for generation {self.generation_number}. New population size: {len(self.population)}. Status: {self.status}"
         )
+        unique_parent_ids = list(set(current_generation_selected_parent_ids)) # Get unique parent IDs
+
         self.broadcast_ga_update(
             event_type="ga_generation_complete",
             additional_data={"generation": self.generation_number},
+            selected_parent_ids=unique_parent_ids, # Pass unique parent IDs
         )  # Added
 
     def get_fittest_individual(self) -> PromptChromosome | None:

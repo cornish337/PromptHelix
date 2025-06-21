@@ -18,6 +18,12 @@ AI prompts through innovative techniques inspired by genetic algorithms and mult
         *   Displays messages for a selected session, ordered by timestamp.
         *   Shows sender ID, recipient ID (or "BROADCAST"), message type, full timestamp, and the message content.
         *   Attempts to pretty-print JSON content within messages for readability.
+*   **GA Analytics Dashboard**:
+    *   **Access**: Visit the `/ui/dashboard` route while the server is running.
+    *   **Features**:
+        *   Real-time metrics and logs streamed via WebSockets.
+        *   Line chart visualizing max, mean, and min fitness across generations.
+        *   Agent metrics and conversation events are displayed to show how interactions influence GA evolution.
 *   Performance tracking and evaluation of prompts
 *   API for programmatic access and integration
 *   User interface for managing and experimenting with prompts (basic HTML interface available)
@@ -257,6 +263,7 @@ python -m prompthelix.cli run ga [options]
 This command runs the Genetic Algorithm. It supports various options to customize the GA run, including providing an initial seed prompt, setting GA parameters (generations, population size), overriding agent and LLM configurations, specifying an output file for the best prompt, and defining where the population should be persisted.
 
 * `--parallel-workers <integer>`: Number of parallel workers used for fitness evaluation. Set to `1` for serial execution. By default, all available CPU cores are used.
+* `--population-file <filepath>`: File path for persisting the GA population. Use this to resume runs or inspect populations. (`--population-path` is a synonym.)
 
 Example:
 ```bash
@@ -312,7 +319,7 @@ PromptHelix also provides an API endpoint to trigger the genetic algorithm.
 
 ### Running Tests
 
-You can run all automated tests (unit and integration tests) using the PromptHelix CLI. This command will discover and execute all tests located within the `prompthelix/tests` directory and its subdirectories.
+You can run all automated tests (unit and integration tests) using the PromptHelix CLI. By default, the command discovers every test in the `prompthelix/tests` directory and its subdirectories.
 
 Execute the following command from the root of the project:
 
@@ -320,5 +327,31 @@ Execute the following command from the root of the project:
 python -m prompthelix.cli test
 ```
 
+To limit discovery to a particular directory or file, pass the `--path` option:
+
+```bash
+python -m prompthelix.cli test --path tests/unit/test_architect_agent.py
+```
+
 The output will show the progress of the tests and a summary of the results.
+
+
+### Interactive Tests
+
+PromptHelix also provides a simple web interface for running tests manually. Start the
+development server and navigate to `/ui/tests` to see the available tests.
+
+1. Open [http://127.0.0.1:8000/ui/tests](http://127.0.0.1:8000/ui/tests) in your browser.
+2. Choose a test from the dropdown list and click **Run**.
+3. Results will be displayed on the page once execution completes.
+
+If your deployment enforces authentication for UI routes, log in first via
+`/ui/login`. Otherwise, the interactive test page can be accessed without a token.
+
+You can also launch the interactive runner from the command line:
+
+```bash
+python -m prompthelix.cli test --interactive
+```
+
 
