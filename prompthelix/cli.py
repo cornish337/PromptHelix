@@ -40,7 +40,6 @@ def main_cli():
 
     # --- Setup Logging ---
     # Centralized logging setup. This will also handle noisy libraries.
-    from prompthelix.logging_config import setup_logging
     setup_logging()
     # --- End Setup Logging ---
 
@@ -48,7 +47,7 @@ def main_cli():
     # This logger instance will now use the configured handlers and format.
     # logger = logging.getLogger(__name__) # Already defined at module level
 
-""" Old 
+    """ Old
 
     # Configure logging according to settings
     configure_logging(settings.DEBUG)
@@ -58,7 +57,7 @@ def main_cli():
     # Control verbosity of noisy libraries
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("openai._base_client").setLevel(logging.WARNING)
-"""
+    """
 
 
 
@@ -209,6 +208,19 @@ def main_cli():
             else:  # start_dir (e.g. /app/prompthelix/tests) was found
                 print(f"Using path discovery from: {start_dir}")
                 suite = loader.discover(start_dir)
+
+            if not args.interactive:
+                def _filter_interactive(s):
+                    filtered = unittest.TestSuite()
+                    for t in s:
+                        if isinstance(t, unittest.TestSuite):
+                            filtered.addTests(_filter_interactive(t))
+                        else:
+                            if "interactive" not in t.id():
+                                filtered.addTest(t)
+                    return filtered
+
+                suite = _filter_interactive(suite)
 
         runner = unittest.TextTestRunner(verbosity=2)
         result = runner.run(suite)

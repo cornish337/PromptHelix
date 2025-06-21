@@ -25,7 +25,7 @@ from prompthelix.enums import ExecutionMode
 from prompthelix.utils.config_utils import update_settings # Assuming a utility for deep merging configs
 from prompthelix import config as global_config # To access global default settings
 from prompthelix.config import settings, ENABLE_WANDB_LOGGING, WANDB_PROJECT_NAME, WANDB_ENTITY_NAME # Added import
-"""old
+# "old"
 
 from prompthelix import config as global_ph_config # Renamed to avoid conflict with local 'config' variable
 from prompthelix.config import settings as global_settings_obj # Added import, renamed for clarity
@@ -38,7 +38,7 @@ from prompthelix.config import settings  # for WANDB / MLflow keys, etc.
 from prompthelix.genetics.fitness_base import BaseFitnessEvaluator  # fitness-evaluator ABC
 
 
-"""
+#
 
 logger = logging.getLogger(__name__)
 
@@ -169,7 +169,7 @@ def main_ga_loop(
 
         logger.info(f"Loading agent '{agent_id}' from class path '{class_path}' using settings key '{settings_key}'.")
 
-"""
+#
 
     # 1. Instantiate Agents from AGENT_PIPELINE_CONFIG
     logger.info("Initializing agents from AGENT_PIPELINE_CONFIG...")
@@ -187,7 +187,7 @@ def main_ga_loop(
 
         logger.info(f"Loading agent '{agent_id}' from class path '{class_path}' using settings key '{settings_key}'.")
 
-"""
+#
         try:
             module_path_str, class_name_str = class_path.rsplit('.', 1)
             module = importlib.import_module(module_path_str)
@@ -253,7 +253,7 @@ def main_ga_loop(
         style_optimizer_agent=style_optimizer,
         metrics_logger=metrics_logger_instance
     ) # Add settings if needed
-"""old
+# old
     # Pass the potentially None style_optimizer to GeneticOperators
     genetic_ops = GeneticOperators(style_optimizer_agent=style_optimizer, strategy_settings=global_ph_config.AGENT_SETTINGS.get("GeneticOperatorsStrategySettings"))
 
@@ -292,7 +292,7 @@ def main_ga_loop(
         logger.error(f"TypeError instantiating {FitnessEvaluatorClass.__name__} with provided arguments: {te}. Check constructor signature.", exc_info=True)
         # Potentially re-raise or use a very basic fallback if critical
         raise ValueError(f"Could not instantiate FitnessEvaluator {FitnessEvaluatorClass.__name__}") from te
-"""
+#
 
 
     pop_manager = PopulationManager(
@@ -308,10 +308,10 @@ def main_ga_loop(
         agents_used=agent_names,  # Pass the collected agent names/IDs
 
         wandb_enabled=current_wandb_enabled, # Pass W&B status
-"""old
-        metrics_file_path=metrics_file_path,
+# old
+#        metrics_file_path=metrics_file_path,
 
-"""
+#
 
         # TODO: Pass agent_settings_override or specific agent configs if PopulationManager
         # is responsible for creating/configuring more agents during its operations.

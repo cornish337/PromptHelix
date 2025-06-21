@@ -1,6 +1,11 @@
 """Prometheus metrics exporter for PromptHelix."""
 
-from prometheus_client import Gauge, start_http_server
+try:
+    from prometheus_client import Gauge, start_http_server
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
+    Gauge = None  # type: ignore
+    def start_http_server(*args, **kwargs):
+        return
 from prompthelix import config
 from prompthelix import globals as ph_globals
 
