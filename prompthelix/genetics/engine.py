@@ -27,6 +27,8 @@ if TYPE_CHECKING:  # pragma: no cover - only for type hints
     from prompthelix.agents.results_evaluator import ResultsEvaluatorAgent
     from prompthelix.agents.style_optimizer import StyleOptimizerAgent
     from prompthelix.message_bus import MessageBus  # Added for type hinting
+    from sqlalchemy.orm import Session as DbSession
+    from prompthelix.models.evolution_models import GAExperimentRun
 
 
 # PromptChromosome class remains unchanged
@@ -1068,6 +1070,8 @@ class PopulationManager:
         task_description: str,
         success_criteria: dict | None = None,
         target_style: str | None = None,
+        db_session: 'DbSession' | None = None,
+        experiment_run: 'GAExperimentRun' | None = None,
     ):
         """
         Orchestrates one generation of evolution: evaluation, selection, crossover, and mutation.
@@ -1078,6 +1082,7 @@ class PopulationManager:
             target_style (str | None, optional): Desired style used during mutation when
                 StyleOptimizerAgent is available. Defaults to None.
         """
+        from prompthelix.services import add_chromosome_record
         if self.should_stop:  # Moved this check up, and modified its behavior
             logger.info(
                 f"PopulationManager.evolve_population: Stop requested before starting generation {self.generation_number + 1}. Aborting evolution for this generation."
@@ -1135,6 +1140,13 @@ class PopulationManager:
                     )
                     chromosome.fitness_score = fitness_score
                     evaluated_chromosomes_count += 1
+                    if db_session and experiment_run:
+                        add_chromosome_record(
+                            db_session,
+                            experiment_run,
+                            current_generation_number,
+                            chromosome,
+                        )
                 except Exception as e:
                     logger.error(
                         f"Error evaluating chromosome {chromosome.id} in serial mode: {e}",
@@ -1167,6 +1179,13 @@ class PopulationManager:
                         fitness_score = future.result(timeout=self.evaluation_timeout)
                         chromosome.fitness_score = fitness_score
                         evaluated_chromosomes_count += 1
+                        if db_session and experiment_run:
+                            add_chromosome_record(
+                                db_session,
+                                experiment_run,
+                                current_generation_number,
+                                chromosome,
+                            )
                     except TimeoutError:
                         logger.error(
                             f"Fitness evaluation for chromosome {chromosome.id} timed out after {self.evaluation_timeout} seconds."
