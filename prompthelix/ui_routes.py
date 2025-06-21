@@ -49,6 +49,7 @@ async def get_current_user_ui(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found for session")
     return user
 
+
 def list_available_agents() -> List[dict[str, str]]: # Updated type hint
     agents_info = [] # Changed variable name
     # Assuming ui_routes.py is in the 'prompthelix' directory.
