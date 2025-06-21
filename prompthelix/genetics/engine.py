@@ -1063,6 +1063,12 @@ class PopulationManager:
                 {
                     "generation": self.generation_number,
                     "best_fitness": payload.get("best_fitness"),
+
+                    "fitness_mean": payload.get("fitness_mean"),
+                    "fitness_min": payload.get("fitness_min"),
+                }
+            )
+
                 }
             )
         except Exception:
@@ -1075,6 +1081,7 @@ class PopulationManager:
             from prompthelix.utils import update_generation, update_best_fitness
             update_generation(self.generation_number)
             update_best_fitness(payload.get("best_fitness"))
+
         except Exception:
             pass
 
@@ -1379,6 +1386,11 @@ class PopulationManager:
                     f"Generation {current_generation_number}: No valid fitness scores found in population to report statistics."
                 )
         else:
+
+            logger.info(
+                f"Generation {current_generation_number}: Population is empty, no fitness statistics to report."
+            )
+
      logger.info(f"Generation {current_generation_number}: Population is empty, no fitness statistics to report.")
 
         if db_session and experiment_run and fitness_scores:
@@ -1561,7 +1573,7 @@ class PopulationManager:
 
             additional_data={"generation": self.generation_number},
             selected_parent_ids=unique_parent_ids,  # Pass unique parent IDs
-
+ main
         )  # Added
 
         # Update Prometheus metrics and optional experiment trackers

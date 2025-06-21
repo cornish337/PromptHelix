@@ -199,8 +199,9 @@
                 },
                 {
                     label: 'Min Fitness',
-                    borderColor: 'rgb(239,68,68)',
-                    backgroundColor: 'rgba(239,68,68,0.3)',
+                    borderColor: 'rgb(234,88,12)',
+                    backgroundColor: 'rgba(234,88,12,0.3)',
+
                     data: [],
                     tension: 0.1
                 }
@@ -338,12 +339,16 @@
                     chartData.datasets[0].data.push(parseFloat(data.best_fitness));
                     chartData.datasets[1].data.push(parseFloat(data.fitness_mean));
                     chartData.datasets[2].data.push(parseFloat(data.fitness_min));
+
                     gaHistoryData.push({generation: data.generation, best_fitness: data.best_fitness, fitness_mean: data.fitness_mean, fitness_min: data.fitness_min});
+
                 } else if (currentLabelIndex !== -1 && currentLabelIndex < chartData.datasets[0].data.length) { // Update existing data point
                     chartData.datasets[0].data[currentLabelIndex] = parseFloat(data.best_fitness);
                     chartData.datasets[1].data[currentLabelIndex] = parseFloat(data.fitness_mean);
                     chartData.datasets[2].data[currentLabelIndex] = parseFloat(data.fitness_min);
+
                     gaHistoryData[currentLabelIndex] = {generation: data.generation, best_fitness: data.best_fitness, fitness_mean: data.fitness_mean, fitness_min: data.fitness_min};
+# main
                 }
 
 
