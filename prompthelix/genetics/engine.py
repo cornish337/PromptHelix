@@ -7,8 +7,13 @@ from typing import List, Optional
 class PromptChromosome:
     """Simple representation of a prompt chromosome used in tests."""
 
-    def __init__(self, genes: Optional[List[str]] = None, fitness_score: float = 0.0,
-                 parent_ids: Optional[List[str]] = None, mutation_strategy: Optional[str] = None):
+    def __init__(
+        self,
+        genes: Optional[List[str]] = None,
+        fitness_score: float = 0.0,
+        parent_ids: Optional[List[str]] = None,
+        mutation_strategy: Optional[str] = None
+    ):
         self.id = uuid.uuid4()
         self.genes = genes or []
         self.fitness_score = fitness_score
@@ -16,8 +21,12 @@ class PromptChromosome:
         self.mutation_strategy = mutation_strategy
 
     def clone(self) -> "PromptChromosome":
-        return PromptChromosome(list(self.genes), self.fitness_score,
-                                list(self.parent_ids), self.mutation_strategy)
+        return PromptChromosome(
+            genes=list(self.genes),
+            fitness_score=self.fitness_score,
+            parent_ids=list(self.parent_ids),
+            mutation_strategy=self.mutation_strategy,
+        )
 
 
 class GeneticOperators:
@@ -27,10 +36,20 @@ class GeneticOperators:
         self.style_optimizer_agent = style_optimizer_agent
         self.mutation_strategies = mutation_strategies or []
 
-    def crossover(self, parent1: PromptChromosome, parent2: PromptChromosome, crossover_rate: float = 1.0, **_):
+    def crossover(
+        self,
+        parent1: PromptChromosome,
+        parent2: PromptChromosome,
+        crossover_rate: float = 1.0,
+        **_
+    ) -> tuple[PromptChromosome, PromptChromosome]:
         child1 = parent1.clone()
         child2 = parent2.clone()
-        if random.random() <= crossover_rate and parent1.genes and parent2.genes:
+        if (
+            random.random() <= crossover_rate
+            and parent1.genes
+            and parent2.genes
+        ):
             pivot = len(parent1.genes) // 2
             child1.genes = parent1.genes[:pivot] + parent2.genes[pivot:]
             child2.genes = parent2.genes[:pivot] + parent1.genes[pivot:]
@@ -38,7 +57,13 @@ class GeneticOperators:
         child2.parent_ids = [str(parent1.id), str(parent2.id)]
         return child1, child2
 
-    def mutate(self, chromosome: PromptChromosome, mutation_rate: float = 1.0, gene_mutation_prob: float = 1.0, **_):
+    def mutate(
+        self,
+        chromosome: PromptChromosome,
+        mutation_rate: float = 1.0,
+        gene_mutation_prob: float = 1.0,
+        **_
+    ) -> PromptChromosome:
         if not self.mutation_strategies or random.random() > mutation_rate:
             return chromosome.clone()
         strategy = self.mutation_strategies[0]
@@ -59,9 +84,16 @@ class FitnessEvaluator:
 class PopulationManager:
     """Simplified population manager supporting persistence and broadcasts."""
 
-    def __init__(self, genetic_operators: GeneticOperators, fitness_evaluator: FitnessEvaluator,
-                 prompt_architect_agent, population_size: int = 0, elitism_count: int = 0,
-                 parallel_workers: int = 1, message_bus=None):
+    def __init__(
+        self,
+        genetic_operators: GeneticOperators,
+        fitness_evaluator: FitnessEvaluator,
+        prompt_architect_agent,
+        population_size: int = 0,
+        elitism_count: int = 0,
+        parallel_workers: int = 1,
+        message_bus=None
+    ):
         self.genetic_operators = genetic_operators
         self.fitness_evaluator = fitness_evaluator
         self.prompt_architect_agent = prompt_architect_agent
@@ -108,8 +140,16 @@ class PopulationManager:
         if self.population:
             self.population_size = len(self.population)
 
-    def broadcast_ga_update(self, event_type: str, selected_parent_ids=None, additional_data=None):
-        if self.message_bus and getattr(self.message_bus, "connection_manager", None):
+    def broadcast_ga_update(
+        self,
+        event_type: str,
+        selected_parent_ids=None,
+        additional_data=None
+    ):
+        if (
+            self.message_bus
+            and getattr(self.message_bus, "connection_manager", None)
+        ):
             payload = {"type": event_type, "data": {"selected_parent_ids": selected_parent_ids}}
             if additional_data:
                 payload["data"].update(additional_data)
@@ -122,6 +162,13 @@ class PopulationManager:
         avg = sum(c.fitness_score for c in self.population) / len(self.population)
         try:
             from prompthelix.services import add_generation_metric
-            add_generation_metric(db_session, experiment_run, self.generation_number, best.fitness_score, avg, 0.0)
+            add_generation_metric(
+                db_session,
+                experiment_run,
+                self.generation_number,
+                best.fitness_score,
+                avg,
+                0.0
+            )
         except Exception:
             pass
