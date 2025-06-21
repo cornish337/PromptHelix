@@ -16,13 +16,14 @@ FALLBACK_KNOWLEDGE_FILE = "style_optimizer_rules.json"
 
 
 class StyleOptimizerAgent(BaseAgent):
-    agent_id = "StyleOptimizer"
+    # agent_id class variable can serve as a default
+    agent_id_default = "StyleOptimizer"
     agent_description = "Improves prompt style and clarity."
     """
     Refines prompts to enhance their style, tone, clarity, and persuasiveness,
     often based on specific target audience or desired communication effect.
     """
-    def __init__(self, message_bus=None, settings: Optional[Dict] = None, knowledge_file_path: Optional[str] = None): # Modified signature
+    def __init__(self, agent_id: Optional[str] = None, message_bus=None, settings: Optional[Dict] = None, knowledge_file_path: Optional[str] = None):
         """
         Initializes the StyleOptimizerAgent.
         Loads style transformation rules or lexicons and agent configuration.
@@ -33,9 +34,11 @@ class StyleOptimizerAgent(BaseAgent):
             knowledge_file_path (Optional[str], optional): Path to the knowledge file.
                 Overrides 'knowledge_file_path' in settings if provided.
         """
-        super().__init__(agent_id="StyleOptimizer", message_bus=message_bus, settings=settings)
+        effective_agent_id = agent_id if agent_id is not None else self.agent_id_default
+        super().__init__(agent_id=effective_agent_id, message_bus=message_bus, settings=settings)
 
-        global_defaults = AGENT_SETTINGS.get("StyleOptimizerAgent", {})
+        settings_key_for_globals = self.settings.get("settings_key_from_pipeline", "StyleOptimizerAgent")
+        global_defaults = AGENT_SETTINGS.get(settings_key_for_globals, {})
         llm_provider_default = global_defaults.get("default_llm_provider", "openai")
         llm_model_default = global_defaults.get("default_llm_model", "gpt-3.5-turbo")
 

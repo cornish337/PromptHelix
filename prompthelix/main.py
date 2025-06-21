@@ -175,6 +175,9 @@ app.include_router(api_routes.router)
 # Include UI routes
 app.include_router(ui_router, prefix="/ui", tags=["UI"])
 
+
+# The /debug-routes endpoint has been removed.
+'''
 @app.get("/debug-routes")
 async def debug_routes():
     """
@@ -190,6 +193,8 @@ async def debug_routes():
             }
         )
     return JSONResponse(content={"routes": routes})
+"""
+'''
 
 if __name__ == "__main__":
     # This block is for when you run the application directly, e.g., using `python -m prompthelix.main`
