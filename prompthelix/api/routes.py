@@ -35,6 +35,7 @@ from prompthelix.services import (
     get_experiment_runs,
     get_experiment_run,
     get_chromosomes_for_run,
+    get_generation_metrics_for_run,
 )
 from prompthelix.services.prompt_service import PromptService
 
@@ -419,9 +420,20 @@ def get_ga_experiment_status():
 
 
 # --- GA History Route ---
-@router.get("/api/ga/history", tags=["GA Control"], summary="Get GA fitness history")
-def get_ga_history():
-    return ph_globals.ga_history
+@router.get(
+    "/api/ga/history",
+    response_model=List[schemas.GAGenerationMetric],
+    tags=["GA Control"],
+    summary="Get GA fitness history",
+)
+def get_ga_history(
+    run_id: int,
+    skip: int = 0,
+    limit: int = 100,
+    db: DbSession = Depends(get_db),
+):
+    metrics = get_generation_metrics_for_run(db=db, run_id=run_id)
+    return metrics[skip : skip + limit]
 
 
 @router.get(

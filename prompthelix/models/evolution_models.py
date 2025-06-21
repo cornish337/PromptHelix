@@ -40,6 +40,7 @@ class GAChromosome(Base):
     run = relationship("GAExperimentRun", back_populates="chromosomes")
 
 
+
 class GAGenerationMetrics(Base):
     """Stores summary metrics for each GA generation."""
 
@@ -50,8 +51,13 @@ class GAGenerationMetrics(Base):
     generation_number = Column(Integer, nullable=False)
     best_fitness = Column(Float, nullable=False)
     avg_fitness = Column(Float, nullable=False)
+
+    population_diversity = Column(Float, nullable=False)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+
     population_size = Column(Integer, nullable=False)
     diversity = Column(JSON, nullable=True)
+
 
     run = relationship("GAExperimentRun")
 

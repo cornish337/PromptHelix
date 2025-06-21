@@ -5,7 +5,11 @@ from sqlalchemy.orm import Session as DbSession
 from prompthelix.models.evolution_models import (
     GAExperimentRun,
     GAChromosome,
-    GAGenerationMetrics,
+
+    GAGenerationMetric,
+
+ #   GAGenerationMetrics,
+#
 )
 from prompthelix.genetics.engine import PromptChromosome
 
@@ -80,4 +84,34 @@ def get_experiment_runs(db: DbSession, skip: int = 0, limit: int = 100) -> List[
 def get_experiment_run(db: DbSession, run_id: int) -> Optional[GAExperimentRun]:
     """Return a single GA experiment run by ID, if it exists."""
     return db.query(GAExperimentRun).filter(GAExperimentRun.id == run_id).first()
+
+
+def add_generation_metric(
+    db: DbSession,
+    run: GAExperimentRun,
+    generation_number: int,
+    best_fitness: float,
+    avg_fitness: float,
+    population_diversity: float,
+) -> GAGenerationMetric:
+    metric = GAGenerationMetric(
+        run_id=run.id,
+        generation_number=generation_number,
+        best_fitness=best_fitness,
+        avg_fitness=avg_fitness,
+        population_diversity=population_diversity,
+    )
+    db.add(metric)
+    db.commit()
+    db.refresh(metric)
+    return metric
+
+
+def get_generation_metrics_for_run(db: DbSession, run_id: int) -> List[GAGenerationMetric]:
+    return (
+        db.query(GAGenerationMetric)
+        .filter(GAGenerationMetric.run_id == run_id)
+        .order_by(GAGenerationMetric.generation_number.asc())
+        .all()
+    )
 
