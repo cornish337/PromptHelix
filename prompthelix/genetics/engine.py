@@ -43,162 +43,43 @@ from prompthelix import metrics as ph_metrics # Already imported at top of file 
 
 # PromptChromosome class remains unchanged
 class PromptChromosome:
-    """
-    Represents an individual prompt in the genetic algorithm.
+    """Represents an individual prompt in the genetic algorithm."""
 
-    Each chromosome consists of a list of 'genes' (which are typically strings
-    or more structured objects representing parts of a prompt), a fitness score,
-    and a unique identifier.
-    """
-
-
-    def __init__(self, genes: list | None = None, fitness_score: float = 0.0,
-                 parent_ids: list[str] | None = None,
-                 mutation_strategy_applied: str | None = None):
-""" Old
     def __init__(
         self,
         genes: list | None = None,
         fitness_score: float = 0.0,
-
-        parents: Optional[list[str]] | None = None,
-        mutation_operator: str | None = None,
+        parent_ids: list[str] | None = None,
+        mutation_strategy_applied: str | None = None,
     ):
-
-        parents: list[str] | None = None,
-        mutation_op: str | None = None,
-    ):
- """
-        """
-        Initializes a PromptChromosome.
-
-        Args:
-            genes (list | None, optional): A list representing the components (genes)
-                                           of the prompt. Defaults to an empty list if None.
-            fitness_score (float, optional): The initial fitness score of the chromosome.
-                                             Defaults to 0.0.
-            parents (list[str] | None, optional): IDs of parent chromosomes. Defaults to empty list.
-            mutation_op (str | None, optional): Name of the mutation operation applied. Defaults to None.
-        """
- """ old
         self.id = uuid.uuid4()
         self.genes: list = [] if genes is None else genes
         self.fitness_score: float = fitness_score
-        self.parents: list[str] = parents if parents is not None else []
-        self.mutation_op: str | None = mutation_op
-"""
-
-
-        """
-        Initializes a PromptChromosome.
-
-        Args:
-            genes (list | None, optional): A list representing the components (genes)
-                                           of the prompt. Defaults to an empty list if None.
-            fitness_score (float, optional): The initial fitness score of the chromosome.
-                                             Defaults to 0.0.
-            parent_ids (list[str] | None, optional): A list of parent chromosome IDs.
-                                                     Defaults to None.
-            mutation_strategy_applied (str | None, optional): Name of the mutation strategy applied.
-                                                              Defaults to None.
-        """
-        self.id = uuid.uuid4()
-        self.genes: list = [] if genes is None else genes
-        self.fitness_score: float = fitness_score
-
-
-        self.parents: list[str] = parents or []
-        self.mutation_operator: str | None = mutation_operator
-
-""" Old
-        self.parent_ids: list[str] | None = parent_ids
-        self.mutation_strategy_applied: str | None = mutation_strategy_applied
-        self.evaluation_details: dict = {} # Already present, just noting
-
-
         self.parent_ids: list[str] = parent_ids or []
-        self.mutation_strategy: str | None = mutation_strategy
-"""
-
-
+        self.mutation_strategy_applied: str | None = mutation_strategy_applied
+        self.evaluation_details: dict = {}
 
     def calculate_fitness(self) -> float:
-        """
-        Returns the current fitness score of the chromosome.
-
-        Note: This method simply returns the stored fitness_score. The actual
-        calculation and setting of this score are typically handled externally by
-        a FitnessEvaluator or a similar mechanism within the genetic algorithm,
-        which then updates self.fitness_score.
-
-        Returns:
-            float: The fitness score of the chromosome.
-        """
+        """Return the current fitness score."""
         return self.fitness_score
 
     def to_prompt_string(self, separator: str = "\n") -> str:
-        """
-        Concatenates all gene strings into a single prompt string.
-
-        This string is typically what would be sent to an LLM for execution.
-
-        Args:
-            separator (str, optional): The separator to use between genes.
-                                       Defaults to a newline character.
-
-        Returns:
-            str: A single string representing the full prompt.
-        """
-        return separator.join(str(gene) for gene in self.genes)
+        """Concatenate genes into a prompt string."""
+        return separator.join(str(g) for g in self.genes)
 
     def clone(self) -> "PromptChromosome":
-        """
-        Creates a deep copy of this chromosome with a new unique ID.
-
-        The genes are deep-copied to ensure the clone is independent of the
-        original. The fitness score is also copied.
-
-        Returns:
-            PromptChromosome: A new PromptChromosome instance that is a deep copy
-                              of the current one, but with a new ID.
-        """
-        cloned_genes = copy.deepcopy(self.genes)
-        # A clone inherits the parentage and mutation history of its source.
-        # If the clone is subsequently mutated, that's a new event for that specific clone.
-        cloned_chromosome = PromptChromosome(
-            genes=cloned_genes,
+        """Return a deep copy of this chromosome with a new ID."""
+        cloned = PromptChromosome(
+            genes=copy.deepcopy(self.genes),
             fitness_score=self.fitness_score,
-
-
-            parents=list(self.parents),
-            mutation_operator=self.mutation_operator,
-
-""" Old
-            parent_ids=copy.deepcopy(self.parent_ids) if self.parent_ids else None, # Deepcopy list
-            mutation_strategy_applied=self.mutation_strategy_applied
-        )
-        # The clone gets a new ID, so it's distinct from its source.
-
-
             parent_ids=list(self.parent_ids),
-            mutation_strategy=self.mutation_strategy,
-
+            mutation_strategy_applied=self.mutation_strategy_applied,
         )
-        cloned_chromosome.mutation_op = None
-"""
-
-        return cloned_chromosome
+        cloned.evaluation_details = copy.deepcopy(self.evaluation_details)
+        return cloned
 
     def __str__(self) -> str:
-        """
-        Returns a human-readable string representation of the chromosome.
-
-        Returns:
-            str: A string detailing the chromosome's ID, fitness, and genes.
-        """
-        gene_representation = "\n".join([f"  - {str(gene)}" for gene in self.genes])
-        if not self.genes:
-            gene_representation = "  - (No genes)"
+        gene_representation = "\n".join(f"  - {str(g)}" for g in self.genes) or "  - (No genes)"
         return (
             f"Chromosome ID: {self.id}\n"
             f"Fitness: {self.fitness_score:.4f}\n"
@@ -206,30 +87,11 @@ class PromptChromosome:
         )
 
     def __repr__(self) -> str:
-        """
-        Returns an unambiguous string representation of the chromosome object.
-
-        Returns:
-            str: A string that could ideally be used to recreate the object.
-        """
         return (
             f"PromptChromosome(id='{self.id}', genes={self.genes!r}, "
             f"fitness_score={self.fitness_score:.4f}, parent_ids={self.parent_ids}, "
-            f"mutation_strategy={self.mutation_strategy!r})"
+            f"mutation_strategy_applied={self.mutation_strategy_applied!r})"
         )
-
-
-import importlib
-from typing import Type, List, Any # Added Type, List, Any
-from prompthelix.config import settings as global_settings_obj # For config access
-from prompthelix.genetics.strategy_base import BaseMutationStrategy, BaseSelectionStrategy, BaseCrossoverStrategy
-# Import default strategies for fallback
-from prompthelix.genetics.mutation_strategies import (
-    AppendCharStrategy, ReverseSliceStrategy, PlaceholderReplaceStrategy, NoOperationMutationStrategy
-)
-from prompthelix.genetics.selection_strategies import TournamentSelectionStrategy
-from prompthelix.genetics.crossover_strategies import SinglePointCrossoverStrategy
-
 
 class GeneticOperators:
     """

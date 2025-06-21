@@ -296,11 +296,12 @@ LOGGING_CONFIG = {
             "propagate": False
         }
     }
+}
 """ Old
     "level": "DEBUG" if settings.DEBUG else "INFO",
     "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 """
-}
+
 
 # --- Experiment Tracking Configuration ---
 ENABLE_WANDB_LOGGING = os.getenv("PROMPTHELIX_ENABLE_WANDB", "false").lower() in ("true", "1", "t")
