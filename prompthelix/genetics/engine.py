@@ -10,7 +10,7 @@ import statistics # Added import
 from typing import TYPE_CHECKING, Optional, Dict  # Ensure Optional is here
 import asyncio  # Added
 import openai
-from openai import OpenAIError
+from openai import OpenAIError, AsyncOpenAI # Added AsyncOpenAI
 from prompthelix.config import (
     settings as global_sdk_settings,
 )  # Renamed to avoid conflict
@@ -127,184 +127,125 @@ class PromptChromosome:
         return f"PromptChromosome(id='{self.id}', genes={self.genes!r}, fitness_score={self.fitness_score:.4f})"
 
 
+import importlib
+from typing import Type, List, Any # Added Type, List, Any
+from prompthelix.config import settings as global_settings_obj # For config access
+from prompthelix.genetics.strategy_base import BaseMutationStrategy, BaseSelectionStrategy, BaseCrossoverStrategy
+# Import default strategies for fallback
 from prompthelix.genetics.mutation_strategies import (
-    MutationStrategy,
-    AppendCharStrategy,
-    ReverseSliceStrategy,
-    PlaceholderReplaceStrategy,
-    NoOperationMutationStrategy,
-    load_strategies,
+    AppendCharStrategy, ReverseSliceStrategy, PlaceholderReplaceStrategy, NoOperationMutationStrategy
 )
+from prompthelix.genetics.selection_strategies import TournamentSelectionStrategy
+from prompthelix.genetics.crossover_strategies import SinglePointCrossoverStrategy
 
 
-# GeneticOperators class remains unchanged
 class GeneticOperators:
     """
     Encapsulates genetic operators like selection, crossover, and mutation
-    for PromptChromosome objects.
+    for PromptChromosome objects. Loads strategies from configuration.
     """
 
-    def __init__(
-        self,
-        style_optimizer_agent: "StyleOptimizerAgent" | None = None,
-        mutation_strategies: list[MutationStrategy] | None = None,
-        strategy_modules: list[str] | None = None,
-    ):
+    def __init__(self, style_optimizer_agent: "StyleOptimizerAgent" | None = None, strategy_settings: Optional[Dict[str, Dict]] = None):
         """
-        Initializes the operator with an optional StyleOptimizerAgent and mutation strategies.
+        Initializes the GeneticOperators, loading strategies from configuration.
 
         Args:
             style_optimizer_agent (StyleOptimizerAgent | None, optional): Agent for style optimization.
-            mutation_strategies (list[MutationStrategy] | None, optional):
-                A list of mutation strategies to use. If None, strategies will be
-                loaded from ``strategy_modules`` if provided, otherwise defaults are used.
-            strategy_modules (list[str] | None, optional):
-                Module paths from which to dynamically load ``MutationStrategy``
-                implementations.
+            strategy_settings (Optional[Dict[str, Dict]], optional): Settings for individual strategies,
+                                                                    keyed by strategy class name.
         """
         self.style_optimizer_agent = style_optimizer_agent
+        self.strategy_settings = strategy_settings if strategy_settings is not None else {}
 
-        if mutation_strategies is None:
-            loaded: list[MutationStrategy] = []
-            if strategy_modules:
-                loaded = load_strategies(strategy_modules)
-                if loaded:
-                    logger.info(
-                        f"GeneticOperators loaded {len(loaded)} mutation strategies from modules."
-                    )
+        self.mutation_strategies: List[BaseMutationStrategy] = self._load_mutation_strategies()
+        self.selection_strategy: BaseSelectionStrategy = self._load_selection_strategy()
+        self.crossover_strategy: BaseCrossoverStrategy = self._load_crossover_strategy()
+
+    def _load_strategy_instance(self, class_path_str: str, default_class: Type, base_class: Type) -> Any:
+        """Helper to load and instantiate a single strategy class."""
+        logger.info(f"Attempting to load strategy from: {class_path_str}")
+        StrategyClass = default_class
+        try:
+            module_path, class_name = class_path_str.rsplit('.', 1)
+            module = importlib.import_module(module_path)
+            LoadedClass = getattr(module, class_name)
+            if issubclass(LoadedClass, base_class):
+                StrategyClass = LoadedClass
+                logger.info(f"Successfully loaded strategy class: {class_name} from {module_path}")
+            else:
+                logger.warning(f"Class {class_name} from {module_path} does not inherit from {base_class.__name__}. Using default: {default_class.__name__}")
+        except (ImportError, AttributeError, ValueError) as e:
+            logger.error(f"Failed to load strategy class '{class_path_str}': {e}. Using default: {default_class.__name__}", exc_info=True)
+
+        # Get specific settings for this strategy class, if any
+        class_specific_settings = self.strategy_settings.get(StrategyClass.__name__, None)
+
+        try:
+            return StrategyClass(settings=class_specific_settings)
+        except Exception as e:
+            logger.error(f"Failed to instantiate strategy {StrategyClass.__name__} with settings {class_specific_settings}: {e}. Instantiating with no settings.", exc_info=True)
+            return StrategyClass(settings=None)
+
+
+    def _load_mutation_strategies(self) -> List[BaseMutationStrategy]:
+        paths_str = global_settings_obj.MUTATION_STRATEGY_CLASSES
+        paths = [path.strip() for path in paths_str.split(',') if path.strip()]
+
+        loaded_strategies: List[BaseMutationStrategy] = []
+        if not paths:
+            logger.warning("No mutation strategy classes configured. Using default list.")
+            # Fallback to a default list of instantiated strategies if config is empty
+            return [
+                AppendCharStrategy(settings=self.strategy_settings.get("AppendCharStrategy")),
+                ReverseSliceStrategy(settings=self.strategy_settings.get("ReverseSliceStrategy")),
+                PlaceholderReplaceStrategy(settings=self.strategy_settings.get("PlaceholderReplaceStrategy"))
+            ]
+
+        for path_str in paths:
+            try:
+                # Default class for mutation is tricky as there are many, use NoOp as a safe default if specific one fails
+                # However, _load_strategy_instance will use the class from path_str if valid.
+                # For mutation, the "default_class" argument to _load_strategy_instance is more like a fallback if the path is totally invalid.
+                # Let's assume for mutation, if a path is given, it must load, or it's an error/skip.
+                # Or, we can have a default_mutation_strategy_class if needed.
+                module_path, class_name = path_str.rsplit('.', 1)
+                module = importlib.import_module(module_path)
+                StrategyClass = getattr(module, class_name)
+                if issubclass(StrategyClass, BaseMutationStrategy):
+                    class_specific_settings = self.strategy_settings.get(StrategyClass.__name__, None)
+                    loaded_strategies.append(StrategyClass(settings=class_specific_settings))
+                    logger.info(f"Loaded and instantiated mutation strategy: {path_str}")
                 else:
-                    logger.warning(
-                        "No mutation strategies found in given modules; falling back to defaults."
-                    )
+                    logger.warning(f"Class {path_str} is not a BaseMutationStrategy. Skipping.")
+            except (ImportError, AttributeError, ValueError) as e:
+                logger.error(f"Failed to load mutation strategy '{path_str}': {e}. Skipping.", exc_info=True)
 
-            if loaded:
-                self.mutation_strategies = loaded
-            else:
-                self.mutation_strategies = [
-                    AppendCharStrategy(),
-                    ReverseSliceStrategy(),
-                    PlaceholderReplaceStrategy(),
-                ]
-                logger.info(
-                    "GeneticOperators initialized with default mutation strategies."
-                )
-        else:
-            # If a list is provided (even if empty), use that list
-            self.mutation_strategies = mutation_strategies
-            if self.mutation_strategies:
-                logger.info(
-                    f"GeneticOperators initialized with {len(self.mutation_strategies)} custom mutation strategies."
-                )
+        if not loaded_strategies: # If all paths failed or paths was empty and resulted in no strategies
+            logger.warning("Failed to load any mutation strategies from configuration. Using NoOperationMutationStrategy as default.")
+            return [NoOperationMutationStrategy(settings=self.strategy_settings.get("NoOperationMutationStrategy"))]
+        return loaded_strategies
 
-        # If, after the above, mutation_strategies is an empty list (e.g., user passed []),
-        # then default to NoOperationMutationStrategy.
-        if not self.mutation_strategies:
-            logger.warning(
-                "GeneticOperators received an empty list for mutation_strategies. Defaulting to NoOperationMutationStrategy."
-            )
-            self.mutation_strategies = [NoOperationMutationStrategy()]
+    def _load_selection_strategy(self) -> BaseSelectionStrategy:
+        class_path = global_settings_obj.SELECTION_STRATEGY_CLASS
+        return self._load_strategy_instance(class_path, TournamentSelectionStrategy, BaseSelectionStrategy)
 
-    def selection(
-        self, population: list[PromptChromosome], tournament_size: int = 3
-    ) -> PromptChromosome:
+    def _load_crossover_strategy(self) -> BaseCrossoverStrategy:
+        class_path = global_settings_obj.CROSSOVER_STRATEGY_CLASS
+        return self._load_strategy_instance(class_path, SinglePointCrossoverStrategy, BaseCrossoverStrategy)
+
+    def selection(self, population: list[PromptChromosome], **kwargs) -> PromptChromosome:
         """
-        Selects an individual from the population using tournament selection.
-
-        Args:
-            population (list[PromptChromosome]): A list of PromptChromosome objects.
-            tournament_size (int, optional): The number of individuals to select
-                                             for the tournament. Defaults to 3.
-
-        Returns:
-            PromptChromosome: The individual with the highest fitness_score from
-                              the tournament.
-
-        Raises:
-            ValueError: If population is empty or tournament_size is not positive.
+        Selects an individual from the population using the configured selection strategy.
         """
-        if not population:
-            raise ValueError("Population cannot be empty for selection.")
-        if tournament_size <= 0:
-            raise ValueError("Tournament size must be positive.")
+        # Pass through kwargs like tournament_size to the strategy's select method
+        return self.selection_strategy.select(population, **kwargs)
 
-        actual_tournament_size = min(len(population), tournament_size)
-        tournament_contenders = random.sample(population, actual_tournament_size)
-
-        winner = tournament_contenders[0]
-        for contender in tournament_contenders[1:]:
-            if contender.fitness_score > winner.fitness_score:
-                winner = contender
-
-        logger.debug(
-            f"Selection (tournament size {actual_tournament_size}): Winner Chromosome ID {winner.id}, Fitness {winner.fitness_score:.4f}"
-        )
-        return winner
-
-    def crossover(
-        self,
-        parent1: PromptChromosome,
-        parent2: PromptChromosome,
-        crossover_rate: float = 0.7,
-    ) -> tuple[PromptChromosome, PromptChromosome]:
+    def crossover(self, parent1: PromptChromosome, parent2: PromptChromosome, **kwargs) -> tuple[PromptChromosome, PromptChromosome]:
         """
-        Performs single-point crossover between two parent chromosomes.
-
-        If random.random() < crossover_rate, crossover occurs. Otherwise, children
-        are clones of the parents.
-
-
-        Args:
-            parent1 (PromptChromosome): The first parent chromosome.
-            parent2 (PromptChromosome): The second parent chromosome.
-            crossover_rate (float, optional): The probability of crossover occurring.
-                                             Defaults to 0.7.
-
-        Returns:
-            tuple[PromptChromosome, PromptChromosome]: Two new child chromosomes.
+        Performs crossover using the configured crossover strategy.
         """
-        child1_genes = []
-        child2_genes = []
-        performed_crossover = False
-
-        if random.random() < crossover_rate:
-            performed_crossover = True
-            len1 = len(parent1.genes)
-            len2 = len(parent2.genes)
-
-            if len1 == 0 and len2 == 0:
-                child1_genes, child2_genes = [], []
-            elif len1 == 0:
-                child1_genes, child2_genes = copy.deepcopy(parent2.genes), []
-            elif len2 == 0:
-                child1_genes, child2_genes = [], copy.deepcopy(parent1.genes)
-            else:
-                shorter_parent_len = min(len1, len2)
-                # Ensure crossover_point allows for segments from both if shorter_parent_len > 0
-                crossover_point = (
-                    random.randint(0, shorter_parent_len)
-                    if shorter_parent_len > 0
-                    else 0
-                )
-
-                child1_genes.extend(parent1.genes[:crossover_point])
-                child1_genes.extend(parent2.genes[crossover_point:])
-                child2_genes.extend(parent2.genes[:crossover_point])
-                child2_genes.extend(parent1.genes[crossover_point:])
-
-            child1 = PromptChromosome(genes=child1_genes, fitness_score=0.0)
-            child2 = PromptChromosome(genes=child2_genes, fitness_score=0.0)
-            logger.debug(
-                f"Crossover performed between Parent {parent1.id} and Parent {parent2.id}. Child1 ID {child1.id}, Child2 ID {child2.id}."
-            )
-        else:
-            child1 = parent1.clone()
-            child2 = parent2.clone()
-            child1.fitness_score = 0.0
-            child2.fitness_score = 0.0
-            logger.debug(
-                f"Crossover skipped (rate {crossover_rate}). Cloned Parent {parent1.id} to Child {child1.id}, Parent {parent2.id} to Child {child2.id}."
-            )
-        return child1, child2
+        # Pass through kwargs like crossover_rate
+        return self.crossover_strategy.crossover(parent1, parent2, **kwargs)
 
     def mutate(
         self,
@@ -447,42 +388,52 @@ class GeneticOperators:
         return mutated_chromosome_overall
 
 
-# FitnessEvaluator class remains unchanged
-class FitnessEvaluator:
+from prompthelix.genetics.fitness_base import BaseFitnessEvaluator # Import the ABC
+
+# FitnessEvaluator class now implements BaseFitnessEvaluator
+class FitnessEvaluator(BaseFitnessEvaluator):
     """
     Evaluates the fitness of PromptChromosome instances.
     This class simulates interaction with an LLM and uses a ResultsEvaluatorAgent
     to determine the fitness score based on the LLM's output.
+    It serves as the default fitness evaluation strategy.
     """
 
     def __init__(
         self,
-        results_evaluator_agent: "ResultsEvaluatorAgent",
-        execution_mode: ExecutionMode,
-        llm_settings: Optional[Dict] = None,
-    ):  # New parameter
+        results_evaluator_agent: "ResultsEvaluatorAgent", # Specific dependency for this implementation
+        execution_mode: ExecutionMode,                   # Specific dependency for this implementation
+        llm_settings: Optional[Dict] = None,             # Specific dependency for this implementation
+        settings: Optional[Dict] = None,                 # From ABC, for general settings
+        **kwargs                                         # For ABC compatibility
+    ):
         """
         Initializes the FitnessEvaluator.
         Args:
             results_evaluator_agent (ResultsEvaluatorAgent): An instance of
-                ResultsEvaluatorAgent that will be used to assess the quality
-                of LLM outputs.
+                ResultsEvaluatorAgent.
             execution_mode (ExecutionMode): The mode of execution (TEST or REAL).
-            llm_settings (Optional[Dict]): Overridden LLM settings.
+            llm_settings (Optional[Dict]): Overridden LLM settings for direct LLM calls.
+            settings (Optional[Dict]): General configuration settings from BaseFitnessEvaluator.
+            **kwargs: Additional keyword arguments.
         """
+        super().__init__(settings=settings, **kwargs) # Call ABC constructor
         from prompthelix.agents.results_evaluator import ResultsEvaluatorAgent
 
         if not isinstance(results_evaluator_agent, ResultsEvaluatorAgent):
             raise TypeError(
-                "results_evaluator_agent must be an instance of ResultsEvaluatorAgent."
+                "results_evaluator_agent must be an instance of ResultsEvaluatorAgent for this default FitnessEvaluator."
             )
 
-        self.results_evaluator_agent = (
-            results_evaluator_agent  # Stored for main process
-        )
+        self.results_evaluator_agent = results_evaluator_agent
         self.execution_mode = execution_mode
 
-        # Merge provided llm_settings with global defaults
+        # Use llm_settings passed directly, or try to get from general settings, then global config
+        effective_llm_settings = llm_settings
+        if effective_llm_settings is None and self.settings:
+            effective_llm_settings = self.settings.get("llm_settings")
+
+        # Merge effective_llm_settings with global defaults
         base_llm_settings = copy.deepcopy(
             global_ph_config.LLM_UTILS_SETTINGS.get("openai", {})
         )  # Assuming 'openai' is the provider here
@@ -528,9 +479,9 @@ class FitnessEvaluator:
                     if "max_retries" in self.llm_settings:
                         client_params["max_retries"] = self.llm_settings["max_retries"]
 
-                    self.openai_client = openai.OpenAI(**client_params)
+                    self.openai_client = openai.AsyncOpenAI(**client_params) # Changed to AsyncOpenAI
                     logger.info(
-                        "FitnessEvaluator: OpenAI client initialized successfully for REAL mode in main process."
+                        "FitnessEvaluator: AsyncOpenAI client initialized successfully for REAL mode in main process."
                     )
                 except Exception as e:
                     logger.error(
@@ -608,9 +559,9 @@ class FitnessEvaluator:
                     }
                     if "max_retries" in self.llm_settings:
                         client_params["max_retries"] = self.llm_settings["max_retries"]
-                    self.openai_client = openai.OpenAI(**client_params)
+                    self.openai_client = openai.AsyncOpenAI(**client_params) # Changed to AsyncOpenAI
                     logger.info(
-                        "FitnessEvaluator (subprocess): OpenAI client re-initialized for REAL mode."
+                        "FitnessEvaluator (subprocess): AsyncOpenAI client re-initialized for REAL mode."
                     )
                 except Exception as e:
                     logger.error(
@@ -626,7 +577,7 @@ class FitnessEvaluator:
                 "FitnessEvaluator (subprocess): In TEST mode, LLM client not re-initialized."
             )
 
-    def _call_llm_api(
+    async def _call_llm_api( # Changed to async def
         self, prompt_string: str, model_name: Optional[str] = None
     ) -> str:
         """
@@ -641,11 +592,13 @@ class FitnessEvaluator:
             logger.info(
                 f"Executing in TEST mode. Returning dummy LLM output for prompt: {prompt_string[:100]}..."
             )
+            # Simulate async behavior even in test mode if needed, though not strictly necessary for dummy data
+            # await asyncio.sleep(0.01)
             return "This is a test output from dummy LLM in TEST mode."
 
         if not self.openai_client:
             logger.error(
-                "OpenAI client is not initialized. Cannot call LLM API in REAL mode."
+                "AsyncOpenAI client is not initialized. Cannot call LLM API in REAL mode."
             )
             return "Error: LLM client not initialized for REAL mode."
 
@@ -664,13 +617,13 @@ class FitnessEvaluator:
         temperature = self.llm_settings.get("temperature", 0.7)  # Example
 
         logger.info(
-            f"Calling OpenAI API model {current_model_name} for prompt (first 100 chars): {prompt_string[:100]}..."
+            f"Calling AsyncOpenAI API model {current_model_name} for prompt (first 100 chars): {prompt_string[:100]}..."
         )
         logger.debug(
             f"LLM call params: timeout={timeout}, max_tokens={max_tokens}, temperature={temperature}"
         )
         try:
-            response = self.openai_client.chat.completions.create(
+            response = await self.openai_client.chat.completions.acreate( # Changed to acreate and added await
                 model=current_model_name,
                 messages=[{"role": "user", "content": prompt_string}],
                 timeout=timeout,
@@ -685,23 +638,23 @@ class FitnessEvaluator:
             ):
                 content = response.choices[0].message.content.strip()
                 logger.info(
-                    f"OpenAI API call successful. Response (first 100 chars): {content[:100]}..."
+                    f"AsyncOpenAI API call successful. Response (first 100 chars): {content[:100]}..."
                 )
                 return content
             else:
                 logger.warning(
-                    f"OpenAI API call for prompt '{prompt_string[:50]}...' returned no content or unexpected response structure."
+                    f"AsyncOpenAI API call for prompt '{prompt_string[:50]}...' returned no content or unexpected response structure."
                 )
                 return "Error: No content from LLM."
         except OpenAIError as e:
             logger.error(
-                f"OpenAI API error for prompt '{prompt_string[:50]}...': {e}",
+                f"AsyncOpenAI API error for prompt '{prompt_string[:50]}...': {e}",
                 exc_info=True,
             )
             return f"Error: LLM API call failed. Details: {str(e)}"
         except Exception as e:  # Catch any other unexpected errors
             logger.critical(
-                f"Unexpected error during OpenAI API call for prompt '{prompt_string[:50]}...': {e}",
+                f"Unexpected error during AsyncOpenAI API call for prompt '{prompt_string[:50]}...': {e}",
                 exc_info=True,
             )
             return f"Error: Unexpected issue during LLM API call. Details: {str(e)}"
@@ -731,7 +684,17 @@ class FitnessEvaluator:
         prompt_string = chromosome.to_prompt_string()
 
         # The call to _call_llm_api is now logged within that method.
-        llm_output = self._call_llm_api(prompt_string)
+        # Since evaluate is synchronous (called by ProcessPoolExecutor)
+        # and _call_llm_api is now async, we use asyncio.run() here.
+        try:
+            llm_output = asyncio.run(self._call_llm_api(prompt_string))
+        except Exception as e:
+            # Catch potential RuntimeError if asyncio.run is called from an already running loop
+            # (should not happen if ProcessPoolExecutor creates fresh processes without active loops)
+            # or other exceptions during the setup/teardown of asyncio.run itself.
+            logger.error(f"FitnessEvaluator: Error invoking asyncio.run for _call_llm_api with prompt ID {chromosome.id}: {e}", exc_info=True)
+            llm_output = f"Error: Failed to run async LLM call. Details: {str(e)}"
+
 
         if llm_output.startswith("Error:"):
             logger.warning(

@@ -76,12 +76,48 @@ class Settings:
     # SECRET_KEY: str = os.getenv("SECRET_KEY", "a_very_secret_key") # For JWT, session management etc.
     # ALGORITHM: str = "HS256" # For JWT
 
+    FITNESS_EVALUATOR_CLASS: str = os.getenv("FITNESS_EVALUATOR_CLASS", "prompthelix.genetics.engine.FitnessEvaluator")
+
+    # Genetic Operator Strategy Configurations
+    MUTATION_STRATEGY_CLASSES: str = os.getenv(
+        "MUTATION_STRATEGY_CLASSES",
+        "prompthelix.genetics.mutation_strategies.AppendCharStrategy,"
+        "prompthelix.genetics.mutation_strategies.ReverseSliceStrategy,"
+        "prompthelix.genetics.mutation_strategies.PlaceholderReplaceStrategy"
+    ) # Comma-separated string
+    SELECTION_STRATEGY_CLASS: str = os.getenv("SELECTION_STRATEGY_CLASS", "prompthelix.genetics.selection_strategies.TournamentSelectionStrategy")
+    CROSSOVER_STRATEGY_CLASS: str = os.getenv("CROSSOVER_STRATEGY_CLASS", "prompthelix.genetics.crossover_strategies.SinglePointCrossoverStrategy")
+
+
     # class Config:
     #     env_file = ".env" # For Pydantic to load .env file
     #     env_file_encoding = 'utf-8'
 
+    # Agent Pipeline Configuration (example, could be loaded from JSON/YAML string in env var)
+    # For simplicity, defining a default Python list structure here.
+    # In a real setup, this might be a JSON string in an env var parsed at runtime.
+    AGENT_PIPELINE_CONFIG_JSON: str = os.getenv(
+        "AGENT_PIPELINE_CONFIG_JSON",
+        json.dumps([
+            {"class_path": "prompthelix.agents.architect.PromptArchitectAgent", "id": "PromptArchitectAgent", "settings_key": "PromptArchitectAgent"},
+            {"class_path": "prompthelix.agents.results_evaluator.ResultsEvaluatorAgent", "id": "ResultsEvaluatorAgent", "settings_key": "ResultsEvaluatorAgent"},
+            {"class_path": "prompthelix.agents.style_optimizer.StyleOptimizerAgent", "id": "StyleOptimizerAgent", "settings_key": "StyleOptimizerAgent"}
+            # Add other agents like Critic, DomainExpert here if they are part of the default pipeline
+        ])
+    )
+
+
 # Instantiate the settings
 settings = Settings()
+
+# Parse AGENT_PIPELINE_CONFIG_JSON
+try:
+    AGENT_PIPELINE_CONFIG = json.loads(settings.AGENT_PIPELINE_CONFIG_JSON)
+except json.JSONDecodeError:
+    logger.error("Failed to parse AGENT_PIPELINE_CONFIG_JSON. Using empty list.")
+    AGENT_PIPELINE_CONFIG = []
+
+
 _openai_key = settings.OPENAI_API_KEY
 if _openai_key:
     display_key = f"{_openai_key[:5]}...{_openai_key[-4:] if len(_openai_key) > 9 else ''}"
