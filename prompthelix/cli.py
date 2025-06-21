@@ -75,6 +75,11 @@ def main_cli():
         help="Alias for --population-path. File to load/save GA population state.",
     )
     run_parser.add_argument("--output-file", type=str, help="File path to save the best prompt.")
+    run_parser.add_argument(
+        "--metrics-file",
+        type=str,
+        help="Write generation metrics as JSON lines to this file when DB is unavailable.",
+    )
     run_parser.add_argument("--agent-settings", type=str, help="JSON string or file path to override agent configurations.")
     run_parser.add_argument("--llm-settings", type=str, help="JSON string or file path to override LLM utility settings.")
     run_parser.add_argument("--execution-mode", type=str, choices=['TEST', 'REAL'], default='TEST', help="Set the execution mode for the GA (TEST or REAL).")
@@ -261,7 +266,8 @@ def main_cli():
                     llm_settings_override=llm_settings_override,
                     population_path=args.population_path,
                     parallel_workers=args.parallel_workers, # Pass the new argument
-                    return_best=True
+                    return_best=True,
+                    metrics_file_path=args.metrics_file,
                 )
 
                 if best_chromosome:
