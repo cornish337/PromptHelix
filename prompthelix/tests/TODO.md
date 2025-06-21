@@ -2,6 +2,6 @@
 
 Test suite improvements.
 
-- [ ] Update outdated API tests that expect old schemas
-- [ ] Mock external LLM calls consistently
-- [ ] Add coverage for services and CLI
+- [x] Update outdated API tests that expect old schemas
+- [x] Mock external LLM calls consistently
+- [x] Add coverage for services and CLI
