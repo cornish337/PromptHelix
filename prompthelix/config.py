@@ -9,9 +9,16 @@ configurations from environment variables and potentially .env files.
 import os
 import logging
 import json
-from sqlalchemy.orm import Session
+try:
+    from sqlalchemy.orm import Session
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
+    Session = None  # type: ignore
 from typing import Optional
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
+    def load_dotenv(*args, **kwargs):
+        return False
 # from pydantic import BaseSettings # Uncomment if Pydantic is used for settings management
 
 logger = logging.getLogger(__name__)
@@ -301,7 +308,6 @@ LOGGING_CONFIG = {
     "level": "DEBUG" if settings.DEBUG else "INFO",
     "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 """
-
 
 # --- Experiment Tracking Configuration ---
 ENABLE_WANDB_LOGGING = os.getenv("PROMPTHELIX_ENABLE_WANDB", "false").lower() in ("true", "1", "t")
