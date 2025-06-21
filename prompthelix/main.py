@@ -2,6 +2,7 @@
 Main application file for the PromptHelix API.
 Initializes the FastAPI application and includes the root endpoint.
 """
+
 import traceback
 from pathlib import Path
 from fastapi import Request
@@ -174,8 +175,8 @@ async def metrics():
 app.include_router(api_routes.router)
 # Include UI routes
 app.include_router(ui_router, prefix="/ui", tags=["UI"])
-
 # Removed the /debug-routes endpoint
+    return JSONResponse(content={"routes": routes})
 
 if __name__ == "__main__":
     # This block is for when you run the application directly, e.g., using `python -m prompthelix.main`
