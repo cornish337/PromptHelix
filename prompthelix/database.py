@@ -6,6 +6,8 @@ from prompthelix.config import settings
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from prompthelix.models.base import Base
+# Import all models to ensure they are registered with Base.metadata
+from prompthelix import models  # This imports prompthelix/models/__init__.py
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./prompthelix.db")
 

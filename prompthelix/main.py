@@ -44,7 +44,7 @@ configure_logging(settings.DEBUG)
 
 # Call init_db to create database tables on startup
 # For production, you'd likely use Alembic migrations separately.
-# init_db() # This should be commented out for tests; conftest.py handles DB setup.
+init_db() # Initialize database and tables on startup
 # For running the app directly (e.g. `python -m prompthelix.main`),
 # it might be called below if __name__ == "__main__".
 
@@ -173,7 +173,9 @@ async def metrics():
 # Include API routes
 app.include_router(api_routes.router)
 # Include UI routes
-app.include_router(ui_router)
+app.include_router(ui_router, prefix="/ui", tags=["UI"])
+
+# The /debug-routes endpoint has been removed.
 
 if __name__ == "__main__":
     # This block is for when you run the application directly, e.g., using `python -m prompthelix.main`
