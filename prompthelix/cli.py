@@ -38,16 +38,28 @@ def main_cli():
     Parses arguments and dispatches commands.
     """
 
+    # --- Setup Logging ---
+    # Centralized logging setup. This will also handle noisy libraries.
+    from prompthelix.logging_config import setup_logging
+    setup_logging()
+    # --- End Setup Logging ---
+
+    # Logger for CLI specific messages, after setup_logging has run.
+    # This logger instance will now use the configured handlers and format.
+    # logger = logging.getLogger(__name__) # Already defined at module level
+
+""" Old 
 
     # Configure logging according to settings
     configure_logging(settings.DEBUG)
-"""
+
     # Configure logging using shared utility
     setup_logging(debug=settings.DEBUG)
     # Control verbosity of noisy libraries
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("openai._base_client").setLevel(logging.WARNING)
 """
+
 
 
     parser = argparse.ArgumentParser(description="PromptHelix CLI")

@@ -19,6 +19,8 @@ if TYPE_CHECKING:  # Added
     from prompthelix.websocket_manager import ConnectionManager  # For type hinting
 
 
+# Logging is configured centrally by setup_logging() in main.py or cli.py
+
 logger = logging.getLogger(__name__)
 
 
