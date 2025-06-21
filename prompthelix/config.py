@@ -250,29 +250,88 @@ LLM_UTILS_SETTINGS = {
     "default_retries": 2,
 }
 
-# --- Logging Configuration (Simplified for now) ---
+# --- Logging Configuration ---
+# KNOWLEDGE_DIR is defined at the top, similar logic for LOG_DIR
+LOG_DIR = os.getenv("PROMPTHELIX_LOG_DIR", os.path.join(os.getcwd(), "logs")) # Default to a 'logs' directory in CWD
+LOG_LEVEL = os.getenv("PROMPTHELIX_LOG_LEVEL", "INFO").upper()
+LOG_FILE_NAME = os.getenv("PROMPTHELIX_LOG_FILE", "prompthelix.log") # Set to None or empty string to disable file logging
+LOG_FORMAT = os.getenv(
+    "PROMPTHELIX_LOG_FORMAT",
+    "%(asctime)s - %(name)s - %(levelname)s - [%(module)s:%(funcName)s:%(lineno)d] - %(message)s"
+)
+
+# The LOGGING_CONFIG dict can be used by logging.config.dictConfig if more complex setup is needed.
+# For now, these individual settings will be used to set up basicConfig and file handlers.
+# We'll keep it here for potential future use or if a module wants to reference it.
 LOGGING_CONFIG = {
+    "version": 1,
+    "disable_existing_loggers": False, # Important to not disable loggers from libraries
+    "formatters": {
+        "standard": {
+            "format": LOG_FORMAT,
+        },
+    },
+    "handlers": {
+        "console": {
+            "level": LOG_LEVEL,
+            "formatter": "standard",
+            "class": "logging.StreamHandler",
+            "stream": "ext://sys.stdout",  # Default is stderr
+        },
+        # File handler will be added programmatically in logging_config.py if LOG_FILE_NAME is set
+    },
+    "root": { # Configuring the root logger
+        "handlers": ["console"], # Start with console, file handler added if configured
+        "level": LOG_LEVEL,
+    },
+    "loggers": { # Example: Quieten noisy libraries if needed
+        "httpx": {
+            "handlers": ["console"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+        "openai": { # Covers openai._base_client etc.
+            "handlers": ["console"],
+            "level": "WARNING",
+            "propagate": False
+        }
+    }
+""" Old
     "level": "DEBUG" if settings.DEBUG else "INFO",
     "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+"""
 }
 
+# --- Experiment Tracking Configuration ---
+ENABLE_WANDB_LOGGING = os.getenv("PROMPTHELIX_ENABLE_WANDB", "false").lower() in ("true", "1", "t")
+WANDB_PROJECT_NAME = os.getenv("PROMPTHELIX_WANDB_PROJECT", "PromptHelix-Experiments")
+WANDB_ENTITY_NAME = os.getenv("PROMPTHELIX_WANDB_ENTITY") # Optional, W&B will use default if not set
+
 # ensure_directories_exist() function was moved up or is handled differently if KNOWLEDGE_DIR is defined early.
-# We still need to ensure KNOWLEDGE_DIR exists, this can be done at app startup.
+# We still need to ensure KNOWLEDGE_DIR and LOG_DIR exist, this can be done at app startup.
 # For now, the definition of KNOWLEDGE_DIR is at the top of the file.
 
 def ensure_directories_exist():
     """
-    Ensures that directories specified in the config (like KNOWLEDGE_DIR) exist.
+    Ensures that directories specified in the config (like KNOWLEDGE_DIR and LOG_DIR) exist.
     """
-    if KNOWLEDGE_DIR and not os.path.exists(KNOWLEDGE_DIR):
-        try:
-            os.makedirs(KNOWLEDGE_DIR, exist_ok=True) # exist_ok=True avoids error if dir already exists
-            print(f"Config: Created directory: {os.path.abspath(KNOWLEDGE_DIR)}")
-        except OSError as e:
-            print(f"Config: Error creating directory {os.path.abspath(KNOWLEDGE_DIR)}: {e}")
-    else:
-        if KNOWLEDGE_DIR:
-            print(f"Config: Directory {os.path.abspath(KNOWLEDGE_DIR)} already exists or KNOWLEDGE_DIR is not set.")
+    dirs_to_check = {
+        "KNOWLEDGE_DIR": KNOWLEDGE_DIR,
+        "LOG_DIR": LOG_DIR
+    }
+
+    for dir_name, dir_path in dirs_to_check.items():
+        if dir_path and not os.path.exists(dir_path):
+            try:
+                os.makedirs(dir_path, exist_ok=True)
+                # Use logger here once logging is configured, print for now if early execution
+                print(f"Config: Created directory for {dir_name}: {os.path.abspath(dir_path)}")
+            except OSError as e:
+                print(f"Config: Error creating directory {os.path.abspath(dir_path)} for {dir_name}: {e}")
+        else:
+            if dir_path:
+                # Use logger here once logging is configured
+                print(f"Config: Directory for {dir_name} ({os.path.abspath(dir_path)}) already exists or was not set.")
 
 # It's good practice to call this early, e.g., when the orchestrator starts,
 # or even here, though calling it here means it runs every time config.py is imported.
