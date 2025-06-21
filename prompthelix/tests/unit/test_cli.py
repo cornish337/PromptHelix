@@ -244,6 +244,28 @@ class TestCli:
         mock_file_open().write.assert_called_once_with(prompt_content)
 
     @patch('prompthelix.cli.main_ga_loop')
+    def test_command_run_ga_metrics_file_passed(self, mock_main_ga_loop, mock_stdout, mock_stderr):
+        metrics_filename = "metrics.jsonl"
+        with patch.object(sys, 'argv', ['prompthelix', 'run', 'ga', '--metrics-file', metrics_filename]):
+            main_cli()
+
+        mock_main_ga_loop.assert_called_once_with(
+            task_desc=ANY,
+            keywords=ANY,
+            num_generations=ANY,
+            population_size=ANY,
+            elitism_count=ANY,
+            execution_mode=ExecutionMode.TEST,
+            initial_prompt_str=None,
+            agent_settings_override=None,
+            llm_settings_override=None,
+            population_path=None,
+            parallel_workers=None,
+            return_best=True,
+            metrics_file_path=metrics_filename,
+        )
+
+    @patch('prompthelix.cli.main_ga_loop')
     @patch('json.loads') # To mock json.loads for string input
     @patch('os.path.isfile', return_value=False) # Ensure it's treated as a string
     @patch('prompthelix.cli.logger.info') # To check logging
@@ -523,6 +545,9 @@ class TestCli:
 
         assert "--output-file OUTPUT_FILE" in help_text
         assert "File path to save the best prompt." in help_text
+
+        assert "--metrics-file METRICS_FILE" in help_text
+        assert "Write generation metrics as JSON lines" in help_text
 
         assert "--agent-settings AGENT_SETTINGS" in help_text
         assert "JSON string or file path to override agent configurations." in help_text

@@ -61,6 +61,9 @@ The application requires certain environment variables to be set, especially for
 *   `WANDB_API_KEY` *(optional)*: Enables logging metrics to Weights & Biases when set.
 *   `MLFLOW_TRACKING_URI` *(optional)*: URI of your MLflow server for metric logging.
 
+*   `DEBUG`: Set to `true` to enable verbose debug logging.
+
+
 **Agent Overrides:**
 
 Environment variables can also override default agent settings. Use the pattern `<AGENTNAME>_<SETTING>` where `AGENTNAME` is the agent class name without the `Agent` suffix. Example overrides include:
@@ -286,6 +289,17 @@ python -m prompthelix.cli check-llm --provider openai --model gpt-3.5-turbo
 
 The command sends a short test prompt and prints the returned text or any error message. Debug logging output is shown to help diagnose connectivity issues.
 
+### Debug Logging
+
+Set the `DEBUG` environment variable to `true` before starting the CLI or server to enable verbose logging:
+
+```bash
+export DEBUG=true
+python -m prompthelix.cli run ga
+```
+
+Modules may also call `setup_logging(json_format=True)` from `prompthelix.utils.logging_utils` to output logs in JSON format.
+
 ### API
 
 PromptHelix also provides an API endpoint to trigger the genetic algorithm.
@@ -370,3 +384,15 @@ python -m prompthelix.cli test --interactive
 ```
 
 
+
+## Metrics Exporter
+
+PromptHelix can expose basic Prometheus metrics to monitor GA progress. Set
+`PROMETHEUS_METRICS_ENABLED=true` in your environment to enable the exporter.
+By default metrics are served on port defined by `PROMETHEUS_METRICS_PORT`
+(default `8001`).
+
+Once enabled, start a GA run normally and scrape `http://localhost:8001/metrics`.
+You can add this scrape target in Prometheus and visualize values like
+`prompthelix_current_generation` and `prompthelix_best_fitness` in Grafana or
+forward them to an experiment tracker such as W&B.

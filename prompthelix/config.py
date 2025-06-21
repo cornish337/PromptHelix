@@ -51,9 +51,14 @@ class Settings:
     ANTHROPIC_API_KEY: str | None = os.getenv("ANTHROPIC_API_KEY")
     GOOGLE_API_KEY: str | None = os.getenv("GOOGLE_API_KEY") # For Gemini or other Google models
 
+
     # Optional experiment tracking integrations
     WANDB_API_KEY: str | None = os.getenv("WANDB_API_KEY")
     MLFLOW_TRACKING_URI: str | None = os.getenv("MLFLOW_TRACKING_URI")
+
+    # Debug flag controlling log verbosity
+    DEBUG: bool = os.getenv("DEBUG", "false").lower() in {"1", "true", "yes"}
+
 
     # Caching (e.g., Redis)
     REDIS_HOST: str = os.getenv("REDIS_HOST", "localhost")
@@ -75,6 +80,10 @@ class Settings:
     DEFAULT_POPULATION_PERSISTENCE_PATH: str = os.getenv("DEFAULT_POPULATION_PERSISTENCE_PATH", os.path.join(KNOWLEDGE_DIR, "ga_population.json"))
     DEFAULT_SAVE_POPULATION_FREQUENCY: int = int(os.getenv("DEFAULT_SAVE_POPULATION_FREQUENCY", "10"))
 
+    # Prometheus metrics
+    PROMETHEUS_METRICS_ENABLED: bool = os.getenv("PROMETHEUS_METRICS_ENABLED", "false").lower() == "true"
+    PROMETHEUS_METRICS_PORT: int = int(os.getenv("PROMETHEUS_METRICS_PORT", "8001"))
+
     # Security settings
     # TODO: Uncomment and set a strong, unique SECRET_KEY for production environments.
     # SECRET_KEY: str = os.getenv("SECRET_KEY", "a_very_secret_key") # For JWT, session management etc.
@@ -94,6 +103,7 @@ else:
 logger.info(f"Loaded OPENAI_API_KEY: {display_key}")
 logger.info(f"Default population persistence path: {settings.DEFAULT_POPULATION_PERSISTENCE_PATH}")
 logger.info(f"Default save population frequency: {settings.DEFAULT_SAVE_POPULATION_FREQUENCY}")
+logger.info(f"Debug logging enabled: {settings.DEBUG}")
 
 # Example of how to access a setting:
 # print(settings.DATABASE_URL)
@@ -203,7 +213,7 @@ LLM_UTILS_SETTINGS = {
 
 # --- Logging Configuration (Simplified for now) ---
 LOGGING_CONFIG = {
-    "level": "INFO",
+    "level": "DEBUG" if settings.DEBUG else "INFO",
     "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 }
 

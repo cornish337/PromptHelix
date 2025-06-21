@@ -21,6 +21,7 @@ from prompthelix.genetics.engine import (
 from typing import List, Optional, Dict
 from prompthelix.enums import ExecutionMode
 from prompthelix.utils.config_utils import update_settings # Assuming a utility for deep merging configs
+from prompthelix.utils import start_exporter_if_enabled, update_generation, update_best_fitness
 from prompthelix import config as global_config # To access global default settings
 from prompthelix.config import settings # Added import
 
@@ -39,7 +40,8 @@ def main_ga_loop(
     parallel_workers: Optional[int] = None,
     return_best: bool = True,
     population_path: Optional[str] = None,
-    save_frequency_override: Optional[int] = None
+    save_frequency_override: Optional[int] = None,
+    metrics_file_path: Optional[str] = None,
 ):
     """
     Main orchestration loop for running the PromptHelix Genetic Algorithm.
@@ -58,12 +60,14 @@ def main_ga_loop(
         return_best: If True, return the best chromosome at the end.
         population_path: Optional path for loading/saving population. If None, uses config default.
         save_frequency_override: Optional override for population save frequency. If None, uses config default.
+        metrics_file_path: Optional path to write generation metrics as JSON lines.
     """
     logger.info("--- main_ga_loop started ---")
     logger.info(f"Task Description: {task_desc}")
     logger.info(f"Keywords: {keywords}")
     logger.info(f"Num Generations: {num_generations}, Population Size: {population_size}, Elitism Count: {elitism_count}")
     logger.info(f"Execution Mode: {execution_mode.name}")
+    start_exporter_if_enabled()
     if initial_prompt_str:
         logger.info(f"Initial Prompt String provided: '{initial_prompt_str[:100]}...'")
     if agent_settings_override:
@@ -85,6 +89,8 @@ def main_ga_loop(
 
     logger.info(f"Effective Population Persistence Path: {actual_population_path}")
     logger.info(f"Effective Save Population Frequency: Every {actual_save_frequency} generations (0 means periodic saving disabled)")
+    if metrics_file_path:
+        logger.info(f"Generation metrics will be written to: {metrics_file_path}")
 
     # 0. Instantiate Message Bus
     logger.debug("Initializing Message Bus...")
@@ -166,6 +172,7 @@ def main_ga_loop(
         parallel_workers=parallel_workers,
         message_bus=message_bus,  # Added
         agents_used=agent_names,  # Pass the collected agent names/IDs
+        metrics_file_path=metrics_file_path,
 
 
         # TODO: Pass agent_settings_override or specific agent configs if PopulationManager
