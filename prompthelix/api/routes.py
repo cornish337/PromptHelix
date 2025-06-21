@@ -332,7 +332,12 @@ def get_ga_experiment_status():
             should_stop=False
         )
 
-# --- GA Experiment History Routes ---
+
+# --- GA History Route ---
+@router.get("/api/ga/history", tags=["GA Control"], summary="Get GA fitness history")
+def get_ga_history():
+    return ph_globals.ga_history
+
 
 @router.get(
     "/api/experiments/runs",
@@ -367,6 +372,7 @@ def list_chromosomes_for_run(
         raise HTTPException(status_code=404, detail="Experiment run not found")
     records = get_chromosomes_for_run(db=db, run_id=run_id)
     return records[skip : skip + limit]
+
 
 # --- LLM Utility Routes (Verified, using CRUD layer for stats) ---
 
