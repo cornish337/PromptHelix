@@ -17,12 +17,28 @@ from prompthelix.genetics.engine import (
     FitnessEvaluator,
     PopulationManager,
     PromptChromosome,
+    # FitnessEvaluator, # No longer directly imported if loaded by path
 )
-from typing import List, Optional, Dict
+import importlib # Added for dynamic class loading
+from typing import List, Optional, Dict, Type # Added Type
 from prompthelix.enums import ExecutionMode
 from prompthelix.utils.config_utils import update_settings # Assuming a utility for deep merging configs
 from prompthelix import config as global_config # To access global default settings
 from prompthelix.config import settings, ENABLE_WANDB_LOGGING, WANDB_PROJECT_NAME, WANDB_ENTITY_NAME # Added import
+"""old
+
+from prompthelix import config as global_ph_config # Renamed to avoid conflict with local 'config' variable
+from prompthelix.config import settings as global_settings_obj # Added import, renamed for clarity
+from prompthelix.genetics.fitness_base import BaseFitnessEvaluator # For type hinting
+
+from prompthelix.utils import start_exporter_if_enabled, update_generation, update_best_fitness
+from prompthelix import config as global_ph_config  # renamed to avoid clash with local `config`
+from prompthelix.config import settings as global_settings_obj  # for mutation / selection / crossover strategy classes
+from prompthelix.config import settings  # for WANDB / MLflow keys, etc.
+from prompthelix.genetics.fitness_base import BaseFitnessEvaluator  # fitness-evaluator ABC
+
+
+"""
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +62,8 @@ def main_ga_loop(
     parallel_workers: Optional[int] = None,
     return_best: bool = True,
     population_path: Optional[str] = None,
-    save_frequency_override: Optional[int] = None
+    save_frequency_override: Optional[int] = None,
+    metrics_file_path: Optional[str] = None,
 ):
     """
     Main orchestration loop for running the PromptHelix Genetic Algorithm.
@@ -65,12 +82,14 @@ def main_ga_loop(
         return_best: If True, return the best chromosome at the end.
         population_path: Optional path for loading/saving population. If None, uses config default.
         save_frequency_override: Optional override for population save frequency. If None, uses config default.
+        metrics_file_path: Optional path to write generation metrics as JSON lines.
     """
     logger.info("--- main_ga_loop started ---")
     logger.info(f"Task Description: {task_desc}")
     logger.info(f"Keywords: {keywords}")
     logger.info(f"Num Generations: {num_generations}, Population Size: {population_size}, Elitism Count: {elitism_count}")
     logger.info(f"Execution Mode: {execution_mode.name}")
+    start_exporter_if_enabled()
     if initial_prompt_str:
         logger.info(f"Initial Prompt String provided: '{initial_prompt_str[:100]}...'")
     if agent_settings_override:
@@ -92,6 +111,8 @@ def main_ga_loop(
 
     logger.info(f"Effective Population Persistence Path: {actual_population_path}")
     logger.info(f"Effective Save Population Frequency: Every {actual_save_frequency} generations (0 means periodic saving disabled)")
+    if metrics_file_path:
+        logger.info(f"Generation metrics will be written to: {metrics_file_path}")
 
     current_wandb_enabled = ENABLE_WANDB_LOGGING and wandb is not None
     wandb_run = None
@@ -126,73 +147,153 @@ def main_ga_loop(
     message_bus = MessageBus(db_session_factory=SessionLocal, connection_manager=websocket_manager)
     logger.debug("Message Bus initialized.")
 
-    # Handle LLM settings override
-    # Create a local copy of LLM settings to use for this run
-    current_llm_settings = update_settings(global_config.LLM_UTILS_SETTINGS.copy(), llm_settings_override)
+    # Handle LLM settings override (used by default FitnessEvaluator and potentially others)
+    current_llm_settings = update_settings(global_ph_config.LLM_UTILS_SETTINGS.copy(), llm_settings_override)
     if llm_settings_override:
         logger.info("LLM settings have been updated with overrides for this session.")
-        # logger.debug(f"Effective LLM Settings: {current_llm_settings}")
 
 
-    # 1. Instantiate Agents, passing the message bus
-    # Agent settings will be a combination of global defaults and overrides
-    logger.debug("Initializing agents with message bus and potentially overridden settings...")
+    # 1. Instantiate Agents from AGENT_PIPELINE_CONFIG
+    logger.info("Initializing agents from AGENT_PIPELINE_CONFIG...")
+    loaded_agents: Dict[str, BaseAgent] = {}
+    agent_names: List[str] = []
 
-    def get_agent_config(agent_name: str) -> Dict:
-        base_settings = global_config.AGENT_SETTINGS.get(agent_name, {}).copy()
-        if agent_settings_override and agent_name in agent_settings_override:
-            logger.info(f"Applying override settings for agent: {agent_name}")
-            # Ensure deep update if settings are nested
-            return update_settings(base_settings, agent_settings_override[agent_name])
-        return base_settings
+    for agent_conf in global_settings_obj.AGENT_PIPELINE_CONFIG:
+        class_path = agent_conf.get("class_path")
+        agent_id = agent_conf.get("id")
+        settings_key = agent_conf.get("settings_key")
 
-    # Pass relevant part of current_llm_settings if agents need direct LLM config
-    # Or, agents should use llm_utils which will now be configured by current_llm_settings (if llm_utils is adapted)
-    # For now, assuming agents get their specific config, and llm_utils will handle global llm_config
+        if not all([class_path, agent_id, settings_key]):
+            logger.error(f"Invalid agent configuration: {agent_conf}. Skipping.")
+            continue
 
-    prompt_architect_config = get_agent_config("PromptArchitectAgent")
-    prompt_architect = PromptArchitectAgent(
-        message_bus=message_bus,
-        knowledge_file_path=prompt_architect_config.get("knowledge_file_path", "architect_ga_knowledge.json")
-    )
+        logger.info(f"Loading agent '{agent_id}' from class path '{class_path}' using settings key '{settings_key}'.")
 
-    results_evaluator_config = get_agent_config("ResultsEvaluatorAgent")
-    results_evaluator = ResultsEvaluatorAgent(
-        message_bus=message_bus,
-        knowledge_file_path=results_evaluator_config.get("knowledge_file_path", "results_evaluator_ga_config.json")
-    )
+"""
 
-    style_optimizer_config = get_agent_config("StyleOptimizerAgent")
-    style_optimizer = StyleOptimizerAgent(
-        message_bus=message_bus,
-        knowledge_file_path=style_optimizer_config.get("knowledge_file_path") # May be None
-    )
-    # TODO: Agents need to be updated to accept and use the 'settings' dict.
-    # For now, they might only use knowledge_file_path from it or ignore it if not updated.
+    # 1. Instantiate Agents from AGENT_PIPELINE_CONFIG
+    logger.info("Initializing agents from AGENT_PIPELINE_CONFIG...")
+    loaded_agents: Dict[str, BaseAgent] = {}
+    agent_names: List[str] = []
 
-    message_bus.register(prompt_architect.agent_id, prompt_architect)
-    message_bus.register(results_evaluator.agent_id, results_evaluator)
-    message_bus.register(style_optimizer.agent_id, style_optimizer)
-    logger.debug("Agents initialized and registered.")
+    for agent_conf in global_settings_obj.AGENT_PIPELINE_CONFIG:
+        class_path = agent_conf.get("class_path")
+        agent_id = agent_conf.get("id")
+        settings_key = agent_conf.get("settings_key")
 
-    agent_names = [prompt_architect.agent_id, results_evaluator.agent_id, style_optimizer.agent_id]
-    logger.info(f"Collected agent names/IDs: {agent_names}")
+        if not all([class_path, agent_id, settings_key]):
+            logger.error(f"Invalid agent configuration: {agent_conf}. Skipping.")
+            continue
+
+        logger.info(f"Loading agent '{agent_id}' from class path '{class_path}' using settings key '{settings_key}'.")
+
+"""
+        try:
+            module_path_str, class_name_str = class_path.rsplit('.', 1)
+            module = importlib.import_module(module_path_str)
+            AgentClass: Type[BaseAgent] = getattr(module, class_name_str)
+
+            # Get base settings from global AGENT_SETTINGS using settings_key
+            agent_base_settings = global_ph_config.AGENT_SETTINGS.get(settings_key, {}).copy()
+            # Apply overrides passed to main_ga_loop (if any for this agent_id or settings_key)
+            # Note: agent_settings_override might be keyed by agent_id or settings_key. Assuming settings_key for now.
+            specific_override = {}
+            if agent_settings_override:
+                specific_override = agent_settings_override.get(settings_key, agent_settings_override.get(agent_id, {}))
+
+            final_agent_settings = update_settings(agent_base_settings, specific_override)
+
+            # Instantiate agent
+            # BaseAgent constructor: __init__(self, agent_id: str, message_bus=None, settings: Optional[Dict] = None)
+            # Specific agents might have more params (e.g. knowledge_file_path directly)
+            # For now, assume agents can get all they need from their 'settings' dict or have defaults.
+            # If knowledge_file_path is standard, it should be in final_agent_settings.
+            # The individual agent classes need to be robust to this.
+            agent_instance = AgentClass(
+                agent_id=agent_id, # Use the ID from pipeline config
+                message_bus=message_bus,
+                settings=final_agent_settings
+            )
+
+            loaded_agents[agent_id] = agent_instance
+            message_bus.register(agent_id, agent_instance)
+            agent_names.append(agent_id)
+            logger.info(f"Successfully loaded and registered agent: {agent_id} (Class: {AgentClass.__name__})")
+
+        except (ImportError, AttributeError, TypeError) as e:
+            logger.error(f"Failed to load or instantiate agent '{agent_id}' from '{class_path}': {e}", exc_info=True)
+            # Decide if this is a critical failure or if the GA can proceed without this agent
+
+    if not loaded_agents:
+        logger.error("No agents were loaded from the pipeline configuration. GA cannot proceed effectively.")
+        # Depending on requirements, either raise an error or try to continue with minimal functionality (if possible)
+        raise ValueError("Agent pipeline configuration resulted in no loaded agents.")
+
+    logger.info(f"All configured agents loaded and registered. Agent IDs: {agent_names}")
+
+    # Retrieve specific agents needed by core GA logic by their configured ID.
+    # These IDs must be present in the AGENT_PIPELINE_CONFIG.
+    # TODO: Make these required agent IDs configurable or handle their absence more gracefully.
+    prompt_architect = loaded_agents.get("PromptArchitectAgent")
+    results_evaluator = loaded_agents.get("ResultsEvaluatorAgent") # Needed for default FitnessEvaluator
+    style_optimizer = loaded_agents.get("StyleOptimizerAgent") # Passed to GeneticOperators
+
+    if not prompt_architect:
+        raise ValueError("Required 'PromptArchitectAgent' not found in loaded agents.")
+    if not results_evaluator: # Critical for the default fitness evaluator
+        raise ValueError("Required 'ResultsEvaluatorAgent' not found in loaded agents (needed for default fitness evaluation).")
+
 
     # 2. Instantiate GA Components
     logger.debug("Initializing GA components...")
+
     # Pass style_optimizer_config to GeneticOperators if it needs settings
     metrics_logger_instance = logging.getLogger("prompthelix.ga_metrics")
     genetic_ops = GeneticOperators(
         style_optimizer_agent=style_optimizer,
         metrics_logger=metrics_logger_instance
     ) # Add settings if needed
+"""old
+    # Pass the potentially None style_optimizer to GeneticOperators
+    genetic_ops = GeneticOperators(style_optimizer_agent=style_optimizer, strategy_settings=global_ph_config.AGENT_SETTINGS.get("GeneticOperatorsStrategySettings"))
 
-    fitness_eval = FitnessEvaluator(
-        results_evaluator_agent=results_evaluator,
-        execution_mode=execution_mode,
-        llm_settings=current_llm_settings,
-    )
-    # TODO: FitnessEvaluator needs to be updated to accept and use llm_settings.
+
+    # Load and instantiate FitnessEvaluator from configuration
+    fitness_evaluator_class_path = global_settings_obj.FITNESS_EVALUATOR_CLASS
+    logger.info(f"Loading FitnessEvaluator from: {fitness_evaluator_class_path}")
+    try:
+        module_path, class_name = fitness_evaluator_class_path.rsplit('.', 1)
+        module = importlib.import_module(module_path)
+        FitnessEvaluatorClass: Type[BaseFitnessEvaluator] = getattr(module, class_name)
+    except (ImportError, AttributeError) as e:
+        logger.error(f"Failed to load FitnessEvaluator class '{fitness_evaluator_class_path}': {e}. Falling back to default.", exc_info=True)
+        # Fallback to the default FitnessEvaluator directly if loading fails
+        from prompthelix.genetics.engine import FitnessEvaluator as DefaultFitnessEvaluator
+        FitnessEvaluatorClass = DefaultFitnessEvaluator
+
+    # Prepare settings/arguments for the chosen FitnessEvaluator
+    # The default FitnessEvaluator expects results_evaluator_agent, execution_mode, llm_settings.
+    # Custom evaluators might take these via a 'settings' dict or specific kwargs.
+    evaluator_init_kwargs = {
+        "results_evaluator_agent": results_evaluator, # Specific to default evaluator
+        "execution_mode": execution_mode,             # Specific to default evaluator
+        "llm_settings": current_llm_settings,         # Specific to default evaluator
+        "settings": { # General settings for any evaluator
+            "llm_settings": current_llm_settings, # Can be accessed via settings.get('llm_settings')
+            "execution_mode": execution_mode.name, # Pass mode as string in general settings
+            # Add other general config if needed by custom evaluators
+        }
+    }
+
+    try:
+        fitness_eval_instance = FitnessEvaluatorClass(**evaluator_init_kwargs)
+        logger.info(f"Successfully instantiated FitnessEvaluator: {FitnessEvaluatorClass.__name__}")
+    except TypeError as te:
+        logger.error(f"TypeError instantiating {FitnessEvaluatorClass.__name__} with provided arguments: {te}. Check constructor signature.", exc_info=True)
+        # Potentially re-raise or use a very basic fallback if critical
+        raise ValueError(f"Could not instantiate FitnessEvaluator {FitnessEvaluatorClass.__name__}") from te
+"""
+
 
     pop_manager = PopulationManager(
         genetic_operators=genetic_ops,
@@ -205,8 +306,12 @@ def main_ga_loop(
         parallel_workers=parallel_workers,
         message_bus=message_bus,  # Added
         agents_used=agent_names,  # Pass the collected agent names/IDs
-        wandb_enabled=current_wandb_enabled, # Pass W&B status
 
+        wandb_enabled=current_wandb_enabled, # Pass W&B status
+"""old
+        metrics_file_path=metrics_file_path,
+
+"""
 
         # TODO: Pass agent_settings_override or specific agent configs if PopulationManager
         # is responsible for creating/configuring more agents during its operations.

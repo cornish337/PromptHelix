@@ -9,7 +9,14 @@ import subprocess
 import sys
 import os
 import unittest
+
 import logging # Added for logging configuration
+
+from prompthelix.logging_config import configure_logging
+from prompthelix.utils.logging_utils import setup_logging
+from prompthelix.config import settings
+
+
 try:
     import openai  # Used for catching openai.RateLimitError during GA runs
 except ModuleNotFoundError:  # pragma: no cover - optional dependency
@@ -22,11 +29,15 @@ import json # For parsing settings overrides
 logger = logging.getLogger(__name__)
 
 
+from prompthelix.utils import setup_logging
+
+
 def main_cli():
     """
     Main function for the PromptHelix CLI.
     Parses arguments and dispatches commands.
     """
+
     # --- Setup Logging ---
     # Centralized logging setup. This will also handle noisy libraries.
     from prompthelix.logging_config import setup_logging
@@ -37,11 +48,23 @@ def main_cli():
     # This logger instance will now use the configured handlers and format.
     # logger = logging.getLogger(__name__) # Already defined at module level
 
-    parser = argparse.ArgumentParser(description="PromptHelix CLI")
-    parser.add_argument(
-        "--version", action="version", version="%(prog)s 0.1.0"
-    )
+""" Old 
 
+    # Configure logging according to settings
+    configure_logging(settings.DEBUG)
+
+    # Configure logging using shared utility
+    setup_logging(debug=settings.DEBUG)
+    # Control verbosity of noisy libraries
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("openai._base_client").setLevel(logging.WARNING)
+"""
+
+
+
+    parser = argparse.ArgumentParser(description="PromptHelix CLI")
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    parser.add_argument("--version", action="version", version="%(prog)s 0.1.0")
     subparsers = parser.add_subparsers(title="commands", dest="command")
 
     # Subcommand for "test"
@@ -77,6 +100,11 @@ def main_cli():
         help="Alias for --population-path. File to load/save GA population state.",
     )
     run_parser.add_argument("--output-file", type=str, help="File path to save the best prompt.")
+    run_parser.add_argument(
+        "--metrics-file",
+        type=str,
+        help="Write generation metrics as JSON lines to this file when DB is unavailable.",
+    )
     run_parser.add_argument("--agent-settings", type=str, help="JSON string or file path to override agent configurations.")
     run_parser.add_argument("--llm-settings", type=str, help="JSON string or file path to override LLM utility settings.")
     run_parser.add_argument("--execution-mode", type=str, choices=['TEST', 'REAL'], default='TEST', help="Set the execution mode for the GA (TEST or REAL).")
@@ -98,6 +126,9 @@ def main_cli():
 
 
     args = parser.parse_args()
+    setup_logging(debug=args.debug or None)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("openai._base_client").setLevel(logging.WARNING)
 
     if args.command == "test":
         loader = unittest.TestLoader()
@@ -263,7 +294,8 @@ def main_cli():
                     llm_settings_override=llm_settings_override,
                     population_path=args.population_path,
                     parallel_workers=args.parallel_workers, # Pass the new argument
-                    return_best=True
+                    return_best=True,
+                    metrics_file_path=args.metrics_file,
                 )
 
                 if best_chromosome:

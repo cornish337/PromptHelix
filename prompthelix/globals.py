@@ -5,6 +5,7 @@ This module should be kept lightweight and free of complex imports
 to avoid circular dependencies.
 """
 from typing import Optional
+from prometheus_client import Gauge
 # Forward reference for GeneticAlgorithmRunner to avoid circular import issues
 # as experiment_runners.ga_runner will import this file.
 if False: # TYPE_CHECKING can also be used here if preferred
@@ -20,6 +21,10 @@ active_ga_runner: Optional["GeneticAlgorithmRunner"] = None
 
 # Fitness history collected during GA runs
 ga_history: list[dict] = []
+
+# Prometheus metrics gauges (initialized lazily by metrics_exporter)
+generation_gauge: Gauge | None = None
+best_fitness_gauge: Gauge | None = None
 
 # You can add other global instances here if needed, e.g., a global MessageBus
 # from prompthelix.database import SessionLocal
