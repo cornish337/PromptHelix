@@ -7,6 +7,9 @@ from .performance_models import PerformanceMetric
 from .conversation_models import ConversationLog
 from .evolution_models import GAExperimentRun, GAChromosome, GAGenerationMetric
 
+#from .evolution_models import GAExperimentRun, GAChromosome, GAGenerationMetrics
+
+
 __all__ = [
     "Base",
     "Prompt",
@@ -20,4 +23,5 @@ __all__ = [
     "GAExperimentRun",
     "GAChromosome",
     "GAGenerationMetric",
+    "GAGenerationMetrics",
 ]
