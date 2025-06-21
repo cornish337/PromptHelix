@@ -336,6 +336,8 @@ python -m prompthelix.cli test --path tests/unit/test_architect_agent.py
 The output will show the progress of the tests and a summary of the results.
 
 
+To execute interactive tests, use the `--interactive` flag. Tests will be discovered under `prompthelix/tests/interactive`:
+
 
 ### Interactive Tests
 
@@ -350,6 +352,7 @@ If your deployment enforces authentication for UI routes, log in first via
 `/ui/login`. Otherwise, the interactive test page can be accessed without a token.
 
 You can also launch the interactive runner from the command line:
+
 
 ```bash
 python -m prompthelix.cli test --interactive
