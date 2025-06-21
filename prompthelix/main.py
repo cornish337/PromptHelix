@@ -8,6 +8,9 @@ from fastapi.responses import JSONResponse, Response
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 # from fastapi.templating import Jinja2Templates # Moved to templating.py
 from fastapi.staticfiles import StaticFiles
+# Logging configuration must be initialized early
+from prompthelix.config import settings
+from prompthelix.logging_config import configure_logging
 from prompthelix.templating import templates # Import templates object
 from prompthelix.api import routes as api_routes
 from prompthelix.ui_routes import router as ui_router # Import the UI router
@@ -15,6 +18,9 @@ from prompthelix.ui_routes import router as ui_router # Import the UI router
 from prompthelix.globals import websocket_manager # Import the global instance
 from prompthelix.database import init_db
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+
+# Configure logging as soon as possible
+configure_logging(settings.DEBUG)
 
 # Call init_db to create database tables on startup
 # For production, you'd likely use Alembic migrations separately.

@@ -52,12 +52,15 @@ class Settings:
     GOOGLE_API_KEY: str | None = os.getenv("GOOGLE_API_KEY") # For Gemini or other Google models
 
 
+    # Debug flag controls logging verbosity across the application
+    DEBUG: bool = os.getenv("PROMPTHELIX_DEBUG", "false").lower() in {"1", "true", "yes"}
+
     # Optional experiment tracking integrations
     WANDB_API_KEY: str | None = os.getenv("WANDB_API_KEY")
     MLFLOW_TRACKING_URI: str | None = os.getenv("MLFLOW_TRACKING_URI")
 
     # Debug flag controlling log verbosity
-    DEBUG: bool = os.getenv("DEBUG", "false").lower() in {"1", "true", "yes"}
+    #DEBUG: bool = os.getenv("DEBUG", "false").lower() in {"1", "true", "yes"}
 
 
     # Caching (e.g., Redis)

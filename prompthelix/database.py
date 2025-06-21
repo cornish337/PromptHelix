@@ -30,9 +30,13 @@ def get_db():
         db.close()
 
 def init_db():
+
+    logger = logging.getLogger(__name__)  # Added logger instance
+"""
     if not logging.getLogger().hasHandlers():
         setup_logging(debug=settings.DEBUG)
     logger = logging.getLogger(__name__)
+"""
     logger.info("Initializing database...")  # Added log message
     logger.info(f"Using database URL: {DATABASE_URL}") # Added log message
     Base.metadata.create_all(bind=engine)
