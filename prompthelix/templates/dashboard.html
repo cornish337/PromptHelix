@@ -59,7 +59,12 @@
                 <button id="ga-cancel-btn" class="bg-rose-500 hover:bg-rose-600 text-white font-bold py-2 px-4 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150 ease-in-out">Cancel</button>
             </div>
             <!-- Chart.js Canvas -->
-            <div id="ga-charts-placeholder" class="mt-4">
+            <div class="mt-4 flex items-center space-x-3">
+                <input type="checkbox" id="toggle-chart" class="h-4 w-4" checked>
+                <label for="toggle-chart" class="text-sm text-gray-700">Show Chart</label>
+                <button id="download-csv" class="bg-blue-500 hover:bg-blue-600 text-white text-sm font-semibold py-1 px-2 rounded">Download CSV</button>
+            </div>
+            <div id="ga-charts-placeholder" class="mt-2">
                 <canvas id="ga-history-chart"></canvas>
             </div>
 
@@ -174,6 +179,7 @@
         const gaCancelBtn = document.getElementById('ga-cancel-btn');
 
         let fitnessChart = null;
+        let gaHistoryData = [];
         const chartData = {
             labels: [],
             datasets: [
@@ -195,6 +201,7 @@
                     label: 'Min Fitness',
                     borderColor: 'rgb(234,88,12)',
                     backgroundColor: 'rgba(234,88,12,0.3)',
+
                     data: [],
                     tension: 0.1
                 }
@@ -332,10 +339,16 @@
                     chartData.datasets[0].data.push(parseFloat(data.best_fitness));
                     chartData.datasets[1].data.push(parseFloat(data.fitness_mean));
                     chartData.datasets[2].data.push(parseFloat(data.fitness_min));
+
+                    gaHistoryData.push({generation: data.generation, best_fitness: data.best_fitness, fitness_mean: data.fitness_mean, fitness_min: data.fitness_min});
+
                 } else if (currentLabelIndex !== -1 && currentLabelIndex < chartData.datasets[0].data.length) { // Update existing data point
                     chartData.datasets[0].data[currentLabelIndex] = parseFloat(data.best_fitness);
                     chartData.datasets[1].data[currentLabelIndex] = parseFloat(data.fitness_mean);
                     chartData.datasets[2].data[currentLabelIndex] = parseFloat(data.fitness_min);
+
+                    gaHistoryData[currentLabelIndex] = {generation: data.generation, best_fitness: data.best_fitness, fitness_mean: data.fitness_mean, fitness_min: data.fitness_min};
+# main
                 }
 
 
@@ -512,6 +525,7 @@
                 const response = await fetch('/api/ga/history');
                 if (response.ok) {
                     const history = await response.json();
+                    gaHistoryData = history;
                     chartData.labels = history.map(h => h.generation);
                     chartData.datasets[0].data = history.map(h => h.best_fitness);
                     chartData.datasets[1].data = history.map(h => h.fitness_mean);
@@ -732,6 +746,35 @@
                 } catch (error) {
                     console.error('Error cancelling GA:', error);
                 }
+            });
+        }
+
+        const toggleChart = document.getElementById('toggle-chart');
+        const chartContainer = document.getElementById('ga-charts-placeholder');
+        if (toggleChart && chartContainer) {
+            toggleChart.addEventListener('change', () => {
+                chartContainer.style.display = toggleChart.checked ? 'block' : 'none';
+            });
+        }
+
+        const downloadCsvBtn = document.getElementById('download-csv');
+        if (downloadCsvBtn) {
+            downloadCsvBtn.addEventListener('click', () => {
+                const rows = [['generation','best_fitness','average_fitness','min_fitness']];
+                gaHistoryData.forEach(h => {
+                    rows.push([h.generation, h.best_fitness, h.fitness_mean, h.fitness_min]);
+                });
+                const csvContent = rows.map(r => r.join(',')).join('\n');
+                const blob = new Blob([csvContent], { type: 'text/csv' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'ga_metrics.csv';
+                a.style.display = 'none';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
             });
         }
 

@@ -12,16 +12,19 @@ from typing import (
 )  # Added TYPE_CHECKING, Optional, Dict, Set, Any
 from sqlalchemy.orm import Session as DbSession
 from prompthelix.models import ConversationLog
+from prompthelix.utils.logging_utils import setup_logging
+from prompthelix.config import settings
 
 if TYPE_CHECKING:  # Added
     from prompthelix.websocket_manager import ConnectionManager  # For type hinting
 
-# Configure basic logging for the message bus
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
 
+# Configure logging if root logger has no handlers
+if not logging.getLogger().hasHandlers():
+    setup_logging(debug=settings.DEBUG)
+"""
+logger = logging.getLogger(__name__)
+"""
 
 class MessageBus:
     """

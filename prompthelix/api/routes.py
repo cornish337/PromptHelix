@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session as DbSession # Use DbSession for type hinting
 from sqlalchemy.exc import IntegrityError
@@ -8,8 +8,10 @@ import asyncio
 import subprocess
 from datetime import datetime, timedelta
 import secrets
+import uuid # Added for task_id generation
+import logging # Added for logging in background task
 
-from prompthelix.database import get_db
+from prompthelix.database import get_db, SessionLocal # Added SessionLocal for background task
 from prompthelix.api import crud
 from prompthelix import schemas
 from prompthelix import globals as ph_globals
@@ -33,6 +35,7 @@ from prompthelix.services import (
     get_experiment_runs,
     get_experiment_run,
     get_chromosomes_for_run,
+    get_generation_metrics_for_run,
 )
 from prompthelix.services.prompt_service import PromptService
 
@@ -203,51 +206,134 @@ def get_metrics_for_version_route(prompt_version_id: int, db: DbSession = Depend
         raise HTTPException(status_code=404, detail=f"PromptVersion with id {prompt_version_id} not found.")
     return performance_service.get_metrics_for_prompt_version(db=db, prompt_version_id=prompt_version_id)
 
-# --- GA Experiment Route (Verified, using CRUD layer) ---
-@router.post("/api/experiments/run-ga", response_model=schemas.PromptVersion, name="api_run_ga_experiment", tags=["Experiments"], summary="Run a Genetic Algorithm experiment", description="Executes a Genetic Algorithm to generate and optimize a prompt based on the provided parameters. The best resulting prompt is saved as a new version under a specified or new prompt.")
-def run_ga_experiment_route(params: schemas.GAExperimentParams, db: DbSession = Depends(get_db), current_user: UserModel = Depends(get_current_user)):
-    # ... (existing GA logic from file, ensuring it calls new crud methods)
-    best_chromosome = main_ga_loop(
-        task_desc=params.task_description,
-        keywords=params.keywords,
-        num_generations=params.num_generations,
-        population_size=params.population_size,
-        elitism_count=params.elitism_count,
-        execution_mode=params.execution_mode,
-        return_best=True
-    )
+# Logger for background tasks
+background_task_logger = logging.getLogger("ga_background_task")
+# Ensure the logger has a handler if not configured globally, e.g., by adding a StreamHandler
+if not background_task_logger.hasHandlers():
+    background_task_logger.addHandler(logging.StreamHandler()) # TODO: Configure proper logging for background tasks
+    background_task_logger.setLevel(logging.INFO)
 
-    if not isinstance(best_chromosome, PromptChromosome):
-        raise HTTPException(status_code=500, detail="GA did not return a valid prompt chromosome.")
 
-    target_prompt = None
-    if params.parent_prompt_id:
-        target_prompt = prompt_service.get_prompt(db, prompt_id=params.parent_prompt_id)
+def run_ga_background_task(
+    params: schemas.GAExperimentParams,
+    current_user_id: int,
+    task_id: str
+):
+    """
+    Background task to run the GA experiment and save the results.
+    """
+    background_task_logger.info(f"Background task {task_id} started for GA experiment with params: {params.model_dump_json()}")
+    db: DbSession = SessionLocal()
+    try:
+        # Note: main_ga_loop itself might set ph_globals.active_ga_runner
+        # This needs to be managed if multiple background tasks run concurrently.
+        # For now, BackgroundTasks from FastAPI run sequentially if not using a separate executor.
+        # If they run concurrently (e.g. via thread pool), active_ga_runner needs protection or to be instance-based.
+        best_chromosome = main_ga_loop(
+            task_desc=params.task_description,
+            keywords=params.keywords,
+            num_generations=params.num_generations,
+            population_size=params.population_size,
+            elitism_count=params.elitism_count,
+            execution_mode=params.execution_mode,
+            # Pass other params from schemas.GAExperimentParams if main_ga_loop accepts them
+            # e.g. initial_prompt_str, agent_settings_override, llm_settings_override, parallel_workers, population_path
+            initial_prompt_str=params.initial_prompt_str,
+            agent_settings_override=params.agent_settings_override,
+            llm_settings_override=params.llm_settings_override,
+            parallel_workers=params.parallel_workers,
+            population_path=params.population_path,
+            save_frequency_override=params.save_frequency, # Assuming GAExperimentParams has save_frequency
+            return_best=True
+        )
+
+        if not isinstance(best_chromosome, PromptChromosome):
+            background_task_logger.error(f"Task {task_id}: GA did not return a valid prompt chromosome. Result: {best_chromosome}")
+            # Potentially update a DB record for the task_id with error status here
+            return
+
+        background_task_logger.info(f"Task {task_id}: GA completed. Best chromosome fitness: {best_chromosome.fitness_score}")
+
+        # Logic to save the best_chromosome as a PromptVersion
+        # This reuses the logic from the original synchronous route
+        local_prompt_service = PromptService() # Create a new service instance for the background task
+
+        target_prompt = None
+        if params.parent_prompt_id:
+            target_prompt = local_prompt_service.get_prompt(db, prompt_id=params.parent_prompt_id)
+            if not target_prompt:
+                background_task_logger.error(f"Task {task_id}: Parent prompt with id {params.parent_prompt_id} not found.")
+                # Update task status to error
+                return
+        elif params.prompt_name:
+            prompt_create_data = schemas.PromptCreate(name=params.prompt_name, description=params.prompt_description)
+            target_prompt = local_prompt_service.create_prompt(db, prompt_create=prompt_create_data, owner_id=current_user_id)
+        else:
+            default_name = f"GA Generated Prompt - Task {task_id} - {datetime.utcnow().isoformat()}"
+            prompt_create_data = schemas.PromptCreate(name=default_name, description=params.prompt_description or f"Generated by GA experiment task {task_id}")
+            target_prompt = local_prompt_service.create_prompt(db, prompt_create=prompt_create_data, owner_id=current_user_id)
+
         if not target_prompt:
-            raise HTTPException(status_code=404, detail=f"Parent prompt with id {params.parent_prompt_id} not found.")
-    elif params.prompt_name:
-        prompt_create_data = schemas.PromptCreate(name=params.prompt_name, description=params.prompt_description)
-        target_prompt = prompt_service.create_prompt(db, prompt_create=prompt_create_data, owner_id=current_user.id)
-    else:
-        default_name = f"GA Generated Prompt - {datetime.utcnow().isoformat()}"
-        prompt_create_data = schemas.PromptCreate(name=default_name, description=params.prompt_description or "Generated by GA experiment")
-        target_prompt = prompt_service.create_prompt(db, prompt_create=prompt_create_data, owner_id=current_user.id)
+            background_task_logger.error(f"Task {task_id}: Could not determine or create target prompt for GA result.")
+            # Update task status to error
+            return
 
-    if not target_prompt:
-        raise HTTPException(status_code=500, detail="Could not determine or create target prompt for GA result.")
+        ga_params_for_version = params.model_dump(exclude={"parent_prompt_id", "prompt_name", "prompt_description"})
+        version_create_data = schemas.PromptVersionCreate(
+            content=best_chromosome.to_prompt_string(),
+            parameters_used=ga_params_for_version,
+            fitness_score=best_chromosome.fitness_score
+        )
+        created_version = local_prompt_service.create_prompt_version(db, prompt_id=target_prompt.id, version_create=version_create_data)
 
-    ga_params_for_version = params.model_dump(exclude={"parent_prompt_id", "prompt_name", "prompt_description"})
-    version_create_data = schemas.PromptVersionCreate(
-        content=best_chromosome.to_prompt_string(),
-        parameters_used=ga_params_for_version,
-        fitness_score=best_chromosome.fitness_score
+        if not created_version:
+            background_task_logger.error(f"Task {task_id}: Failed to save GA experiment result as a prompt version for prompt ID {target_prompt.id}.")
+            # Update task status to error
+        else:
+            background_task_logger.info(f"Task {task_id}: Successfully saved GA result as PromptVersion ID {created_version.id} for Prompt ID {target_prompt.id}.")
+            # Update task status to completed, store created_version.id
+
+    except Exception as e:
+        background_task_logger.exception(f"Task {task_id}: An error occurred during GA background task execution: {e}")
+        # Update task status to error, store error message
+    finally:
+        db.close()
+        background_task_logger.info(f"Background task {task_id} finished.")
+
+
+# --- GA Experiment Route (Now uses BackgroundTasks) ---
+@router.post("/api/experiments/run-ga", response_model=schemas.GARunResponse, name="api_run_ga_experiment", tags=["Experiments"], summary="Run a Genetic Algorithm experiment in the background", description="Starts a Genetic Algorithm to generate and optimize a prompt. The process runs in the background. The best resulting prompt will be saved as a new version under a specified or new prompt.")
+def run_ga_experiment_route(
+    params: schemas.GAExperimentParams,
+    background_tasks: BackgroundTasks,
+    # db: DbSession = Depends(get_db), # db session for main thread if needed for pre-checks
+    current_user: UserModel = Depends(get_current_user)
+):
+    task_id = str(uuid.uuid4())
+    background_task_logger.info(f"API: Received request to run GA experiment. Assigning task ID: {task_id}")
+
+    # Optional: Perform any quick pre-checks here if needed before starting the background task
+    # For example, validating parent_prompt_id if provided, using the 'db' from Depends(get_db)
+
+    background_tasks.add_task(
+        run_ga_background_task,
+        params=params,
+        current_user_id=current_user.id, # Pass user ID instead of the whole user object
+        task_id=task_id
     )
-    created_version = prompt_service.create_prompt_version(db, prompt_id=target_prompt.id, version_create=version_create_data)
-    if not created_version:
-        raise HTTPException(status_code=500, detail="Failed to save GA experiment result as a prompt version.")
-    return created_version
+
+    return schemas.GARunResponse(
+        message="GA experiment started in background.",
+        task_id=task_id,
+        status_endpoint=f"/api/ga/status/{task_id}" # Example, actual status endpoint needs implementation
+    )
 
 # --- GA Control Routes ---
+# TODO: GA Control routes (/pause, /resume, /cancel, /status) will need to be adapted
+# to work with background tasks. ph_globals.active_ga_runner is problematic for multiple tasks.
+# A dictionary mapping task_id to runner instances would be needed.
+# The status endpoint should ideally query a database record for the task_id.
+
 @router.post("/api/ga/pause", status_code=status.HTTP_200_OK, tags=["GA Control"], summary="Pause the running GA experiment")
 def pause_ga_experiment():
     if ph_globals.active_ga_runner:
@@ -334,9 +420,20 @@ def get_ga_experiment_status():
 
 
 # --- GA History Route ---
-@router.get("/api/ga/history", tags=["GA Control"], summary="Get GA fitness history")
-def get_ga_history():
-    return ph_globals.ga_history
+@router.get(
+    "/api/ga/history",
+    response_model=List[schemas.GAGenerationMetric],
+    tags=["GA Control"],
+    summary="Get GA fitness history",
+)
+def get_ga_history(
+    run_id: int,
+    skip: int = 0,
+    limit: int = 100,
+    db: DbSession = Depends(get_db),
+):
+    metrics = get_generation_metrics_for_run(db=db, run_id=run_id)
+    return metrics[skip : skip + limit]
 
 
 @router.get(
