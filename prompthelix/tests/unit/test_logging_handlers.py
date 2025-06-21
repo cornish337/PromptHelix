@@ -156,6 +156,17 @@ class TestWebSocketLogHandler(unittest.TestCase):
             # Restore the original broadcast_json mock AFTER all tests are done
             self.mock_connection_manager.broadcast_json = original_broadcast_json
 
+    @patch('asyncio.create_task')
+    def test_emit_create_task_runtime_error_falls_back_to_run(self, mock_create_task):
+        # Simulate create_task raising RuntimeError
+        mock_create_task.side_effect = RuntimeError("no event loop")
+
+        self.logger.info("runtime error test")
+
+        mock_create_task.assert_called_once()
+        # broadcast_json should still be awaited via asyncio.run
+        self.mock_connection_manager.broadcast_json.assert_awaited_once()
+
 
     def test_handler_level_respects_logger_level(self):
         # This test is more about logging configuration than the handler itself.
