@@ -4,7 +4,6 @@ __pycache__/
 *$py.class
 old_prompthelix.db
 prompthelix.db
-prompthelix.db
 test_prompthelix.db
 
 # C extensions
