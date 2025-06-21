@@ -127,6 +127,7 @@ class PromptCriticAgent(BaseAgent):
         for rule in self.rules:
             pattern = rule.get("pattern")
             if not pattern:
+                # Treat missing rule keys as errors since the rule cannot be evaluated
                 logger.error(
                     f"Agent '{self.agent_id}': Invalid rule structure for rule '{rule.get('name', 'Unnamed')}'. Missing key: 'pattern'. Skipping rule."
                 )
@@ -134,6 +135,7 @@ class PromptCriticAgent(BaseAgent):
             try:
                 regex = re.compile(pattern)
             except re.error as e:
+                # A broken regex means the rule is unusable
                 logger.error(
                     f"Agent '{self.agent_id}': Regex error in rule '{rule.get('name', 'Unnamed')}': {e}. Skipping rule."
                 )
@@ -147,6 +149,7 @@ class PromptCriticAgent(BaseAgent):
                     feedback_message = feedback_template.replace("{pattern}", pattern)
                     issues.append(feedback_message)
                 else:
+                    # Without feedback the user cannot act on the rule violation
                     logger.error(
                         f"Agent '{self.agent_id}': Invalid rule structure for rule '{rule.get('name', 'Unnamed')}'. Missing key: 'feedback'."
                     )
