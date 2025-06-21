@@ -87,6 +87,16 @@ def main_cli():
     check_parser.add_argument("--provider", default="openai", help="LLM provider name")
     check_parser.add_argument("--model", help="Model name for the provider")
 
+    # "interactive" command for running interactive pytest sessions
+    interactive_parser = subparsers.add_parser(
+        "interactive", help="Run interactive tests that require user input"
+    )
+    interactive_parser.add_argument(
+        "--path",
+        "-p",
+        help="Optional directory or file containing interactive tests",
+    )
+
 
     args = parser.parse_args()
 
@@ -310,6 +320,19 @@ def main_cli():
             logging.exception("CLI: LLM connectivity check failed")
             print(f"CLI: Failed to contact {args.provider}: {e}", file=sys.stderr)
             sys.exit(1)
+
+    elif args.command == "interactive":
+        try:
+            import pytest
+        except ImportError:
+            print("pytest is required for interactive tests", file=sys.stderr)
+            sys.exit(1)
+
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        target = args.path if args.path else os.path.join(project_root, "tests", "interactive")
+        print(f"CLI: Running interactive tests from {target}...")
+        exit_code = pytest.main([target, "-s"])
+        sys.exit(exit_code)
 
     # No specific action needed for --version as argparse handles it
     elif hasattr(args, 'version') and args.version:

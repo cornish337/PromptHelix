@@ -62,6 +62,14 @@
             <div class="mt-4">
                 <canvas id="fitnessTrendChart"></canvas>
             </div>
+
+            <!-- Population Snapshot Section -->
+            <div id="population-snapshot" class="mt-6">
+                <h3 class="text-lg font-semibold mb-2">Population Snapshot (Top 5)</h3>
+                <div id="population-sample-container" class="space-y-2">
+                    <p class="text-gray-500">Waiting for population data...</p>
+                </div>
+            </div>
         </div>
     </section>
 
@@ -102,7 +110,49 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
+    function escapeHtml(unsafe) {
+        if (unsafe === null || typeof unsafe === 'undefined') {
+            return '';
+        }
+        return unsafe
+             .replace(/&/g, "&amp;")
+             .replace(/</g, "&lt;")
+             .replace(/>/g, "&gt;")
+             .replace(/"/g, "&quot;")
+             .replace(/'/g, "&#039;");
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
+        // Helper logic for agent colors in conversation logs
+        const agentColors = {};
+        const predefinedColors = [
+            { bg: 'bg-sky-50', text: 'text-sky-700', border: 'border-sky-300' },
+            { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-300' },
+            { bg: 'bg-violet-50', text: 'text-violet-700', border: 'border-violet-300' },
+            { bg: 'bg-lime-50', text: 'text-lime-700', border: 'border-lime-300' },
+            { bg: 'bg-pink-50', text: 'text-pink-700', border: 'border-pink-300' },
+            { bg: 'bg-teal-50', text: 'text-teal-700', border: 'border-teal-300' },
+            { bg: 'bg-fuchsia-50', text: 'text-fuchsia-700', border: 'border-fuchsia-300' },
+            { bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-300' }
+        ];
+        let nextColorIndex = 0;
+
+        function getAgentColorStyle(agentId) {
+            if (!agentId || agentId === 'SYSTEM' || agentId.toLowerCase().includes('user')) {
+                // Specific styling for SYSTEM or user messages
+                if (agentId === 'SYSTEM') {
+                    return { bg: 'bg-yellow-50', text: 'text-yellow-700', border: 'border-yellow-300' };
+                }
+                // Default for user or unspecified non-agent senders
+                return { bg: 'bg-gray-100', text: 'text-gray-700', border: 'border-gray-300' };
+            }
+            if (!agentColors[agentId]) {
+                agentColors[agentId] = predefinedColors[nextColorIndex % predefinedColors.length];
+                nextColorIndex++;
+            }
+            return agentColors[agentId];
+        }
+
         const gaStatus = document.getElementById('ga-status');
         const gaGeneration = document.getElementById('ga-generation');
         const gaBestFitness = document.getElementById('ga-best-fitness');
@@ -113,6 +163,7 @@
         const gaStdDevFitness = document.getElementById('ga-stddev-fitness'); // New
         const gaAgentsUsed = document.getElementById('ga-agents-used');
         const gaFittestChromosome = document.getElementById('ga-fittest-chromosome');
+        const populationSampleContainer = document.getElementById('population-sample-container'); // Added
         const logsContainer = document.getElementById('logs-container');
         const agentMetricsData = document.getElementById('agent-metrics-data');
         const debugLogsContainer = document.getElementById('debug-logs-container'); // Add this
@@ -212,6 +263,51 @@
             gaFittestChromosome.textContent = data.fittest_chromosome_string || 'N/A';
             updateGaControlButtons(data.status);
 
+            if (data.agent_metrics) {
+                const metricsContainer = document.getElementById('agent-metrics-data');
+                let table = document.getElementById('agent-metrics-table');
+                if (!table) {
+                    table = document.createElement('table');
+                    table.id = 'agent-metrics-table';
+                    table.classList.add('min-w-full', 'text-sm', 'table-auto', 'border-collapse');
+                    table.innerHTML = `
+                        <thead>
+                            <tr>
+                                <th class="border px-2">Agent</th>
+                                <th class="border px-2">Messages</th>
+                                <th class="border px-2">Errors</th>
+                                <th class="border px-2">Last Operation</th>
+                                <th class="border px-2">Avg Fitness Δ</th>
+                                <th class="border px-2">Updated</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>`;
+                    metricsContainer.innerHTML = '';
+                    metricsContainer.appendChild(table);
+                }
+
+                const tbody = table.querySelector('tbody');
+                Object.entries(data.agent_metrics).forEach(([id, m]) => {
+                    let row = tbody.querySelector(`tr[data-agent-id="${id}"]`);
+                    if (!row) {
+                        row = document.createElement('tr');
+                        row.dataset.agentId = id;
+                        tbody.appendChild(row);
+                    }
+                    const avgDelta = m.average_fitness_change !== undefined && m.average_fitness_change !== null
+                        ? parseFloat(m.average_fitness_change).toFixed(4)
+                        : '-';
+                    row.innerHTML = `
+                        <td class="border px-2">${id}</td>
+                        <td class="border px-2">${m.messages_processed}</td>
+                        <td class="border px-2">${m.errors_encountered}</td>
+                        <td class="border px-2">${m.last_operation_type || '-'}</td>
+                        <td class="border px-2">${avgDelta}</td>
+                        <td class="border px-2">${new Date(m.timestamp).toLocaleTimeString()}</td>
+                    `;
+                });
+            }
+
             // Update chart if generation data is present and it's a relevant event
             // Consider "ga_evaluation_complete" or "ga_generation_complete" as good points to update chart
             // For simplicity, updating if generation and fitness_mean are present
@@ -246,6 +342,52 @@
                 if (fitnessChart) {
                     fitnessChart.update();
                 }
+            }
+
+            // Handle population sample display
+            if (populationSampleContainer) { // Check if the container exists
+                if (data.population_sample && Array.isArray(data.population_sample)) {
+                    populationSampleContainer.innerHTML = ''; // Clear previous content
+                    const selectedParentIds = (data.selected_parent_ids && Array.isArray(data.selected_parent_ids)) ? data.selected_parent_ids : [];
+
+                    if (data.population_sample.length > 0) {
+                        data.population_sample.forEach(chromosome => {
+                            const chromosomeDiv = document.createElement('div');
+                            const isParent = selectedParentIds.includes(chromosome.id);
+                            const parentClass = isParent ? 'is-selected-parent' : '';
+                            const parentBadge = isParent ? '<span class="parent-badge ml-2 text-xs bg-green-200 text-green-800 px-1.5 py-0.5 rounded-full">Parent</span>' : '';
+
+                            chromosomeDiv.className = `chromosome-entry p-2 border rounded bg-gray-50 text-xs ${parentClass}`;
+
+                            let genesHtml = '<ul class="list-disc list-inside pl-4 mt-1">';
+                            chromosome.genes.forEach(gene => {
+                                genesHtml += `<li>${escapeHtml(gene)}</li>`;
+                            });
+                            genesHtml += '</ul>';
+
+                            chromosomeDiv.innerHTML = `
+                                <p class="text-xs font-medium">ID: <span class="font-normal">${escapeHtml(chromosome.id)}</span> | Fitness: <span class="font-normal">${parseFloat(chromosome.fitness_score).toFixed(4)}</span>${parentBadge}</p>
+                                <p class="text-xs font-medium mt-1">Genes:</p>
+                                ${genesHtml}
+                            `;
+                            populationSampleContainer.appendChild(chromosomeDiv);
+                        });
+                    } else {
+                        populationSampleContainer.innerHTML = '<p class="text-gray-500">Population sample is empty.</p>';
+                    }
+                } else if (data.hasOwnProperty('population_sample') &&
+                           (data.population_sample === null || data.population_sample === undefined || (Array.isArray(data.population_sample) && data.population_sample.length === 0)) ) {
+                    // This condition ensures that if 'population_sample' is explicitly sent as null, undefined, or an empty array,
+                    // we update the container, rather than leaving stale data.
+                    if (populationSampleContainer.innerHTML.includes("Waiting for population data...")) {
+                        // It's fine, initial state or no data yet. Message will be updated if sample is empty.
+                    } else if (Array.isArray(data.population_sample) && data.population_sample.length === 0) {
+                        populationSampleContainer.innerHTML = '<p class="text-gray-500">Population sample is empty.</p>';
+                    } else {
+                         populationSampleContainer.innerHTML = '<p class="text-gray-500">Population sample data not available.</p>';
+                    }
+                }
+                // If data.population_sample key is not in the message at all, the "Waiting..." message (or previous content) remains.
             }
             // console.log("GA Data Processed for event type, data:", data);
         }
@@ -384,29 +526,34 @@
 
             if (message.type === 'new_conversation_log' && message.data) {
                 const logEntry = document.createElement('div');
-                logEntry.classList.add('log-entry', 'p-2', 'rounded', 'text-xs', 'mb-1');
 
-                // Basic styling based on sender/recipient (can be refined)
-                if (message.data.sender_id && message.data.sender_id.toLowerCase().includes('agent')) {
-                    logEntry.classList.add('bg-blue-50');
-                } else if (message.data.sender_id === 'SYSTEM') {
-                    logEntry.classList.add('bg-yellow-50');
-                } else {
-                    logEntry.classList.add('bg-gray-100');
-                }
+                const senderId = message.data.sender_id || 'SYSTEM'; // Default if sender_id is null/undefined
+                const agentStyle = getAgentColorStyle(senderId);
+
+                logEntry.classList.add('log-entry', 'p-2', 'rounded', 'text-xs', 'mb-1', 'border', agentStyle.bg, agentStyle.border);
 
                 const timestamp = new Date(message.data.timestamp || Date.now()).toLocaleTimeString();
                 let contentHtml = '';
+                // Ensure content is escaped
+                const escapedContent = escapeHtml(typeof message.data.content === 'string' ? message.data.content : JSON.stringify(message.data.content, null, 2));
+
                 if (typeof message.data.content === 'object') {
-                    contentHtml = `<pre class="whitespace-pre-wrap">${JSON.stringify(message.data.content, null, 2)}</pre>`;
+                    contentHtml = `<pre class="whitespace-pre-wrap text-xs ${agentStyle.text}">${escapedContent}</pre>`;
                 } else {
-                    contentHtml = `<p class="whitespace-pre-wrap">${message.data.content}</p>`;
+                    // For plain string content, decide if specific text styling from agentStyle is desired or use a default.
+                    // Using agentStyle.text for consistency here.
+                    contentHtml = `<p class="whitespace-pre-wrap text-sm ${agentStyle.text}">${escapedContent}</p>`;
                 }
 
                 logEntry.innerHTML = `
-                    <div class="font-semibold">${timestamp} | ${message.data.sender_id} &rarr; ${message.data.recipient_id || 'BROADCAST'} (${message.data.message_type})</div>
-                    <div class="pl-2">${contentHtml}</div>
-                    <div class="text-gray-500 text-right text-xs">Session: ${message.data.session_id}</div>
+                    <div class="font-semibold ${agentStyle.text}">
+                        ${escapeHtml(timestamp)} |
+                        <strong class="${agentStyle.text}">${escapeHtml(senderId)}</strong>
+                        &rarr; ${escapeHtml(message.data.recipient_id || 'BROADCAST')}
+                        (${escapeHtml(message.data.message_type)})
+                    </div>
+                    <div class="pl-2 mt-1">${contentHtml}</div>
+                    <div class="text-gray-500 text-right text-xs mt-1">Session: ${escapeHtml(message.data.session_id)}</div>
                 `;
 
                 // If it was "Waiting for logs...", remove it

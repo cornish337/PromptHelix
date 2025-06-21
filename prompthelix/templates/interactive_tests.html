@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Interactive Tests</h1>
+<form method="post" action="{{ url_for('ui_run_test') }}">
+    <label for="test_name">Select Test:</label>
+    <select name="test_name" id="test_name">
+    {% for test in tests %}
+        <option value="{{ test }}" {% if selected_test == test %}selected{% endif %}>{{ test }}</option>
+    {% endfor %}
+    </select>
+    <button type="submit">Run Test</button>
+</form>
+{% if test_output %}
+<h2>Test Output</h2>
+<pre>{{ test_output }}</pre>
+{% endif %}
+{% endblock %}

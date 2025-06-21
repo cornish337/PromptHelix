@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}Interactive Tests{% endblock %}
+
+{% block content %}
+<h1>Interactive Tests</h1>
+{% if tests %}
+<form id="runTestForm">
+    <label for="testSelect">Select a test:</label>
+    <select id="testSelect" name="test_name">
+    {% for t in tests %}
+        <option value="{{ t }}">{{ t }}</option>
+    {% endfor %}
+    </select>
+    <button type="submit">Run Test</button>
+</form>
+{% else %}
+<p>No interactive tests found.</p>
+{% endif %}
+<pre id="testOutput" style="white-space: pre-wrap; margin-top: 1rem;"></pre>
+
+<script>
+document.getElementById('runTestForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const testName = document.getElementById('testSelect').value;
+    const resp = await fetch('/api/interactive_tests/run', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({test_name: testName})
+    });
+    if (resp.ok) {
+        const data = await resp.json();
+        document.getElementById('testOutput').textContent = data.output;
+    } else {
+        document.getElementById('testOutput').textContent = 'Failed to run test';
+    }
+});
+</script>
+{% endblock %}
+
