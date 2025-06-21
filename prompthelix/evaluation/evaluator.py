@@ -227,19 +227,7 @@ if __name__ == '__main__':
     #     logging.basicConfig(level=logging.INFO) # Basic fallback if needed
 
 
-""" old
-    from prompthelix.logging_config import configure_logging
-    from prompthelix.config import settings
-
-    # Configure logging for this standalone example
-    configure_logging(settings.DEBUG)
-
-    from prompthelix.utils.logging_utils import setup_logging
-    from prompthelix.config import settings
-
-    # Configure logging for the example script
-    setup_logging(debug=settings.DEBUG)
-"""
+    pass
 
 
 

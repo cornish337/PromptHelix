@@ -10,8 +10,12 @@ from typing import (
     Set,
     Any,
 )  # Added TYPE_CHECKING, Optional, Dict, Set, Any
-from sqlalchemy.orm import Session as DbSession
-from prompthelix.models import ConversationLog
+try:
+    from sqlalchemy.orm import Session as DbSession  # type: ignore
+    from prompthelix.models import ConversationLog
+except Exception:  # pragma: no cover - optional dependency for tests
+    DbSession = Any  # type: ignore
+    ConversationLog = None
 from prompthelix.utils.logging_utils import setup_logging
 from prompthelix.config import settings
 
@@ -27,9 +31,6 @@ logger = logging.getLogger(__name__)
 # Configure logging if root logger has no handlers
 if not logging.getLogger().hasHandlers():
     setup_logging(debug=settings.DEBUG)
-"""
-logger = logging.getLogger(__name__)
-"""
 
 class MessageBus:
     """
