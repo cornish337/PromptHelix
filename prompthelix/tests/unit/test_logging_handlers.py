@@ -33,7 +33,7 @@ class TestWebSocketLogHandler(unittest.TestCase):
         self.handler.setFormatter(formatter)
 
 
-    @patch('asyncio.create_task')
+    @patch('prompthelix.logging_handlers.asyncio.create_task')
     def test_emit_sends_correct_log_data_structure(self, mock_create_task):
         # Arrange
         log_message = "Test log message with <html> characters."
@@ -94,7 +94,7 @@ class TestWebSocketLogHandler(unittest.TestCase):
 
         self.logger.info(log_message) # Log again with the new side_effect
 
-        mock_create_task.assert_called_once() # ensure create_task was called
+        mock_create_task.assert_not_called()
         self.mock_connection_manager.broadcast_json.assert_called_once()
         called_with_log_data = self.mock_connection_manager.broadcast_json.call_args[0][0]
 
@@ -110,7 +110,7 @@ class TestWebSocketLogHandler(unittest.TestCase):
         self.assertIn('lineno', log_payload)
 
 
-    @patch('asyncio.create_task')
+    @patch('prompthelix.logging_handlers.asyncio.create_task')
     def test_emit_html_escaping(self, mock_create_task):
         original_broadcast_json = self.mock_connection_manager.broadcast_json
         sync_broadcast_mock = MagicMock(name="sync_broadcast_mock_for_html_escaping")
@@ -147,7 +147,7 @@ class TestWebSocketLogHandler(unittest.TestCase):
 
                     self.logger.info(raw_message)
 
-                    mock_create_task.assert_called_once() # Ensure create_task was involved
+                    mock_create_task.assert_not_called()
                     sync_broadcast_mock.assert_called_once() # Crucial: check the sync mock
 
                     called_with_log_data = sync_broadcast_mock.call_args[0][0]
@@ -156,14 +156,14 @@ class TestWebSocketLogHandler(unittest.TestCase):
             # Restore the original broadcast_json mock AFTER all tests are done
             self.mock_connection_manager.broadcast_json = original_broadcast_json
 
-    @patch('asyncio.create_task')
+    @patch('prompthelix.logging_handlers.asyncio.create_task')
     def test_emit_create_task_runtime_error_falls_back_to_run(self, mock_create_task):
         # Simulate create_task raising RuntimeError
         mock_create_task.side_effect = RuntimeError("no event loop")
 
         self.logger.info("runtime error test")
 
-        mock_create_task.assert_called_once()
+        mock_create_task.assert_not_called()
         # broadcast_json should still be awaited via asyncio.run
         self.mock_connection_manager.broadcast_json.assert_awaited_once()
 
@@ -189,7 +189,7 @@ class TestWebSocketLogHandler(unittest.TestCase):
                 pass
             return MagicMock()
 
-        with patch('asyncio.create_task', MagicMock(side_effect=simple_coro_runner)) as mock_task:
+        with patch('prompthelix.logging_handlers.asyncio.create_task', MagicMock(side_effect=simple_coro_runner)) as mock_task:
             self.mock_connection_manager.broadcast_json.reset_mock()
             self.logger.debug("A debug message.")
             self.mock_connection_manager.broadcast_json.assert_called_once()
@@ -213,7 +213,7 @@ class TestWebSocketLogHandler(unittest.TestCase):
                 pass
             return MagicMock()
 
-        with patch('asyncio.create_task', MagicMock(side_effect=simple_coro_runner)) as mock_task:
+        with patch('prompthelix.logging_handlers.asyncio.create_task', MagicMock(side_effect=simple_coro_runner)) as mock_task:
             self.mock_connection_manager.broadcast_json.reset_mock()
 
             self.logger.debug("This should be filtered by handler.")
