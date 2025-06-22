@@ -115,3 +115,44 @@ def get_all_llm_statistics(db: Session) -> List[LLMUsageStatistic]: # Returns li
 # Note: User and PerformanceMetric CRUD functions are not part of this file as per the task.
 # They would typically be in their respective API route files, calling their services.
 # If they were meant to be added here, the user_service and performance_service would be used.
+
+# --- UserFeedback CRUD Functions ---
+from prompthelix.models.evolution_models import UserFeedback # Import the model
+
+def create_user_feedback(db: Session, feedback: schemas.UserFeedbackCreate, current_user_id: Optional[int] = None) -> UserFeedback:
+    """
+    Creates a new user feedback entry in the database.
+    `current_user_id` is optionally passed if the user is authenticated, otherwise feedback.user_id is used.
+    """
+    db_feedback = UserFeedback(
+        ga_run_id=feedback.ga_run_id,
+        chromosome_id_str=feedback.chromosome_id_str,
+        prompt_content_snapshot=feedback.prompt_content_snapshot,
+        user_id=current_user_id if current_user_id is not None else feedback.user_id,
+        rating=feedback.rating,
+        feedback_text=feedback.feedback_text
+    )
+    db.add(db_feedback)
+    db.commit()
+    db.refresh(db_feedback)
+    return db_feedback
+
+def get_user_feedback(db: Session, feedback_id: int) -> Optional[UserFeedback]:
+    """Retrieves a specific feedback entry by its ID."""
+    return db.query(UserFeedback).filter(UserFeedback.id == feedback_id).first()
+
+def get_user_feedback_for_chromosome(db: Session, chromosome_id_str: str, skip: int = 0, limit: int = 100) -> List[UserFeedback]:
+    """Retrieves all feedback entries for a specific chromosome ID string."""
+    return db.query(UserFeedback).filter(UserFeedback.chromosome_id_str == chromosome_id_str).offset(skip).limit(limit).all()
+
+def get_user_feedback_for_run(db: Session, ga_run_id: int, skip: int = 0, limit: int = 100) -> List[UserFeedback]:
+    """Retrieves all feedback entries for a specific GA run ID."""
+    return db.query(UserFeedback).filter(UserFeedback.ga_run_id == ga_run_id).offset(skip).limit(limit).all()
+
+def get_user_feedback_for_prompt_content(db: Session, prompt_content_snapshot: str, skip: int = 0, limit: int = 100) -> List[UserFeedback]:
+    """Retrieves feedback entries based on an exact match of the prompt_content_snapshot."""
+    return db.query(UserFeedback).filter(UserFeedback.prompt_content_snapshot == prompt_content_snapshot).offset(skip).limit(limit).all()
+
+def get_all_user_feedback(db: Session, skip: int = 0, limit: int = 100) -> List[UserFeedback]:
+    """Retrieves all feedback entries, paginated."""
+    return db.query(UserFeedback).order_by(UserFeedback.created_at.desc()).offset(skip).limit(limit).all()
