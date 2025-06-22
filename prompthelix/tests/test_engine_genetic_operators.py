@@ -3,8 +3,8 @@ from unittest.mock import MagicMock, patch
 import logging
 
 from prompthelix.genetics.engine import PromptChromosome, GeneticOperators
+from prompthelix.genetics.strategy_base import BaseMutationStrategy
 from prompthelix.genetics.mutation_strategies import (
-    MutationStrategy,
     AppendCharStrategy,
     NoOperationMutationStrategy,
     PlaceholderReplaceStrategy
@@ -16,14 +16,20 @@ from prompthelix.agents.style_optimizer import StyleOptimizerAgent
 
 
 # A concrete mock strategy for testing selection
-class MockStrategyA(MutationStrategy):
+class MockStrategyA(BaseMutationStrategy):
+    def __init__(self, settings=None):
+        super().__init__(settings)
+
     def mutate(self, chromosome: PromptChromosome) -> PromptChromosome:
         mutated_chromosome = chromosome.clone()
         mutated_chromosome.genes.append("mutated_by_A")
         mutated_chromosome.fitness_score = 0.0
         return mutated_chromosome
 
-class MockStrategyB(MutationStrategy):
+class MockStrategyB(BaseMutationStrategy):
+    def __init__(self, settings=None):
+        super().__init__(settings)
+
     def mutate(self, chromosome: PromptChromosome) -> PromptChromosome:
         mutated_chromosome = chromosome.clone()
         mutated_chromosome.genes.append("mutated_by_B")
@@ -44,10 +50,10 @@ class TestGeneticOperators(unittest.TestCase):
         # logging.disable(logging.NOTSET) # Removed
 
     def test_init_default_strategies(self):
+        # When no strategies are provided, it should default to NoOperationMutationStrategy.
         operators = GeneticOperators()
-        self.assertTrue(len(operators.mutation_strategies) > 0)
-        self.assertTrue(any(isinstance(s, AppendCharStrategy) for s in operators.mutation_strategies))
-        self.assertTrue(any(isinstance(s, PlaceholderReplaceStrategy) for s in operators.mutation_strategies))
+        self.assertEqual(len(operators.mutation_strategies), 1)
+        self.assertIsInstance(operators.mutation_strategies[0], NoOperationMutationStrategy)
 
     def test_init_custom_strategies(self):
         custom_strategies = [MockStrategyA(), MockStrategyB()]
@@ -63,7 +69,7 @@ class TestGeneticOperators(unittest.TestCase):
 
 
     def test_mutate_applies_selected_strategy(self):
-        mock_strategy = MagicMock(spec=MutationStrategy)
+        mock_strategy = MagicMock(spec=BaseMutationStrategy)
         # Configure the mock strategy's mutate method to return a new PromptChromosome
         # (or the same one if that's how it's supposed to work after cloning)
         mutated_clone = self.chromosome.clone()
@@ -90,7 +96,7 @@ class TestGeneticOperators(unittest.TestCase):
 
 
     def test_mutate_rate_zero(self):
-        mock_strategy = MagicMock(spec=MutationStrategy)
+        mock_strategy = MagicMock(spec=BaseMutationStrategy)
         strategies = [mock_strategy]
         operators = GeneticOperators(mutation_strategies=strategies)
 
@@ -106,7 +112,7 @@ class TestGeneticOperators(unittest.TestCase):
 
 
     def test_mutate_rate_one(self):
-        mock_strategy = MagicMock(spec=MutationStrategy)
+        mock_strategy = MagicMock(spec=BaseMutationStrategy)
         mutated_clone = self.chromosome.clone()
         mutated_clone.fitness_score = 0.0
         mock_strategy.mutate.return_value = mutated_clone
@@ -126,7 +132,7 @@ class TestGeneticOperators(unittest.TestCase):
         base_mutated_chromosome.genes.append("base_mutated")
         base_mutated_chromosome.fitness_score = 0.0 # Strategy resets fitness
 
-        mock_base_strategy = MagicMock(spec=MutationStrategy)
+        mock_base_strategy = MagicMock(spec=BaseMutationStrategy)
         mock_base_strategy.mutate.return_value = base_mutated_chromosome
 
         style_optimized_chromosome = self.chromosome.clone() # Different ID from base_mutated_chromosome
@@ -159,7 +165,7 @@ class TestGeneticOperators(unittest.TestCase):
         base_mutated_chromosome.genes.append("base_mutated")
         base_mutated_chromosome.fitness_score = 0.0
 
-        mock_base_strategy = MagicMock(spec=MutationStrategy)
+        mock_base_strategy = MagicMock(spec=BaseMutationStrategy)
         mock_base_strategy.mutate.return_value = base_mutated_chromosome
 
         self.mock_style_optimizer_agent.process_request.return_value = None # Agent returns None
@@ -186,7 +192,7 @@ class TestGeneticOperators(unittest.TestCase):
         base_mutated_chromosome.genes.append("base_mutated")
         base_mutated_chromosome.fitness_score = 0.0
 
-        mock_base_strategy = MagicMock(spec=MutationStrategy)
+        mock_base_strategy = MagicMock(spec=BaseMutationStrategy)
         mock_base_strategy.mutate.return_value = base_mutated_chromosome
 
         self.mock_style_optimizer_agent.process_request.side_effect = Exception("Agent Error")
@@ -204,10 +210,10 @@ class TestGeneticOperators(unittest.TestCase):
         self.assertIn("base_mutated", final_chromosome.genes)
         self.assertEqual(final_chromosome.fitness_score, 0.0)
 
-        self.assertTrue(any("Style optimization failed during mutation" in msg and "Agent Error" in msg for msg in log_watcher.output))
+        self.assertTrue(any(f"Style optimization failed for {base_mutated_chromosome.id}" in msg and "Agent Error" in msg for msg in log_watcher.output))
 
     def test_mutate_no_style_optimizer_agent_but_target_style_provided(self):
-        mock_base_strategy = MagicMock(spec=MutationStrategy)
+        mock_base_strategy = MagicMock(spec=BaseMutationStrategy)
         base_mutated_chromosome = self.chromosome.clone()
         base_mutated_chromosome.genes.append("base_mutated")
         base_mutated_chromosome.fitness_score = 0.0
@@ -222,7 +228,7 @@ class TestGeneticOperators(unittest.TestCase):
             final_chromosome = operators.mutate(self.chromosome, mutation_rate=1.0, target_style="concise")
 
         self.assertEqual(final_chromosome, base_mutated_chromosome)
-        self.assertTrue(any("StyleOptimizerAgent is not available. Skipping style optimization." in msg for msg in log_watcher.output))
+        self.assertTrue(any(f"target_style 'concise' for {base_mutated_chromosome.id}, but StyleOptimizerAgent not available. Skipping." in msg for msg in log_watcher.output))
 
 
 if __name__ == '__main__':

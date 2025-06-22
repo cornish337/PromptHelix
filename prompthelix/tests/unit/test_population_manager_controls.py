@@ -3,7 +3,8 @@ import unittest
 from unittest.mock import MagicMock, AsyncMock, patch, ANY
 
 # Adjust imports based on your project structure
-from prompthelix.genetics.engine import PopulationManager, PromptChromosome
+from prompthelix.genetics.engine import PopulationManager
+from prompthelix.genetics.chromosome import PromptChromosome
 from prompthelix.message_bus import MessageBus
 # ConnectionManager might not be directly imported by PopulationManager,
 # but MessageBus uses it. We mock the relevant parts.

@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch, MagicMock
 import json # Though not directly used, good for complex mock return values
 from prompthelix.agents.architect import PromptArchitectAgent
-from prompthelix.genetics.engine import PromptChromosome
+from prompthelix.genetics.chromosome import PromptChromosome
 from prompthelix.config import AGENT_SETTINGS as GLOBAL_AGENT_SETTINGS
 
 # Default config for architect if not overridden by specific test patches

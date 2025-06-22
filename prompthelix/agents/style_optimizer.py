@@ -1,46 +1,31 @@
 from prompthelix.agents.base import BaseAgent
-from prompthelix.genetics.engine import PromptChromosome
+from prompthelix.genetics.chromosome import PromptChromosome # Updated import
 from prompthelix.utils.llm_utils import call_llm_api
 from prompthelix.config import AGENT_SETTINGS, KNOWLEDGE_DIR
-import json  # For parsing LLM response
+import json
 import logging
 import os
-from typing import Optional, Dict # Added for type hinting
+from typing import Optional, Dict, List
 
 logger = logging.getLogger(__name__)
 
-# Default knowledge filename if nothing else is provided
 FALLBACK_LLM_PROVIDER = "openai"
 FALLBACK_LLM_MODEL = "gpt-3.5-turbo"
 FALLBACK_KNOWLEDGE_FILE = "style_optimizer_rules.json"
 
 
 class StyleOptimizerAgent(BaseAgent):
-    # agent_id class variable can serve as a default
     agent_id_default = "StyleOptimizer"
     agent_description = "Improves prompt style and clarity."
-    """
-    Refines prompts to enhance their style, tone, clarity, and persuasiveness,
-    often based on specific target audience or desired communication effect.
-    """
-    def __init__(self, agent_id: Optional[str] = None, message_bus=None, settings: Optional[Dict] = None, knowledge_file_path: Optional[str] = None):
-        """
-        Initializes the StyleOptimizerAgent.
-        Loads style transformation rules or lexicons and agent configuration.
 
-        Args:
-            message_bus (object, optional): The message bus for inter-agent communication.
-            settings (Optional[Dict], optional): Configuration settings for the agent.
-            knowledge_file_path (Optional[str], optional): Path to the knowledge file.
-                Overrides 'knowledge_file_path' in settings if provided.
-        """
+    def __init__(self, agent_id: Optional[str] = None, message_bus=None, settings: Optional[Dict] = None, knowledge_file_path: Optional[str] = None):
         effective_agent_id = agent_id if agent_id is not None else self.agent_id_default
         super().__init__(agent_id=effective_agent_id, message_bus=message_bus, settings=settings)
 
         settings_key_for_globals = self.settings.get("settings_key_from_pipeline", "StyleOptimizerAgent")
         global_defaults = AGENT_SETTINGS.get(settings_key_for_globals, {})
-        llm_provider_default = global_defaults.get("default_llm_provider", "openai")
-        llm_model_default = global_defaults.get("default_llm_model", "gpt-3.5-turbo")
+        llm_provider_default = global_defaults.get("default_llm_provider", FALLBACK_LLM_PROVIDER)
+        llm_model_default = global_defaults.get("default_llm_model", FALLBACK_LLM_MODEL)
 
         self.llm_provider = self.settings.get("default_llm_provider", llm_provider_default)
         self.llm_model = self.settings.get("default_llm_model", llm_model_default)
@@ -58,43 +43,29 @@ class StyleOptimizerAgent(BaseAgent):
         logger.info(f"Agent '{self.agent_id}' initialized with LLM provider: {self.llm_provider}, model: {self.llm_model}, knowledge: {self.knowledge_file_path}")
 
         os.makedirs(os.path.dirname(self.knowledge_file_path), exist_ok=True)
-        self.style_rules = {} # Initialize before loading
+        self.style_rules = {}
         self.load_knowledge()
 
     def _get_default_style_rules(self) -> dict:
-        """
-        Provides default mock style transformation rules.
-
-        In a real scenario, this would load from a configuration file,
-        a database, or be dynamically updated by other agents like MetaLearnerAgent.
-
-        Returns:
-            dict: A dictionary of style rules.
-        """
         logger.info(f"Agent '{self.agent_id}': Using default style rules.")
         return {
             "formal": {
                 "replace": {"don't": "do not", "stuff": "items", "gonna": "going to", "wanna": "want to"},
-                "prepend_politeness": "Please ", # Changed from append to prepend for instructions
+                "prepend_politeness": "Please ",
                 "ensure_ending_punctuation": True
             },
             "casual": {
                 "replace": {"do not": "don't", "items": "stuff", "please ": "", "Please ": "", "kindly ": "", "Kindly ": ""},
-                "remove_ending_punctuation": False # Usually casual still has punctuation
+                "remove_ending_punctuation": False
             },
-            "instructional": { # Example of a more specific style
+            "instructional": {
                 "prepend_politeness": "Could you ",
-                "append_request_marker": "?", # For instructions that are phrased as questions
+                "append_request_marker": "?",
                 "replace": {"tell me": "explain"}
             }
         }
 
     def load_knowledge(self):
-        """
-        Loads style rules from the specified JSON file.
-        If the file is not found or is invalid, it loads default rules
-        and saves them to a new file.
-        """
         try:
             with open(self.knowledge_file_path, 'r') as f:
                 self.style_rules = json.load(f)
@@ -102,13 +73,9 @@ class StyleOptimizerAgent(BaseAgent):
         except FileNotFoundError:
             logger.warning(f"Agent '{self.agent_id}': Knowledge file '{self.knowledge_file_path}' not found. Using default rules and creating the file.")
             self.style_rules = self._get_default_style_rules()
-            self.save_knowledge() # Save defaults if file not found
+            self.save_knowledge()
         except json.JSONDecodeError as e:
             logger.error(
-                f"Agent '{self.agent_id}': Error decoding JSON from '{self.knowledge_file_path}': {e}. Using default rules.",
-                exc_info=True,
-            )
-            logging.error(
                 f"Agent '{self.agent_id}': Error decoding JSON from '{self.knowledge_file_path}': {e}. Using default rules.",
                 exc_info=True,
             )
@@ -118,30 +85,12 @@ class StyleOptimizerAgent(BaseAgent):
                 f"Agent '{self.agent_id}': Failed to load style rules from '{self.knowledge_file_path}': {e}. Using default rules.",
                 exc_info=True,
             )
-            logging.error(
-                f"Agent '{self.agent_id}': Failed to load style rules from '{self.knowledge_file_path}': {e}. Using default rules.",
-                exc_info=True,
-            )
             self.style_rules = self._get_default_style_rules()
 
     def optimize(self, prompt: str, tone: str = "concise") -> str:
-        """
-        Optimizes the style of a given prompt string using an LLM.
-
-        Args:
-            prompt (str): The prompt string to optimize.
-            tone (str): The desired tone for the optimization (e.g., "concise", "formal", "casual").
-
-        Returns:
-            str: The optimized prompt string or a placeholder if not in "REAL" LLM mode.
-        """
         llm_template = f"Rephrase the following prompt to be more {tone}: {prompt}"
-
-        # Ensure self.settings is available. BaseAgent should store it.
         if not hasattr(self, 'settings') or self.settings is None:
             logger.warning(f"Agent '{self.agent_id}': Settings not available. Defaulting to non-REAL mode for optimize.")
-            # Attempt to fetch from AGENT_SETTINGS if self.settings is missing
-            # This is a fallback, ideally settings should be passed during init.
             agent_specific_settings = AGENT_SETTINGS.get(self.agent_id, {})
             llm_mode = agent_specific_settings.get("llm_mode", "PLACEHOLDER")
         else:
@@ -159,16 +108,12 @@ class StyleOptimizerAgent(BaseAgent):
                 return optimized_prompt
             except Exception as e:
                 logger.error(f"Agent '{self.agent_id}': Error calling LLM API during style optimization: {e}. Returning original prompt with placeholder.", exc_info=True)
-                # Fallback to placeholder behavior in case of LLM error even in REAL mode
                 return f"{prompt} [Styled: Placeholder - Error]"
         else:
             logger.info(f"Agent '{self.agent_id}': LLM mode is '{llm_mode}'. Returning placeholder styled prompt.")
             return f"{prompt} [Styled: Placeholder]"
 
     def save_knowledge(self):
-        """
-        Saves the current style rules to the specified JSON file.
-        """
         try:
             with open(self.knowledge_file_path, 'w') as f:
                 json.dump(self.style_rules, f, indent=4)
@@ -177,64 +122,18 @@ class StyleOptimizerAgent(BaseAgent):
             logger.error(f"Agent '{self.agent_id}': Failed to save style rules to '{self.knowledge_file_path}': {e}", exc_info=True)
 
     def _tone_analysis_adjustment(self, genes: list, target_tone: str) -> list:
-        """
-        Placeholder for analyzing and adjusting the tone of prompt genes.
-
-        Args:
-            genes (list): The list of gene strings.
-            target_tone (str): The desired tone (e.g., "neutral", "enthusiastic").
-
-        Returns:
-            list: The list of genes, potentially modified for tone.
-        """
         logger.info(f"Agent '{self.agent_id}': (Placeholder) Analyzing/adjusting tone for: {target_tone}")
-        # Future: Implement NLP techniques for tone detection and rule-based or
-        # model-based transformations.
         return genes
 
     def _clarity_enhancement(self, genes: list) -> list:
-        """
-        Placeholder for enhancing the clarity of prompt genes.
-
-        Args:
-            genes (list): The list of gene strings.
-
-        Returns:
-            list: The list of genes, potentially modified for clarity.
-        """
         logger.info(f"Agent '{self.agent_id}': (Placeholder) Enhancing clarity.")
-        # Future: Implement checks for ambiguity, complex sentences, jargon reduction, etc.
-        # Example:
-        # for i, gene in enumerate(genes):
-        #     if "utilize" in gene:
-        #         genes[i] = gene.replace("utilize", "use")
         return genes
 
     def _persuasiveness_improvement(self, genes: list) -> list:
-        """
-        Placeholder for improving the persuasiveness of prompt genes.
-
-        Args:
-            genes (list): The list of gene strings.
-
-        Returns:
-            list: The list of genes, potentially modified for persuasiveness.
-        """
         logger.info(f"Agent '{self.agent_id}': (Placeholder) Improving persuasiveness.")
-        # Future: Implement techniques like adding rhetorical questions, benefit statements, etc.
         return genes
 
     def _compare_chromosomes(self, old_chromo: PromptChromosome, new_chromo: PromptChromosome) -> list:
-        """
-        Compares two chromosomes and lists the differences in their genes.
-
-        Args:
-            old_chromo (PromptChromosome): The original chromosome.
-            new_chromo (PromptChromosome): The new chromosome.
-
-        Returns:
-            list: A list of strings describing the differences.
-        """
         diffs = []
         old_genes = [str(g) for g in old_chromo.genes]
         new_genes = [str(g) for g in new_chromo.genes]
@@ -255,22 +154,6 @@ class StyleOptimizerAgent(BaseAgent):
         return diffs
 
     def process_request(self, request_data: dict) -> PromptChromosome:
-        """
-        Optimizes the style of a given prompt chromosome based on a target style.
-
-        Args:
-            request_data (dict): Expected to contain:
-                'prompt_chromosome' (PromptChromosome): The prompt to optimize.
-                'target_style' (str): The desired style (e.g., "formal", "casual").
-                                 Example:
-                                 {
-                                     "prompt_chromosome": PromptChromosome(genes=["Instruct: don't summarize stuff", "Context: ..."]),
-                                     "target_style": "formal"
-                                 }
-
-        Returns:
-            PromptChromosome: The style-optimized prompt chromosome.
-        """
         original_chromosome = request_data.get("prompt_chromosome")
         target_style = request_data.get("target_style")
 
@@ -278,18 +161,14 @@ class StyleOptimizerAgent(BaseAgent):
             logger.error(f"Agent '{self.agent_id}': Invalid or missing 'prompt_chromosome' object provided.")
             return original_chromosome 
         
-        if not target_style : # Removed check against self.style_rules as LLM might handle undefined styles
+        if not target_style :
             logger.warning(f"Agent '{self.agent_id}': Target style not provided. Returning original prompt.")
             return original_chromosome
         
-        # If target_style is not in self.style_rules, only LLM can handle it. Fallback won't work.
-        # This is acceptable as LLM is the primary, rules are fallback.
-
         logger.info(f"Agent '{self.agent_id}': Optimizing prompt (ID: {original_chromosome.id if original_chromosome else 'N/A'}) for style: {target_style}")
         
         original_genes_str_list = [str(g) for g in original_chromosome.genes]
 
-        # Attempt LLM-based style optimization first
         llm_optimized_genes = None
         llm_prompt = f"""
 Rewrite the following prompt segments to adopt a '{target_style}' style.
@@ -320,15 +199,13 @@ Rewritten Prompt Segments (JSON list of strings):
         if llm_optimized_genes:
             modified_genes = llm_optimized_genes
         else:
-            # Fallback to rule-based transformations only if target_style is in defined style_rules
             if target_style in self.style_rules:
                 logger.info(f"Agent '{self.agent_id}': Using rule-based fallback for style: {target_style}")
-                modified_genes = list(original_genes_str_list) # Start with a fresh copy for rule-based
+                modified_genes = list(original_genes_str_list)
                 style_config = self.style_rules[target_style]
 
                 if "replace" in style_config:
                     for i, gene_str in enumerate(modified_genes):
-                        # current_gene_val = gene_str # Not needed if replacing on modified_genes[i]
                         for old, new in style_config["replace"].items():
                             modified_genes[i] = modified_genes[i].replace(old, new)
 
@@ -348,13 +225,11 @@ Rewritten Prompt Segments (JSON list of strings):
                         if gene_str and gene_str[-1] not in ".!?":
                             modified_genes[i] = gene_str + "."
             else:
-                # If LLM failed and no rule-based style exists, return the original chromosome unchanged
                 logger.warning(
                     f"Agent '{self.agent_id}': LLM failed for style '{target_style}' and no rule-based fallback exists. Returning original genes."
                 )
                 return original_chromosome
 
-            # Apply placeholder adjustments after rule-based changes or if LLM failed and no rules applied
             modified_genes = self._tone_analysis_adjustment(modified_genes, target_style)
             modified_genes = self._clarity_enhancement(modified_genes)
             modified_genes = self._persuasiveness_improvement(modified_genes)
@@ -375,7 +250,6 @@ Rewritten Prompt Segments (JSON list of strings):
     def _parse_llm_gene_response(self, response_str: str) -> list[str] | None:
         """ Parses LLM response expected to be a JSON list of strings (genes). """
         try:
-            # Handle cases where LLM might add explanatory text before/after JSON
             json_start = response_str.find('[')
             json_end = response_str.rfind(']') + 1
             if json_start != -1 and json_end != -1 and json_start < json_end:
@@ -383,17 +257,13 @@ Rewritten Prompt Segments (JSON list of strings):
                 parsed_list = json.loads(actual_json)
                 if isinstance(parsed_list, list) and all(isinstance(item, str) for item in parsed_list):
                     return parsed_list
-            print(f"{self.agent_id} - LLM response was not a valid JSON list of strings: {response_str}")
+            logger.warning(f"{self.agent_id} - LLM response was not a valid JSON list of strings: {response_str}") # Changed print to logger.warning
             return None
         except json.JSONDecodeError as e:
-            print(f"{self.agent_id} - Failed to parse LLM gene response as JSON list: {e}. Response: {response_str}")
-            # Fallback: if not JSON, try splitting by newline if it looks like a list of genes
-            # This is less reliable and should ideally be avoided by ensuring LLM sticks to JSON.
+            logger.error(f"{self.agent_id} - Failed to parse LLM gene response as JSON list: {e}. Response: {response_str}", exc_info=True) # Changed print to logger.error
             if "\n" in response_str:
                 lines = [line.strip() for line in response_str.split('\n') if line.strip()]
-                # Basic check if lines look like genes (e.g. not too long, no weird chars)
-                # This is very heuristic.
-                if lines and all(len(line) < 500 for line in lines): # Arbitrary length check
-                    print(f"{self.agent_id} - Attempting to use newline-separated genes from LLM response.")
+                if lines and all(len(line) < 500 for line in lines):
+                    logger.info(f"{self.agent_id} - Attempting to use newline-separated genes from LLM response.") # Changed print to logger.info
                     return lines
             return None

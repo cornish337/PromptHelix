@@ -1,11 +1,11 @@
 import unittest
 from unittest.mock import Mock, patch, call, MagicMock
 from prompthelix.genetics.engine import (
-    PopulationManager, 
-    PromptChromosome, 
-    GeneticOperators, 
+    PopulationManager,
+    GeneticOperators,
     FitnessEvaluator
 )
+from prompthelix.genetics.chromosome import PromptChromosome
 from prompthelix.agents.architect import PromptArchitectAgent
 from prompthelix.agents.results_evaluator import ResultsEvaluatorAgent # Needed for actual FitnessEvaluator
 from prompthelix.message_bus import MessageBus # Needed for mocking message_bus

@@ -3,7 +3,7 @@ from unittest.mock import patch, MagicMock
 import random # random is used by the agent itself, not directly in tests for mocking here
 import json # For creating mock JSON responses
 from prompthelix.agents.results_evaluator import ResultsEvaluatorAgent
-from prompthelix.genetics.engine import PromptChromosome
+from prompthelix.genetics.chromosome import PromptChromosome
 import logging # To capture logs
 
 class TestResultsEvaluatorAgent(unittest.TestCase):

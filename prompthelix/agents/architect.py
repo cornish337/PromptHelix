@@ -1,11 +1,12 @@
 from prompthelix.agents.base import BaseAgent
-from prompthelix.genetics.engine import PromptChromosome
-from prompthelix.utils.llm_utils import call_llm_api
+from prompthelix.genetics.chromosome import PromptChromosome # Updated import
+from prompthelix.utils.llm_utils import call_llm_api, DEFAULT_FALLBACK_PROVIDER, DEFAULT_FALLBACK_MODEL # Removed LLMProvider
 from prompthelix.config import AGENT_SETTINGS, KNOWLEDGE_DIR # Keep KNOWLEDGE_DIR for default path construction
 import os
 import json
 import logging
 from typing import Optional, Dict # Added for type hinting
+import random # Added for fallback gene population
 
 logger = logging.getLogger(__name__)
 
@@ -120,17 +121,9 @@ class PromptArchitectAgent(BaseAgent):
                 f"Agent '{self.agent_id}': Error decoding JSON from '{self.knowledge_file_path}': {e}. Using default templates.",
                 exc_info=True,
             )
-            logging.error(
-                f"Agent '{self.agent_id}': Error decoding JSON from '{self.knowledge_file_path}': {e}. Using default templates.",
-                exc_info=True,
-            )
             self.templates = self._get_default_templates()
         except Exception as e:
             logger.error(
-                f"Agent '{self.agent_id}': Failed to load templates from '{self.knowledge_file_path}': {e}. Using default templates.",
-                exc_info=True,
-            )
-            logging.error(
                 f"Agent '{self.agent_id}': Failed to load templates from '{self.knowledge_file_path}': {e}. Using default templates.",
                 exc_info=True,
             )
@@ -171,8 +164,6 @@ class PromptArchitectAgent(BaseAgent):
         """
         try:
             response = call_llm_api(prompt, provider=self.llm_provider, model=self.llm_model)
-            # Basic parsing of a stringified JSON-like response (placeholder)
-            # In a robust implementation, ensure the LLM is prompted for valid JSON
             logger.info(f"Agent '{self.agent_id}' - LLM response for parsing: {response}")
             data = json.loads(response)
             if not isinstance(data, dict):
@@ -185,7 +176,6 @@ class PromptArchitectAgent(BaseAgent):
             }
         except Exception as e:
             logger.error(f"Agent '{self.agent_id}': Error calling LLM for parsing requirements: {e}", exc_info=True)
-            # Fallback to simpler parsing if LLM call fails
             return {
                 "task_description": task_desc if task_desc else "Default task description",
                 "keywords": keywords,
@@ -227,7 +217,6 @@ class PromptArchitectAgent(BaseAgent):
                 return self._fallback_select_template(parsed_requirements)
         except Exception as e:
             logger.error(f"Agent '{self.agent_id}': Error calling LLM for template selection: {e}", exc_info=True)
-            # Fallback logic (same as original)
             return self._fallback_select_template(parsed_requirements)
 
     def _fallback_select_template(self, parsed_requirements: dict) -> str:
@@ -298,7 +287,6 @@ class PromptArchitectAgent(BaseAgent):
             return genes
         except Exception as e:
             logger.error(f"Agent '{self.agent_id}': Error calling LLM for gene population: {e}. Falling back to basic population.", exc_info=True)
-            # Fallback to original simpler gene population
             return self._fallback_populate_genes(template, parsed_requirements)
 
     def _fallback_populate_genes(self, template: dict, parsed_requirements: dict) -> list:
@@ -388,4 +376,3 @@ class PromptArchitectAgent(BaseAgent):
         
         logger.info(f"Agent '{self.agent_id}' - Created PromptChromosome: {str(prompt_chromosome)}")
         return prompt_chromosome
-

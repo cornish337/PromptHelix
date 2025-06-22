@@ -5,63 +5,28 @@ import random
 import copy # Added for deepcopy
 import asyncio # Added for asyncio.gather
 from typing import List, Optional, Dict # Added Dict
+import logging # Added for logging
+from prompthelix.genetics.mutation_strategies import NoOperationMutationStrategy # Added import
+from prompthelix.genetics.chromosome import PromptChromosome # Moved PromptChromosome
+from prompthelix.enums import ExecutionMode # Added for ExecutionMode.TEST comparison
+from prompthelix.agents.base import BaseAgent # Added for type hint
 
-class PromptChromosome:
-    """Simple representation of a prompt chromosome used in tests."""
 
-    def __init__(
-        self,
-        genes: Optional[List[str]] = None,
-        fitness_score: float = 0.0,
-        parent_ids: Optional[List[str]] = None,
-        mutation_strategy: Optional[str] = None # Retained this field
-    ):
-        self.id = uuid.uuid4()
-        self.genes = genes if genes is not None else []
-        self.fitness_score = fitness_score
-        self.parent_ids = parent_ids if parent_ids is not None else []
-        self.mutation_strategy = mutation_strategy # Retained this field
-
-    def clone(self) -> "PromptChromosome":
-        """Creates a deep copy of this chromosome with a new ID."""
-        cloned = PromptChromosome(
-            genes=copy.deepcopy(self.genes), # Use deepcopy for genes
-            fitness_score=self.fitness_score, # Fitness is usually reset or recalculated later
-            parent_ids=list(self.parent_ids), # Shallow copy of parent_ids list is fine
-            mutation_strategy=self.mutation_strategy # Copy mutation strategy
-        )
-        # The new ID is already handled by PromptChromosome.__init__
-        return cloned
-
-    def to_prompt_string(self, separator: str = "\n") -> str:
-        """Converts the chromosome's genes into a single string."""
-        return separator.join(map(str, self.genes))
-
-    def __str__(self) -> str:
-        """Returns a human-readable string representation of the chromosome."""
-        gene_summary = self.to_prompt_string(separator=" ")[:100] # Show a snippet
-        if not self.genes:
-            gene_summary = "(No genes)"
-        return (
-            f"PromptChromosome(ID: {self.id}, Fitness: {self.fitness_score:.4f}, "
-            f"Genes: '{gene_summary}...', Parents: {self.parent_ids}, MutationOp: {self.mutation_strategy})"
-        )
-
-    def __repr__(self) -> str:
-        """Returns an unambiguous string representation of the chromosome."""
-        return (
-            f"PromptChromosome(id='{self.id}', genes={self.genes!r}, "
-            f"fitness_score={self.fitness_score!r}, parent_ids={self.parent_ids!r}, "
-            f"mutation_strategy={self.mutation_strategy!r})"
-        )
-
+logger = logging.getLogger(__name__) # Added logger for this module
 
 class GeneticOperators:
     """Minimal genetic operators used by unit tests."""
 
-    def __init__(self, style_optimizer_agent=None, mutation_strategies: Optional[List] = None, **_):
+    def __init__(self, style_optimizer_agent=None, mutation_strategies: Optional[List] = None, strategy_settings: Optional[Dict] = None, **_): # Added strategy_settings
         self.style_optimizer_agent = style_optimizer_agent
-        self.mutation_strategies = mutation_strategies or []
+        self.strategy_settings = strategy_settings if strategy_settings is not None else {} # Store strategy_settings
+
+        if mutation_strategies is None or not mutation_strategies:
+            # Pass relevant settings to NoOperationMutationStrategy if needed
+            no_op_settings = self.strategy_settings.get("NoOperationMutationStrategy", None)
+            self.mutation_strategies = [NoOperationMutationStrategy(settings=no_op_settings)]
+        else:
+            self.mutation_strategies = mutation_strategies
 
     def crossover(
         self,
@@ -71,7 +36,10 @@ class GeneticOperators:
         **_
     ) -> tuple[PromptChromosome, PromptChromosome]:
         child1 = parent1.clone()
+        child1.fitness_score = 0.0 # Reset fitness for children
         child2 = parent2.clone()
+        child2.fitness_score = 0.0 # Reset fitness for children
+
         if (
             random.random() <= crossover_rate
             and parent1.genes
@@ -80,6 +48,7 @@ class GeneticOperators:
             pivot = len(parent1.genes) // 2
             child1.genes = parent1.genes[:pivot] + parent2.genes[pivot:]
             child2.genes = parent2.genes[:pivot] + parent1.genes[pivot:]
+
         child1.parent_ids = [str(parent1.id), str(parent2.id)]
         child2.parent_ids = [str(parent1.id), str(parent2.id)]
         return child1, child2
@@ -88,16 +57,65 @@ class GeneticOperators:
         self,
         chromosome: PromptChromosome,
         mutation_rate: float = 1.0,
-        gene_mutation_prob: float = 1.0,
+        gene_mutation_prob: float = 1.0, # Retained for compatibility
+        target_style: Optional[str] = None,
         **_
     ) -> PromptChromosome:
-        if not self.mutation_strategies or random.random() > mutation_rate:
-            return chromosome.clone()
-        strategy = self.mutation_strategies[0]
-        mutated = strategy.mutate(chromosome.clone())
-        mutated.parent_ids = [str(chromosome.id)]
-        mutated.mutation_strategy = strategy.__class__.__name__
-        return mutated
+        mutated_chromosome = chromosome.clone()
+        mutated_chromosome.fitness_score = 0.0
+
+        if not self.mutation_strategies:
+            logger.warning(f"GeneticOperators: No mutation strategies available. Chromosome {chromosome.id} will not be mutated.")
+            return mutated_chromosome
+
+        if random.random() > mutation_rate:
+            logger.debug(f"GeneticOperators: Mutation skipped for chromosome {chromosome.id} due to mutation_rate ({mutation_rate}).")
+            return mutated_chromosome
+
+        # Ensure there's at least one strategy (NoOperation by default in __init__)
+        strategy = random.choice(self.mutation_strategies)
+
+        logger.info(f"GeneticOperators: Applying mutation strategy '{strategy.__class__.__name__}' to chromosome {chromosome.id}.")
+
+        # Strategy's mutate method should return a new (or modified in-place) chromosome.
+        # We pass the clone `mutated_chromosome` to it.
+        post_strategy_chromosome = strategy.mutate(mutated_chromosome)
+        post_strategy_chromosome.parent_ids = [str(chromosome.id)]
+        post_strategy_chromosome.mutation_strategy = strategy.__class__.__name__
+        post_strategy_chromosome.fitness_score = 0.0 # Ensure fitness is reset
+
+        final_chromosome = post_strategy_chromosome
+
+        if self.style_optimizer_agent and target_style:
+            logger.info(f"GeneticOperators: Attempting style optimization with target_style '{target_style}' for chromosome {final_chromosome.id}.")
+            try:
+                style_request_data = {
+                    "prompt_chromosome": final_chromosome,
+                    "target_style": target_style
+                }
+                optimized_result = self.style_optimizer_agent.process_request(style_request_data)
+
+                if isinstance(optimized_result, PromptChromosome):
+                    final_chromosome = optimized_result
+                    final_chromosome.fitness_score = 0.0
+                    logger.info(f"GeneticOperators: Style optimization applied. New genes: {final_chromosome.genes}")
+                else:
+                    logger.warning(
+                        f"GeneticOperators: StyleOptimizerAgent did not return a PromptChromosome for {final_chromosome.id}. "
+                        f"Using pre-style-optimization version. Result type: {type(optimized_result)}"
+                    )
+            except Exception as e:
+                logger.error(
+                    f"GeneticOperators: Style optimization failed for {final_chromosome.id}. Error: {e}. "
+                    "Using pre-style-optimization version.", exc_info=True
+                )
+        elif target_style and not self.style_optimizer_agent:
+            logger.warning(
+                f"GeneticOperators: target_style '{target_style}' for {final_chromosome.id}, "
+                "but StyleOptimizerAgent not available. Skipping."
+            )
+
+        return final_chromosome
 
     def selection(self, population: List[PromptChromosome], tournament_size: int = 2) -> PromptChromosome:
         """
@@ -117,10 +135,6 @@ class GeneticOperators:
 
         # Return the fittest individual from the tournament
         return max(tournament_contestants, key=lambda c: c.fitness_score)
-
-
-from prompthelix.enums import ExecutionMode # Added for ExecutionMode.TEST comparison
-from prompthelix.agents.base import BaseAgent # Added for type hint
 
 class FitnessEvaluator:
     """Evaluator wrapper, potentially simplified for tests or base for complex evaluators."""

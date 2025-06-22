@@ -3,7 +3,7 @@ from unittest.mock import patch, mock_open, MagicMock
 import os
 import json
 from prompthelix.agents.meta_learner import MetaLearnerAgent
-from prompthelix.genetics.engine import PromptChromosome
+from prompthelix.genetics.chromosome import PromptChromosome
 from prompthelix.config import AGENT_SETTINGS as GLOBAL_AGENT_SETTINGS, KNOWLEDGE_DIR # For easy access to structure
 from prompthelix.message_bus import MessageBus # Added import
 
