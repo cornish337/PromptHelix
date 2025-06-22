@@ -2,10 +2,12 @@ import uuid
 import json
 import os
 import random
-import copy # Added for deepcopy
-import asyncio # Added for asyncio.gather
-from typing import List, Optional, Dict # Added Dict
-import logging # Added for logging
+import copy  # Added for deepcopy
+import asyncio  # Added for asyncio.gather
+from typing import List, Optional, Dict  # Added Dict
+import logging  # Added for logging
+import statistics
+from datetime import datetime
 from prompthelix.genetics.mutation_strategies import NoOperationMutationStrategy # Added import
 from prompthelix.genetics.chromosome import PromptChromosome # Moved PromptChromosome
 from prompthelix.enums import ExecutionMode # Added for ExecutionMode.TEST comparison
@@ -282,19 +284,19 @@ class PopulationManager:
     def pause_evolution(self):
         self.is_paused = True
         self.status = "PAUSED"
-        self.broadcast_ga_update(event_type="ga_run_paused")
+        self.broadcast_ga_update(event_type="ga_paused")
         # logger.info(f"PopulationManager (ID: {id(self)}): Evolution paused.")
 
     def resume_evolution(self):
         self.is_paused = False
         self.status = "RUNNING"
-        self.broadcast_ga_update(event_type="ga_run_resumed")
+        self.broadcast_ga_update(event_type="ga_resumed")
         # logger.info(f"PopulationManager (ID: {id(self)}): Evolution resumed.")
 
     def stop_evolution(self):
         self.should_stop = True
-        self.status = "STOPPED" # Or "STOPPING" then orchestrator sets to "STOPPED"
-        self.broadcast_ga_update(event_type="ga_run_stopped")
+        self.status = "STOPPING"  # Set STOPPING before broadcasting
+        self.broadcast_ga_update(event_type="ga_stopping")
         # logger.info(f"PopulationManager (ID: {id(self)}): Evolution stop requested.")
 
     def get_ga_status(self) -> Dict:
@@ -360,7 +362,50 @@ class PopulationManager:
             self.message_bus
             and getattr(self.message_bus, "connection_manager", None)
         ):
-            payload = {"type": event_type, "data": {"selected_parent_ids": selected_parent_ids}}
+            fitness_scores = [c.fitness_score for c in self.population]
+
+            if fitness_scores:
+                best_fitness = max(fitness_scores)
+                fitness_min = min(fitness_scores)
+                fitness_max = max(fitness_scores)
+                fitness_mean = statistics.mean(fitness_scores)
+                fitness_median = statistics.median(fitness_scores)
+                fitness_std_dev = (
+                    statistics.stdev(fitness_scores)
+                    if len(fitness_scores) > 1
+                    else 0.0
+                )
+                fittest_chromosome_string = (
+                    self.get_fittest_individual().to_prompt_string()
+                )
+            else:
+                best_fitness = None
+                fitness_min = None
+                fitness_max = None
+                fitness_mean = None
+                fitness_median = None
+                fitness_std_dev = None
+                fittest_chromosome_string = None
+
+            payload = {
+                "type": event_type,
+                "data": {
+                    "status": self.status,
+                    "generation": self.generation_number,
+                    "population_size": len(self.population),
+                    "best_fitness": best_fitness,
+                    "fitness_min": fitness_min,
+                    "fitness_max": fitness_max,
+                    "fitness_mean": fitness_mean,
+                    "fitness_median": fitness_median,
+                    "fitness_std_dev": fitness_std_dev,
+                    "fittest_chromosome_string": fittest_chromosome_string,
+                    "is_paused": self.is_paused,
+                    "should_stop": self.should_stop,
+                    "selected_parent_ids": selected_parent_ids,
+                    "timestamp": datetime.utcnow().isoformat(),
+                },
+            }
             if additional_data:
                 payload["data"].update(additional_data)
             self.message_bus.connection_manager.broadcast_json(payload)
