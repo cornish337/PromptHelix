@@ -434,3 +434,9 @@ You can also launch the interactive runner from the command line:
 ```bash
 python -m prompthelix.cli test --interactive
 ```
+
+### Example Scripts
+
+Demonstration code that previously lived in `prompthelix/orchestrator.py` has
+been moved to the `examples/` directory. See `examples/orchestrator_demo.py` for
+MessageBus and agent persistence demos as well as a small GA run example.
