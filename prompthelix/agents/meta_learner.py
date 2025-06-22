@@ -562,5 +562,3 @@ If no clear patterns emerge, return an empty list.
         recommendations = self._generate_recommendations()
         
         return {"status": "Data processed successfully.", "recommendations": recommendations}
-
-[end of prompthelix/agents/meta_learner.py]
