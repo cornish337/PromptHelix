@@ -19,6 +19,13 @@ from openai import (
     APIConnectionError as OpenAIAPIConnectionError,
     AsyncOpenAI,  # Added AsyncOpenAI
 )
+import time # For latency measurement
+from prompthelix.metrics import ( # For LLM metrics
+    LLM_CALL_LATENCY_SECONDS,
+    LLM_INPUT_TOKENS_TOTAL,
+    LLM_OUTPUT_TOKENS_TOTAL,
+    LLM_CALLS_TOTAL
+)
 
 try:  # pragma: no cover – support both old and new OpenAI SDKs
     from openai import InvalidRequestError as OpenAIInvalidRequestError
@@ -70,6 +77,11 @@ async def call_openai_api(prompt: str, model: str = "gpt-3.5-turbo", db: Session
     logger.info(f"Calling AsyncOpenAI API with model {model}. Prompt snippet: {prompt[:100]}...")
 
     processed_prompt = prompt
+    start_time = time.time()
+    status = "success"
+    input_tokens = 0
+    output_tokens = 0
+
     try:
         # Attempt to parse the prompt if it looks like a JSON list of strings
         if prompt.strip().startswith('[') and prompt.strip().endswith(']'):
@@ -94,28 +106,46 @@ async def call_openai_api(prompt: str, model: str = "gpt-3.5-turbo", db: Session
             messages=[{"role": "user", "content": processed_prompt}],
         )
         content = response.choices[0].message.content.strip()
+        if response.usage:
+            input_tokens = response.usage.prompt_tokens
+            output_tokens = response.usage.completion_tokens
         return content
     except OpenAIRateLimitError as e:
         logger.error(f"AsyncOpenAI API RateLimitError: {e}")
+        status = "error_rate_limit"
         return "RATE_LIMIT_ERROR"
     except OpenAIAuthenticationError as e:
         logger.error(f"OpenAI API AuthenticationError: {e}")
+        status = "error_auth"
         return "AUTHENTICATION_ERROR"
     except OpenAIAPIConnectionError as e:
         logger.error(f"OpenAI API ConnectionError: {e}")
+        status = "error_connection"
         return "API_CONNECTION_ERROR"
     except OpenAIInvalidRequestError as e:
         logger.error(f"OpenAI API InvalidRequestError: {e}")
+        status = "error_invalid_request"
         return "INVALID_REQUEST_ERROR"
     except OpenAPIApiError as e:
         logger.error(f"OpenAI API APIError (general): {e}")
+        status = "error_api"
         return "API_ERROR"
     except OpenAIError as e:
         logger.error(f"OpenAI API generic OpenAIError: {e}")
+        status = "error_openai"
         return "OPENAI_ERROR"
     except Exception as e:
         logger.error(f"An unexpected error occurred during OpenAI API call: {type(e).__name__} - {e}", exc_info=True)
+        status = "error_unexpected"
         return "UNEXPECTED_OPENAI_CALL_ERROR"
+    finally:
+        latency = time.time() - start_time
+        LLM_CALL_LATENCY_SECONDS.labels(llm_provider="openai", llm_model=model).observe(latency)
+        LLM_CALLS_TOTAL.labels(llm_provider="openai", llm_model=model, status=status).inc()
+        if input_tokens > 0:
+            LLM_INPUT_TOKENS_TOTAL.labels(llm_provider="openai", llm_model=model).inc(input_tokens)
+        if output_tokens > 0:
+            LLM_OUTPUT_TOKENS_TOTAL.labels(llm_provider="openai", llm_model=model).inc(output_tokens)
 
 
 async def call_claude_api(prompt: str, model: str = "claude-2", db: Session = None) -> str:  # Changed to async def
@@ -127,12 +157,21 @@ async def call_claude_api(prompt: str, model: str = "claude-2", db: Session = No
 
     client = AsyncAnthropicClient(api_key=api_key)  # Changed to AsyncAnthropicClient
     logger.info(f"Calling AsyncAnthropic Claude API with model {model}. Prompt snippet: {prompt[:100]}...")
+    start_time = time.time()
+    status = "success"
+    input_tokens = 0
+    output_tokens = 0
+
     try:
         response = await client.messages.acreate(  # Changed to acreate and added await
             model=model,
             max_tokens=1024,  # Assuming acreate supports max_tokens directly, or it's part of model config
             messages=[{"role": "user", "content": prompt}],
         )
+        if response.usage:
+            input_tokens = response.usage.input_tokens
+            output_tokens = response.usage.output_tokens
+
         if response.content and isinstance(response.content, list) and len(response.content) > 0:
             first_block = response.content[0]
             if hasattr(first_block, 'text'):  # Check if it's a TextBlock
@@ -140,32 +179,49 @@ async def call_claude_api(prompt: str, model: str = "claude-2", db: Session = No
             else:
                 logger.warning(
                     f"Anthropic API: First content block is not text. Type: {type(first_block)}. Block: {first_block}")
+                status = "error_malformed_response"
                 return "MALFORMED_CLAUDE_RESPONSE_CONTENT"
         logger.warning(
             f"Anthropic API: Response content is empty or not in expected format. Content: {response.content}")
+        status = "error_empty_response"
         return "EMPTY_CLAUDE_RESPONSE"
     except AnthropicRateLimitError as e:
         logger.error(f"Anthropic API RateLimitError: {e}")
+        status = "error_rate_limit"
         return "RATE_LIMIT_ERROR"
     except AnthropicAuthenticationError as e:
         logger.error(f"Anthropic API AuthenticationError: {e}")
+        status = "error_auth"
         return "AUTHENTICATION_ERROR"
     except AnthropicAPIStatusError as e:
         logger.error(
             f"Anthropic API StatusError: {e} (Status Code: {e.status_code if hasattr(e, 'status_code') else 'N/A'})")
+        status = "error_api_status"
         return "API_STATUS_ERROR"
     except AnthropicAPIConnectionError as e:
         logger.error(f"Anthropic API ConnectionError: {e}")
+        status = "error_connection"
         return "API_CONNECTION_ERROR"
     except AnthropicAPIError as e:
         logger.error(f"Anthropic API APIError (general): {e}")
+        status = "error_api"
         return "API_ERROR"
     except AnthropicError as e:
         logger.error(f"Anthropic API generic AnthropicError: {e}")
+        status = "error_anthropic"
         return "ANTHROPIC_ERROR"
     except Exception as e:
         logger.error(f"An unexpected error occurred during Anthropic API call: {e}", exc_info=True)
+        status = "error_unexpected"
         return "UNEXPECTED_ANTHROPIC_CALL_ERROR"
+    finally:
+        latency = time.time() - start_time
+        LLM_CALL_LATENCY_SECONDS.labels(llm_provider="anthropic", llm_model=model).observe(latency)
+        LLM_CALLS_TOTAL.labels(llm_provider="anthropic", llm_model=model, status=status).inc()
+        if input_tokens > 0:
+            LLM_INPUT_TOKENS_TOTAL.labels(llm_provider="anthropic", llm_model=model).inc(input_tokens)
+        if output_tokens > 0:
+            LLM_OUTPUT_TOKENS_TOTAL.labels(llm_provider="anthropic", llm_model=model).inc(output_tokens)
 
 
 async def call_google_api(prompt: str, model: str = "gemini-pro", db: Session = None) -> str:  # Changed to async def
@@ -178,12 +234,38 @@ async def call_google_api(prompt: str, model: str = "gemini-pro", db: Session = 
     genai.configure(api_key=api_key)  # This is synchronous, should be fine to call once.
     model_client = genai.GenerativeModel(model)
     logger.info(f"Calling Async Google Generative AI with model {model}. Prompt snippet: {prompt[:100]}...")
+    start_time = time.time()
+    status = "success"
+    input_tokens = 0
+    output_tokens = 0 # Google API makes this harder to get without another call for response.text
+
     try:
+        # Get input token count before the main call
+        try:
+            count_response = await model_client.count_tokens_async(prompt)
+            input_tokens = count_response.total_tokens
+        except Exception as e_count:
+            logger.warning(f"Google API: Could not count input tokens for model {model}. Error: {e_count}")
+
         response = await model_client.generate_content_async(prompt)  # Changed to generate_content_async
+
+        # Check for usage metadata if available (newer Gemini versions might include it)
+        if hasattr(response, 'usage_metadata'):
+            if response.usage_metadata: # Ensure it's not None
+                # Fields are typically prompt_token_count and candidates_token_count
+                if hasattr(response.usage_metadata, 'prompt_token_count'):
+                    input_tokens = response.usage_metadata.prompt_token_count # Override if available
+                if hasattr(response.usage_metadata, 'candidates_token_count'): # This is for output
+                    output_tokens = response.usage_metadata.candidates_token_count
+                elif hasattr(response.usage_metadata, 'total_token_count') and input_tokens > 0: # Fallback if only total is given
+                    output_tokens = response.usage_metadata.total_token_count - input_tokens
+
+
         # Check response content and prompt feedback carefully
         if not response.parts:  # No parts usually means blocked or empty
             if hasattr(response, 'prompt_feedback') and response.prompt_feedback.block_reason:
                 logger.warning(f"Google API prompt blocked. Reason: {response.prompt_feedback.block_reason}")
+                status = "error_blocked_prompt"
                 return "BLOCKED_PROMPT_ERROR"
             # Check finish reason if parts are empty and not blocked above
             if hasattr(response, 'candidates') and response.candidates and hasattr(response.candidates[0],
@@ -193,9 +275,11 @@ async def call_google_api(prompt: str, model: str = "gemini-pro", db: Session = 
                 # Only return specific error if it's a more active stop reason like SAFETY, RECITATION etc.
                 if finish_reason_name not in ["STOP", "MAX_TOKENS", "UNSPECIFIED", "FINISH_REASON_UNSPECIFIED"]:
                     logger.warning(f"Google API generation finished due to: {finish_reason_name}")
+                    status = f"error_stopped_{finish_reason_name.lower()}"
                     return f"GENERATION_STOPPED_{finish_reason_name}"
             logger.warning(
                 f"Google API returned empty response parts and no clear block/stop reason. Response: {response}")
+            status = "error_empty_response"
             return "EMPTY_GOOGLE_RESPONSE"
 
         # If parts exist, try to get text
@@ -207,37 +291,59 @@ async def call_google_api(prompt: str, model: str = "gemini-pro", db: Session = 
             logger.warning(
                 f"Google API: ValueError accessing response.text (often due to blocked content not caught by prompt_feedback): {ve}. Response: {response}")
             if hasattr(response, 'prompt_feedback') and response.prompt_feedback.block_reason:
+                status = "error_blocked_prompt_value_error"
                 return "BLOCKED_PROMPT_ERROR"
+            status = "error_empty_response_value_error"
             return "EMPTY_GOOGLE_RESPONSE"  # Or BLOCKED_CONTENT_ERROR
 
     except google_exceptions.ResourceExhausted as e:
         logger.error(f"Google Generative AI ResourceExhausted error (likely rate limit/quota): {e}")
+        status = "error_rate_limit"
         return "RATE_LIMIT_ERROR"
     except google_exceptions.PermissionDenied as e:
         logger.error(f"Google Generative AI PermissionDenied error: {e}")
+        status = "error_auth"
         return "AUTHENTICATION_ERROR"
     except google_exceptions.InvalidArgument as e:
         logger.error(f"Google Generative AI InvalidArgument error: {e}")
+        status = "error_invalid_argument"
         return "INVALID_ARGUMENT_ERROR"
     except google_exceptions.InternalServerError as e:
         logger.error(f"Google Generative AI InternalServerError: {e}")
+        status = "error_server"
         return "API_SERVER_ERROR"
     except google_exceptions.GoogleAPIError as e:
         logger.error(f"Google Generative AI APIError (general): {e}")
+        status = "error_api"
         return "API_ERROR"
     # except genai.types.BlockedPromptException as e: # If direct catch is needed
     #     logger.error(f"Google Generative AI BlockedPromptException: {e}")
+    #     status = "error_blocked_prompt_exception"
     #     return "BLOCKED_PROMPT_ERROR"
     except Exception as e:
         logger.error(f"An unexpected error occurred during Google API call: {e}", exc_info=True)
         if "google.generativeai" in str(type(e)) or "google.api_core" in str(type(e)):
             logger.error(f"Google API/SDK specific library error: {e}")
+            status = "error_google_sdk"
             return "GOOGLE_SDK_ERROR"
+        status = "error_unexpected"
         return "UNEXPECTED_GOOGLE_CALL_ERROR"
+    finally:
+        latency = time.time() - start_time
+        LLM_CALL_LATENCY_SECONDS.labels(llm_provider="google", llm_model=model).observe(latency)
+        LLM_CALLS_TOTAL.labels(llm_provider="google", llm_model=model, status=status).inc()
+        if input_tokens > 0:
+            LLM_INPUT_TOKENS_TOTAL.labels(llm_provider="google", llm_model=model).inc(input_tokens)
+        if output_tokens > 0: # Will be 0 if not available from API
+            LLM_OUTPUT_TOKENS_TOTAL.labels(llm_provider="google", llm_model=model).inc(output_tokens)
 
 
 async def call_llm_api(prompt: str, provider: str, model: Optional[str] = None,
                        db: Session = None) -> str:  # Changed to async def
+    # This wrapper function does not need to change much, as the metric updates
+    # are now handled within each specific provider's function (call_openai_api, etc.)
+    # The existing logging within this function can remain as is.
+
     logger.info(f"Async call_llm_api invoked with provider: {provider}, model: {model}")
     provider_lower = provider.lower()
     timestamp = datetime.datetime.now().isoformat()

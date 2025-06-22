@@ -68,6 +68,11 @@
                 <canvas id="ga-history-chart"></canvas>
             </div>
 
+            <div id="ga-diversity-chart-placeholder" class="mt-6">
+                 <h3 class="text-lg font-semibold mb-2">Population Diversity Over Generations</h3>
+                <canvas id="ga-diversity-chart"></canvas>
+            </div>
+
             <!-- Population Snapshot Section -->
             <div id="population-snapshot" class="mt-6">
                 <h3 class="text-lg font-semibold mb-2">Population Snapshot (Top 5)</h3>
@@ -180,39 +185,54 @@
         const gaCancelBtn = document.getElementById('ga-cancel-btn');
 
         let fitnessChart = null;
-        let gaHistoryData = [];
-        const chartData = {
+        let diversityChart = null; // For the new diversity chart
+        let gaHistoryData = []; // Will store {generation, best_fitness, avg_fitness, population_diversity}
+
+        const fitnessChartData = {
             labels: [],
             datasets: [
                 {
                     label: 'Best Fitness',
                     borderColor: 'rgb(99,102,241)', // Indigo
                     backgroundColor: 'rgba(99,102,241,0.3)',
-
-                    data: [], // y-axis data for best fitness
+                    data: [],
                     tension: 0.1,
-                    yAxisID: 'y' // Assuming a single y-axis for now
+                    yAxisID: 'yFitness'
                 },
                 {
                     label: 'Average Fitness',
                     borderColor: 'rgb(34,197,94)', // Green
                     backgroundColor: 'rgba(34,197,94,0.3)',
-                    data: [], // y-axis data for average fitness
+                    data: [],
                     tension: 0.1,
-                    yAxisID: 'y'
-
+                    yAxisID: 'yFitness'
                 }
             ]
         };
 
-        function initializeFitnessChart() {
-            const ctx = document.getElementById('ga-history-chart').getContext('2d');
+        const diversityChartData = {
+            labels: [],
+            datasets: [
+                {
+                    label: 'Population Diversity',
+                    borderColor: 'rgb(234, 88, 12)', // Orange
+                    backgroundColor: 'rgba(234, 88, 12, 0.3)',
+                    data: [],
+                    tension: 0.1,
+                    yAxisID: 'yDiversity'
+                }
+            ]
+        };
+
+        function initializeCharts() {
+            // Fitness Chart
+            const fitnessCtx = document.getElementById('ga-history-chart').getContext('2d');
             if (fitnessChart) {
-                fitnessChart.destroy(); // Destroy existing chart if any
+                fitnessChart.destroy();
             }
-            fitnessChart = new Chart(ctx, {
+            fitnessChart = new Chart(fitnessCtx, {
                 type: 'line',
-                data: chartData,
+                data: fitnessChartData,
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
@@ -223,22 +243,47 @@
                                 text: 'Generation'
                             }
                         },
-                        y: {
+                        yFitness: { // Use a unique ID for the y-axis
                             title: {
                                 display: true,
                                 text: 'Fitness Score'
                             },
-                            beginAtZero: true // Adjust as needed
+                            beginAtZero: true, // Adjust as needed
+                            position: 'left'
                         }
                     },
                     plugins: {
-                        legend: {
-                            position: 'top',
+                        legend: { position: 'top' },
+                        title: { display: true, text: 'Fitness Trend Over Generations' }
+                    }
+                }
+            });
+
+            // Diversity Chart
+            const diversityCtx = document.getElementById('ga-diversity-chart').getContext('2d');
+            if (diversityChart) {
+                diversityChart.destroy();
+            }
+            diversityChart = new Chart(diversityCtx, {
+                type: 'line',
+                data: diversityChartData,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            title: { display: true, text: 'Generation' }
                         },
-                        title: {
-                            display: true,
-                            text: 'Fitness Trend Over Generations'
+                        yDiversity: { // Use a unique ID for the y-axis
+                            title: { display: true, text: 'Diversity Score' },
+                            beginAtZero: true,
+                            suggestedMax: 1.0, // Assuming diversity is often 0-1
+                            position: 'left'
                         }
+                    },
+                    plugins: {
+                        legend: { position: 'top' },
+                        title: { display: true, text: 'Population Diversity Over Generations' }
                     }
                 }
             });
@@ -332,59 +377,50 @@
                 const generation = data.generation;
                 const bestFitness = parseFloat(data.best_fitness);
                 const avgFitness = (data.fitness_mean !== null && data.fitness_mean !== undefined) ? parseFloat(data.fitness_mean) : null;
+                const populationDiversity = (data.population_diversity !== null && data.population_diversity !== undefined) ? parseFloat(data.population_diversity) : null;
 
-                let generationLabelIndex = chartData.labels.indexOf(generation);
 
-                if (generationLabelIndex === -1) { // New generation
-                    chartData.labels.push(generation);
-                    chartData.datasets[0].data.push(bestFitness);
-                    chartData.datasets[1].data.push(avgFitness);
-                } else { // Existing generation, update data
-                    chartData.datasets[0].data[generationLabelIndex] = bestFitness;
+                // Update Fitness Chart
+                let fitnessGenIdx = fitnessChartData.labels.indexOf(generation);
+                if (fitnessGenIdx === -1) {
+                    fitnessChartData.labels.push(generation);
+                    fitnessChartData.datasets[0].data.push(bestFitness);
+                    fitnessChartData.datasets[1].data.push(avgFitness);
+                } else {
+                    fitnessChartData.datasets[0].data[fitnessGenIdx] = bestFitness;
                     if (avgFitness !== null) {
-                        // Ensure dataset array is long enough if avgFitness wasn't there before for this label
-                        while(chartData.datasets[1].data.length <= generationLabelIndex) chartData.datasets[1].data.push(null);
-                        chartData.datasets[1].data[generationLabelIndex] = avgFitness;
+                         while(fitnessChartData.datasets[1].data.length <= fitnessGenIdx) fitnessChartData.datasets[1].data.push(null);
+                        fitnessChartData.datasets[1].data[fitnessGenIdx] = avgFitness;
                     }
-///oldd
-                // Ensure data arrays are appended to correctly or updated if generation label already existed
-                // This basic implementation assumes new generation data comes sequentially
-                // For a new generation, push data. If updating existing, replace at index.
-                // Current logic: always appends if generation is new, which is typical for GA progress.
-///                const currentLabelIndex = chartData.labels.indexOf(data.generation);
-
-   ///             if (currentLabelIndex === chartData.datasets[0].data.length) { // New data point
-   ///                 chartData.datasets[0].data.push(parseFloat(data.best_fitness));
-   ///                 chartData.datasets[1].data.push(parseFloat(data.fitness_mean));
-///                    chartData.datasets[2].data.push(parseFloat(data.fitness_min));
-
-///                    gaHistoryData.push({generation: data.generation, best_fitness: data.best_fitness, fitness_mean: data.fitness_mean, fitness_min: data.fitness_min});
-
-///                } else if (currentLabelIndex !== -1 && currentLabelIndex < chartData.datasets[0].data.length) { // Update existing data point
-///                    chartData.datasets[0].data[currentLabelIndex] = parseFloat(data.best_fitness);
-///                    chartData.datasets[1].data[currentLabelIndex] = parseFloat(data.fitness_mean);
-///                    chartData.datasets[2].data[currentLabelIndex] = parseFloat(data.fitness_min);
-
- ///                   gaHistoryData[currentLabelIndex] = {generation: data.generation, best_fitness: data.best_fitness, fitness_mean: data.fitness_mean, fitness_min: data.fitness_min};
-
                 }
-
-                // Sort chart data by generation number to ensure x-axis is correct
-                // This is crucial if data (e.g. from history + live) is not strictly ordered.
-                let combined = chartData.labels.map((label, i) => ({
+                // Sort fitness chart data
+                let combinedFitness = fitnessChartData.labels.map((label, i) => ({
                     label: label,
-                    best: chartData.datasets[0].data[i],
-                    // Ensure avg exists for the combined mapping, default to null if not
-                    avg: (chartData.datasets[1].data.length > i) ? chartData.datasets[1].data[i] : null
-                }));
-                combined.sort((a, b) => a.label - b.label);
+                    best: fitnessChartData.datasets[0].data[i],
+                    avg: (fitnessChartData.datasets[1].data.length > i) ? fitnessChartData.datasets[1].data[i] : null
+                })).sort((a, b) => a.label - b.label);
+                fitnessChartData.labels = combinedFitness.map(item => item.label);
+                fitnessChartData.datasets[0].data = combinedFitness.map(item => item.best);
+                fitnessChartData.datasets[1].data = combinedFitness.map(item => item.avg);
+                if (fitnessChart) fitnessChart.update();
 
-                chartData.labels = combined.map(item => item.label);
-                chartData.datasets[0].data = combined.map(item => item.best);
-                chartData.datasets[1].data = combined.map(item => item.avg);
-
-                if (fitnessChart) {
-                    fitnessChart.update();
+                // Update Diversity Chart (if populationDiversity is available)
+                if (populationDiversity !== null) {
+                    let diversityGenIdx = diversityChartData.labels.indexOf(generation);
+                    if (diversityGenIdx === -1) {
+                        diversityChartData.labels.push(generation);
+                        diversityChartData.datasets[0].data.push(populationDiversity);
+                    } else {
+                        diversityChartData.datasets[0].data[diversityGenIdx] = populationDiversity;
+                    }
+                    // Sort diversity chart data
+                    let combinedDiversity = diversityChartData.labels.map((label, i) => ({
+                        label: label,
+                        diversity: (diversityChartData.datasets[0].data.length > i) ? diversityChartData.datasets[0].data[i] : null
+                    })).sort((a, b) => a.label - b.label);
+                    diversityChartData.labels = combinedDiversity.map(item => item.label);
+                    diversityChartData.datasets[0].data = combinedDiversity.map(item => item.diversity);
+                    if (diversityChart) diversityChart.update();
                 }
             }
 
@@ -409,8 +445,14 @@
                             });
                             genesHtml += '</ul>';
 
+                            let parentsHtml = '';
+                            if (chromosome.parent_ids && chromosome.parent_ids.length > 0) {
+                                parentsHtml = `<p class="text-xs font-medium mt-1">Parents: <span class="font-normal">${chromosome.parent_ids.map(id => escapeHtml(id)).join(', ')}</span></p>`;
+                            }
+
                             chromosomeDiv.innerHTML = `
                                 <p class="text-xs font-medium">ID: <span class="font-normal">${escapeHtml(chromosome.id)}</span> | Fitness: <span class="font-normal">${parseFloat(chromosome.fitness_score).toFixed(4)}</span>${parentBadge}</p>
+                                ${parentsHtml}
                                 <p class="text-xs font-medium mt-1">Genes:</p>
                                 ${genesHtml}
                             `;
@@ -556,37 +598,41 @@
                 const response = await fetch('/api/ga/history');
                 if (response.ok) {
 
-                    const history = await response.json(); // Assuming history is an array of {generation: x, best_fitness: y, fitness_mean: z}
+                    const history = await response.json();
+                    gaHistoryData = history; // Store for CSV download or other uses
 
                     // Sort history by generation first
-                    history.sort((a, b) => a.generation - b.generation);
+                    history.sort((a, b) => a.generation_number - b.generation_number); // Use generation_number from schema
 
-                    chartData.labels = history.map(h => h.generation);
-                    chartData.datasets[0].data = history.map(h => (h.best_fitness !== null && h.best_fitness !== undefined) ? parseFloat(h.best_fitness) : null);
-                    // Check if history items contain fitness_mean (or similar key for average)
-                    if (history.length > 0 && history[0].hasOwnProperty('fitness_mean')) {
-                        chartData.datasets[1].data = history.map(h => (h.fitness_mean !== null && h.fitness_mean !== undefined) ? parseFloat(h.fitness_mean) : null);
-                    } else if (history.length > 0 && history[0].hasOwnProperty('avg_fitness')) { // Fallback key
-                        chartData.datasets[1].data = history.map(h => (h.avg_fitness !== null && h.avg_fitness !== undefined) ? parseFloat(h.avg_fitness) : null);
-                    } else {
-                        // If no average fitness in history, fill with nulls matching labels length
-                        chartData.datasets[1].data = new Array(chartData.labels.length).fill(null);
+                    const labels = history.map(h => h.generation_number);
+
+                    // Populate Fitness Chart Data
+                    fitnessChartData.labels = [...labels];
+                    fitnessChartData.datasets[0].data = history.map(h => (h.best_fitness !== null && h.best_fitness !== undefined) ? parseFloat(h.best_fitness) : null);
+
+                    let avgFitnessKey = 'avg_fitness'; // Default key from GAGenerationMetric schema
+                    if (history.length > 0 && history[0].hasOwnProperty('fitness_mean')) { // backward compatibility or alternative key check
+                        avgFitnessKey = 'fitness_mean';
                     }
-///old
-///                    const history = await response.json();
-///                    gaHistoryData = history;
-///                    chartData.labels = history.map(h => h.generation);
-///                    chartData.datasets[0].data = history.map(h => h.best_fitness);
-//////                    chartData.datasets[1].data = history.map(h => h.fitness_mean);
-///                    chartData.datasets[2].data = history.map(h => h.fitness_min);
+                    fitnessChartData.datasets[1].data = history.map(h => (h[avgFitnessKey] !== null && h[avgFitnessKey] !== undefined) ? parseFloat(h[avgFitnessKey]) : null);
+
+                    // Populate Diversity Chart Data
+                    diversityChartData.labels = [...labels];
+                    diversityChartData.datasets[0].data = history.map(h => (h.population_diversity !== null && h.population_diversity !== undefined) ? parseFloat(h.population_diversity) : null);
 
                 } else {
                     console.error('Failed to fetch GA history:', response.status);
+                    // Clear chart data if fetch fails
+                    fitnessChartData.labels = [];
+                    fitnessChartData.datasets[0].data = [];
+                    fitnessChartData.datasets[1].data = [];
+                    diversityChartData.labels = [];
+                    diversityChartData.datasets[0].data = [];
                 }
             } catch (err) {
                 console.error('Error fetching GA history:', err);
             }
-            initializeFitnessChart();
+            initializeCharts(); // Initialize/update both charts
         }
 
         // Determine WebSocket protocol
@@ -810,9 +856,19 @@
         const downloadCsvBtn = document.getElementById('download-csv');
         if (downloadCsvBtn) {
             downloadCsvBtn.addEventListener('click', () => {
-                const rows = [['generation','best_fitness','average_fitness','min_fitness']];
+                const rows = [['generation', 'best_fitness', 'average_fitness', 'population_diversity']];
+                // gaHistoryData is now populated by fetchGaHistory and contains items from GAGenerationMetric schema
                 gaHistoryData.forEach(h => {
-                    rows.push([h.generation, h.best_fitness, h.fitness_mean, h.fitness_min]);
+                    // Determine the key for average fitness based on what's available (compatibility)
+                    let avgFitnessVal = (h.avg_fitness !== null && h.avg_fitness !== undefined) ? h.avg_fitness :
+                                        ((h.fitness_mean !== null && h.fitness_mean !== undefined) ? h.fitness_mean : '');
+
+                    rows.push([
+                        h.generation_number,
+                        (h.best_fitness !== null && h.best_fitness !== undefined) ? h.best_fitness : '',
+                        avgFitnessVal,
+                        (h.population_diversity !== null && h.population_diversity !== undefined) ? h.population_diversity : ''
+                    ]);
                 });
                 const csvContent = rows.map(r => r.join(',')).join('\n');
                 const blob = new Blob([csvContent], { type: 'text/csv' });

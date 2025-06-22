@@ -18,8 +18,23 @@
 
         <!-- Messages View -->
         <div class="md:w-2/3 bg-white p-4 rounded shadow">
-            <h2 class="text-xl font-semibold mb-1">Messages</h2>
-            <p id="currentSessionId" class="text-sm text-gray-600 mb-3">Select a session to view messages.</p>
+            <div class="flex justify-between items-center mb-2">
+                <h2 class="text-xl font-semibold">Messages</h2>
+                <p id="currentSessionId" class="text-sm text-gray-600">Select a session</p>
+            </div>
+
+            <!-- Filter Inputs -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2 mb-3 p-3 border rounded-md bg-gray-50">
+                <div>
+                    <label for="filterAgentId" class="block text-xs font-medium text-gray-700 mb-1">Filter by Agent ID (Sender/Recipient):</label>
+                    <input type="text" id="filterAgentId" name="filterAgentId" class="w-full p-1.5 border border-gray-300 rounded-md shadow-sm text-sm focus:ring-blue-500 focus:border-blue-500" placeholder="e.g., User, ArchitectAgent">
+                </div>
+                <div>
+                    <label for="filterContent" class="block text-xs font-medium text-gray-700 mb-1">Filter by Content:</label>
+                    <input type="text" id="filterContent" name="filterContent" class="w-full p-1.5 border border-gray-300 rounded-md shadow-sm text-sm focus:ring-blue-500 focus:border-blue-500" placeholder="e.g., evaluation, error">
+                </div>
+            </div>
+
             <div id="messagesContainer" class="max-h-96 overflow-y-auto space-y-3 pr-2">
                 <!-- Messages will be populated by JavaScript -->
             </div>
@@ -32,6 +47,74 @@
         const sessionsList = document.getElementById('sessionsList');
         const messagesContainer = document.getElementById('messagesContainer');
         const currentSessionIdDisplay = document.getElementById('currentSessionId');
+        const filterAgentIdInput = document.getElementById('filterAgentId');
+        const filterContentInput = document.getElementById('filterContent');
+
+        let allMessagesForCurrentSession = []; // To store all messages for client-side filtering
+
+        function renderMessages(messagesToRender) {
+            messagesContainer.innerHTML = ''; // Clear previous
+            if (messagesToRender.length === 0) {
+                messagesContainer.innerHTML = '<div class="p-3 text-center text-gray-500">No messages match your filters (or session is empty).</div>';
+                return;
+            }
+
+            messagesToRender.forEach(msg => {
+                const msgDiv = document.createElement('div');
+                msgDiv.className = 'p-2 rounded';
+
+                let contentParsed = msg.content;
+                try {
+                    const parsedJson = JSON.parse(msg.content);
+                    contentParsed = JSON.stringify(parsedJson, null, 2);
+                    contentParsed = `<pre class="whitespace-pre-wrap text-xs bg-gray-50 p-2 rounded">${contentParsed.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</pre>`;
+                } catch (e) {
+                    contentParsed = `<p class="text-sm whitespace-pre-wrap">${msg.content.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>`;
+                }
+
+                const senderRecipientStyle = msg.sender_id.toLowerCase().includes('llm') || (msg.recipient_id && msg.recipient_id.toLowerCase().includes('llm'))
+                    ? 'bg-purple-100 border-l-4 border-purple-500'
+                    : (msg.sender_id === 'SYSTEM' ? 'bg-yellow-100 border-l-4 border-yellow-500' : 'bg-blue-100 border-l-4 border-blue-500');
+
+                msgDiv.innerHTML = `
+                    <div class="${senderRecipientStyle} p-3 rounded-md shadow-sm">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="font-semibold text-sm">${msg.sender_id} &rarr; ${msg.recipient_id || 'BROADCAST'}</span>
+                            <span class="text-xs text-gray-500">${new Date(msg.timestamp).toLocaleString()}</span>
+                        </div>
+                        <div class="text-xs text-gray-600 mb-1">Type: ${msg.message_type || 'N/A'}</div>
+                        <div class="message-content text-sm">${contentParsed}</div>
+                    </div>
+                `;
+                messagesContainer.appendChild(msgDiv);
+            });
+            messagesContainer.scrollTop = messagesContainer.scrollHeight; // Scroll to bottom
+        }
+
+        function applyFiltersAndRender() {
+            const agentFilter = filterAgentIdInput.value.toLowerCase().trim();
+            const contentFilter = filterContentInput.value.toLowerCase().trim();
+
+            if (!allMessagesForCurrentSession || allMessagesForCurrentSession.length === 0) {
+                renderMessages([]); // Render empty state if no base messages
+                return;
+            }
+
+            const filteredMessages = allMessagesForCurrentSession.filter(msg => {
+                const agentMatch = agentFilter === '' ||
+                                   (msg.sender_id && msg.sender_id.toLowerCase().includes(agentFilter)) ||
+                                   (msg.recipient_id && msg.recipient_id.toLowerCase().includes(agentFilter));
+
+                const contentMatch = contentFilter === '' ||
+                                     (msg.content && msg.content.toLowerCase().includes(contentFilter));
+
+                return agentMatch && contentMatch;
+            });
+            renderMessages(filteredMessages);
+        }
+
+        filterAgentIdInput.addEventListener('input', applyFiltersAndRender);
+        filterContentInput.addEventListener('input', applyFiltersAndRender);
 
         async function fetchSessions() {
             try {
@@ -89,46 +172,17 @@
                      return;
                 }
                 const messages = await response.json();
+                allMessagesForCurrentSession = messages; // Store all fetched messages
 
-                messagesContainer.innerHTML = ''; // Clear loading/previous
-                if (messages.length === 0) {
-                    messagesContainer.innerHTML = '<div class="p-3 text-center text-gray-500">No messages in this session.</div>';
-                    return;
-                }
+                // Clear filter inputs when a new session's messages are fetched
+                filterAgentIdInput.value = '';
+                filterContentInput.value = '';
 
-                messages.forEach(msg => {
-                    const msgDiv = document.createElement('div');
-                    msgDiv.className = 'p-2 rounded';
+                applyFiltersAndRender(); // Apply filters (which will show all if filters are empty)
 
-                    let contentParsed = msg.content;
-                    try {
-                        // Attempt to parse and pretty-print if content is JSON string
-                        const parsedJson = JSON.parse(msg.content);
-                        contentParsed = JSON.stringify(parsedJson, null, 2);
-                        contentParsed = `<pre class="whitespace-pre-wrap text-xs bg-gray-50 p-2 rounded">${contentParsed.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</pre>`;
-                    } catch (e) {
-                        // If not JSON or error parsing, display as plain text
-                        contentParsed = `<p class="text-sm whitespace-pre-wrap">${msg.content.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>`;
-                    }
-
-                    const senderRecipientStyle = msg.sender_id.toLowerCase().includes('llm') || (msg.recipient_id && msg.recipient_id.toLowerCase().includes('llm'))
-                        ? 'bg-purple-100 border-l-4 border-purple-500'
-                        : (msg.sender_id === 'SYSTEM' ? 'bg-yellow-100 border-l-4 border-yellow-500' : 'bg-blue-100 border-l-4 border-blue-500');
-
-                    msgDiv.innerHTML = `
-                        <div class="${senderRecipientStyle} p-3 rounded-md shadow-sm">
-                            <div class="flex justify-between items-center mb-1">
-                                <span class="font-semibold text-sm">${msg.sender_id} &rarr; ${msg.recipient_id || 'BROADCAST'}</span>
-                                <span class="text-xs text-gray-500">${new Date(msg.timestamp).toLocaleString()}</span>
-                            </div>
-                            <div class="text-xs text-gray-600 mb-1">Type: ${msg.message_type || 'N/A'}</div>
-                            <div class="message-content text-sm">${contentParsed}</div>
-                        </div>
-                    `;
-                    messagesContainer.appendChild(msgDiv);
-                });
-                messagesContainer.scrollTop = messagesContainer.scrollHeight; // Scroll to bottom
             } catch (error) {
+                allMessagesForCurrentSession = []; // Clear stored messages on error
+                renderMessages([]); // Render empty/error state
                 messagesContainer.innerHTML = '<div class="p-3 text-center text-red-500">Failed to load messages.</div>';
                 console.error('Error fetching messages for session ' + sessionId + ':', error);
             }

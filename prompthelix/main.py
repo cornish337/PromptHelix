@@ -31,10 +31,15 @@ from prompthelix.logging_config import setup_logging # Import the logging setup 
 setup_logging()
 # --- End Setup Logging ---
 
+# --- Prometheus Metrics Exporter ---
+from prompthelix.utils.metrics_exporter import start_exporter_if_enabled
+start_exporter_if_enabled() # Start Prometheus client HTTP server if enabled
+# --- End Prometheus Metrics Exporter ---
 
-from prompthelix.utils import setup_logging
 
-setup_logging()
+from prompthelix.utils import setup_logging # This is a duplicate import, setup_logging() was already called
+
+# setup_logging() # Duplicate call
 
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
