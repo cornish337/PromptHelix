@@ -257,6 +257,7 @@ class TestPopulationManagerParallelEvaluation(unittest.IsolatedAsyncioTestCase):
         expected_fitnesses_by_id = self._get_expected_fitnesses(self.processed_chromosomes)
 
         print("Running evolve_population for test_evolve_population_single_and_multiple_workers_match_expected...")
+
         await self.population_manager.evolve_population(self.task_description, self.success_criteria) # Added await
 
         # Assertions are now made on self.processed_chromosomes
@@ -286,9 +287,11 @@ class TestPopulationManagerParallelEvaluation(unittest.IsolatedAsyncioTestCase):
 
         print("Running evolve_population for test_evolve_population_handles_evaluation_exception...")
 
+
         # Patch the logger for PopulationManager to check for error logging
         with patch('prompthelix.genetics.engine.logger.error') as mock_log_error:
             await self.population_manager.evolve_population(self.task_description, self.success_criteria) # Added await
+
 
         # Assertions are now made on self.processed_chromosomes
         for processed_chromo in self.processed_chromosomes:

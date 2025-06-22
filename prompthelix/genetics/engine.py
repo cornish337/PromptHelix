@@ -304,7 +304,8 @@ class PopulationManager:
         elitism_count: int = 0,
         initial_prompt_str: Optional[str] = None, # Added initial_prompt_str
         parallel_workers: int = 1,
-        message_bus=None
+        message_bus=None,
+        population_path: Optional[str] = None
     ):
         self.genetic_operators = genetic_operators
         self.fitness_evaluator = fitness_evaluator
@@ -339,6 +340,7 @@ class PopulationManager:
         self.population: List[PromptChromosome] = []
         self.generation_number = 0
         self.message_bus = message_bus
+        self.population_path = population_path
         self.status: str = "IDLE" # Possible statuses: IDLE, INITIALIZING, RUNNING, PAUSED, STOPPED, COMPLETED, ERROR
         self.is_paused: bool = False
         self.should_stop: bool = False
@@ -467,7 +469,10 @@ class PopulationManager:
             "fittest_individual_score": self.get_fittest_individual().fitness_score if self.population else None,
         }
 
-    def save_population(self, file_path: str) -> None:
+    def save_population(self, file_path: Optional[str] = None) -> None:
+        file_path = file_path or self.population_path
+        if not file_path:
+            raise ValueError("population_path must be provided to save_population")
         data = {
             "generation_number": self.generation_number,
             "population": [
@@ -487,130 +492,70 @@ class PopulationManager:
         except (IOError, OSError) as e:
             logger.error(f"Error saving population to {file_path}: {e}", exc_info=True)
 
-    def load_population(self, file_path: str) -> None:
-        if not os.path.exists(file_path):
-            logger.info(f"PopulationManager: No population file at {file_path}; starting fresh.")
-            self.population = []
-            self.generation_number = 0
-            return
+def load_population(self, file_path: Optional[str] = None) -> None:
+    file_path = file_path or self.population_path
+    if not file_path or not os.path.exists(file_path):
+        logger.info(f"PopulationManager: No population file at {file_path}; starting fresh.")
+        self.population = []
+        self.generation_number = 0
+        return
 
-        try:
-            with open(file_path, "r", encoding="utf-8") as fh:
-                content = fh.read()
-                if not content.strip(): # Check for empty or whitespace-only content
-                    logger.error(f"Error loading population from {file_path}: File is empty.")
-                    self.population = []
-                    self.generation_number = 0
-                    return
-
-                data = json.loads(content) # Use json.loads after reading
-
-            if not isinstance(data, dict):
-                logger.error(f"Error loading population from {file_path}: File content is not a JSON object (dictionary). Loaded type: {type(data)}")
+    try:
+        with open(file_path, "r", encoding="utf-8") as fh:
+            content = fh.read()
+            if not content.strip():  # Check for empty or whitespace-only content
+                logger.error(f"Error loading population from {file_path}: File is empty.")
                 self.population = []
                 self.generation_number = 0
                 return
 
-            self.generation_number = data.get("generation_number", 0)
-            loaded_population_data = data.get("population", [])
+            data = json.loads(content)
 
-            if not isinstance(loaded_population_data, list):
-                logger.error(f"Error loading population from {file_path}: 'population' key is not a list. Found type: {type(loaded_population_data)}")
-                self.population = []
-            else:
-                self.population = [
-                    PromptChromosome(
-                        genes=item.get("genes", []),
-                        fitness_score=item.get("fitness_score", 0.0),
-                        parent_ids=item.get("parents", []),
-                        mutation_strategy=item.get("mutation_strategy"),
-                    )
-                    for item in loaded_population_data if isinstance(item, dict)
-                ]
-
-            if self.population:
-                self.population_size = len(self.population)
-
-        except json.JSONDecodeError as e:
-            logger.error(f"Error loading population from {file_path} due to JSON decoding error: {e}")
+        if not isinstance(data, dict):
+            logger.error(
+                f"Error loading population from {file_path}: File content is not a JSON object (dictionary). "
+                f"Loaded type: {type(data)}"
+            )
             self.population = []
             self.generation_number = 0
-        except Exception as e:
-            logger.error(f"Unexpected error loading population from {file_path}: {e}", exc_info=True)
+            return
+
+        self.generation_number = data.get("generation_number", 0)
+        loaded_population_data = data.get("population", [])
+
+        if not isinstance(loaded_population_data, list):
+            logger.error(
+                f"Error loading population from {file_path}: 'population' key is not a list. "
+                f"Found type: {type(loaded_population_data)}"
+            )
             self.population = []
-            self.generation_number = 0
-
-    def get_fittest_individual(self) -> Optional[PromptChromosome]:
-        """Return the chromosome with the highest fitness or None."""
-        if not self.population:
-            return None
-        return max(self.population, key=lambda c: c.fitness_score)
-
-    async def broadcast_ga_update(
-        self,
-        event_type: str,
-        selected_parent_ids=None,
-        additional_data=None
-    ):
-        if (
-            self.message_bus
-            and getattr(self.message_bus, "connection_manager", None)
-        ):
-            fitness_scores = [c.fitness_score for c in self.population]
-
-            if fitness_scores:
-                best_fitness = max(fitness_scores)
-                fitness_min = min(fitness_scores)
-                fitness_max = max(fitness_scores)
-                fitness_mean = statistics.mean(fitness_scores)
-                fitness_median = statistics.median(fitness_scores)
-                fitness_std_dev = (
-                    statistics.stdev(fitness_scores)
-                    if len(fitness_scores) > 1
-                    else 0.0
+        else:
+            self.population = [
+                PromptChromosome(
+                    genes=item.get("genes", []),
+                    fitness_score=item.get("fitness_score", 0.0),
+                    parent_ids=item.get("parents", []),
+                    mutation_strategy=item.get("mutation_strategy"),
                 )
-                fittest_chromosome_string = (
-                    self.get_fittest_individual().to_prompt_string()
-                )
-            else:
-                best_fitness = None
-                fitness_min = None
-                fitness_max = None
-                fitness_mean = None
-                fitness_median = None
-                fitness_std_dev = None
-                fittest_chromosome_string = None
+                for item in loaded_population_data
+                if isinstance(item, dict)
+            ]
 
-            payload = {
-                "type": event_type,
-                "data": {
-                    "status": self.status,
-                    "generation": self.generation_number,
-                    "population_size": len(self.population),
-                    "best_fitness": best_fitness,
-                    "fitness_min": fitness_min,
-                    "fitness_max": fitness_max,
-                    "fitness_mean": fitness_mean,
-                    "fitness_median": fitness_median,
-                    "fitness_std_dev": fitness_std_dev,
-                    "fittest_chromosome_string": fittest_chromosome_string,
-                    "is_paused": self.is_paused,
-                    "should_stop": self.should_stop,
-                    "selected_parent_ids": selected_parent_ids,
-                    "timestamp": datetime.utcnow().isoformat(),
-                },
-            }
-            if additional_data:
-                payload["data"].update(additional_data)
+        if self.population:
+            self.population_size = len(self.population)
 
-            try:
-                await self.message_bus.connection_manager.broadcast_json(payload)
-            except Exception as e:
-                logger.error(f"Error during broadcast_json in broadcast_ga_update: {e}", exc_info=True)
-                # Decide if this should raise or just log. For now, logging.
+    except json.JSONDecodeError as e:
+        logger.error(f"Error loading population from {file_path} due to JSON decoding error: {e}")
+        self.population = []
+        self.generation_number = 0
+    except Exception as e:
+        logger.error(f"Unexpected error loading population from {file_path}: {e}", exc_info=True)
+        self.population = []
+        self.generation_number = 0
 
 
     async def evolve_population(self, task_description: str, success_criteria: Optional[Dict] = None, db_session=None, experiment_run=None): # Changed to async def
+
         if not self.population:
             logger.warning("PopulationManager: evolve_population called with an empty population.")
             return

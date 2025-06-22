@@ -176,7 +176,6 @@ async def main_ga_loop( # Changed to async def
         logger.info("LLM settings have been updated with overrides for this session.")
 
 
-    # 1. Instantiate Agents from AGENT_PIPELINE_CONFIG
     logger.info("Initializing agents from AGENT_PIPELINE_CONFIG...")
     loaded_agents: Dict[str, BaseAgent] = {}
     agent_names: List[str] = []
@@ -191,29 +190,6 @@ async def main_ga_loop( # Changed to async def
             continue
 
         logger.info(f"Loading agent '{agent_id}' from class path '{class_path}' using settings key '{settings_key}'.")
-
-#
-
-    # 1. Instantiate Agents from AGENT_PIPELINE_CONFIG
-    logger.info("Initializing agents from AGENT_PIPELINE_CONFIG...")
-    loaded_agents: Dict[str, BaseAgent] = {}
-    agent_names: List[str] = []
-
-    # This loop appears to be a duplicate of the one starting around line 184.
-    # It should also use the directly imported AGENT_PIPELINE_CONFIG.
-    # TODO: Investigate if this entire block is redundant.
-    for agent_conf in AGENT_PIPELINE_CONFIG: # Use the directly imported AGENT_PIPELINE_CONFIG
-        class_path = agent_conf.get("class_path")
-        agent_id = agent_conf.get("id")
-        settings_key = agent_conf.get("settings_key")
-
-        if not all([class_path, agent_id, settings_key]):
-            logger.error(f"Invalid agent configuration: {agent_conf}. Skipping.")
-            continue
-
-        logger.info(f"Loading agent '{agent_id}' from class path '{class_path}' using settings key '{settings_key}'.")
-
-#
         try:
             module_path_str, class_name_str = class_path.rsplit('.', 1)
             module = importlib.import_module(module_path_str)
@@ -333,6 +309,7 @@ async def main_ga_loop( # Changed to async def
         initial_prompt_str=initial_prompt_str,
         parallel_workers=parallel_workers,
         message_bus=message_bus,  # Added
+        population_path=actual_population_path,
 
 # old
 #        metrics_file_path=metrics_file_path,
@@ -471,7 +448,7 @@ async def main_ga_loop( # Changed to async def
     if actual_population_path:
         logger.info(f"Orchestrator: Attempting to save final population to {actual_population_path}")
         try:
-            pop_manager.save_population(actual_population_path)
+            pop_manager.save_population()
             logger.info(f"Orchestrator: Final population successfully saved to {actual_population_path}.")
         except Exception as e:
             logger.error(f"Orchestrator: Failed to save final population to {actual_population_path}. Error: {e}", exc_info=True)
@@ -498,192 +475,3 @@ async def main_ga_loop( # Changed to async def
         logger.info("Orchestrator: main_ga_loop completed. Set GA_RUNNING_STATUS to 0.")
 
 
-if __name__ == "__main__":
-    print("Running PromptHelix Genetic Algorithm Orchestrator (example run)...")
-
-    # --- Message Bus Demonstration ---
-    print("\n--- Simple Message Bus Demonstration ---")
-    # Create a mock agent for demonstration if existing agents are too complex for a simple ping
-    class DemoAgent(BaseAgent): # Inherit from BaseAgent to get send_message and receive_message
-        def __init__(self, agent_id, message_bus):
-            super().__init__(agent_id, message_bus)
-
-        def process_request(self, request_data: dict) -> dict:
-            # Simple echo for demo
-            print(f"DemoAgent '{self.agent_id}' process_request called with: {request_data}")
-            return {"status": "processed_by_demo_agent", "original_payload": request_data}
-
-        def do_something_and_send_ping(self, target_agent_id, data):
-            print(f"DemoAgent '{self.agent_id}' is sending a ping to '{target_agent_id}'.")
-            self.send_message(target_agent_id, {"ping_data": data}, "direct_request") # Use direct_request for demo
-
-    if SessionLocal is not None:
-        demo_bus = MessageBus(
-            db_session_factory=SessionLocal, connection_manager=websocket_manager
-        )
-    else:
-        print(
-            "Warning: SessionLocal not available. Demo MessageBus will not log to the database."
-        )
-        demo_bus = MessageBus(connection_manager=websocket_manager)
-    agent_X = DemoAgent(agent_id="AgentX", message_bus=demo_bus)
-    agent_Y = DemoAgent(agent_id="AgentY", message_bus=demo_bus)
-    demo_bus.register(agent_X.agent_id, agent_X)
-    demo_bus.register(agent_Y.agent_id, agent_Y)
-
-    # --- "Ping" Message Demonstration (using updated send_message) ---
-    print(f"\n--- 'Ping' Message Demonstration ---")
-    ping_payload = {"content": "AgentX checking in"}
-    print(f"{agent_X.agent_id} sending 'ping' to {agent_Y.agent_id} with payload: {ping_payload}")
-    pong_response = agent_X.send_message(recipient_agent_id="AgentY", message_content=ping_payload, message_type="ping")
-    print(f"{agent_X.agent_id} received pong response: {pong_response}")
-
-    # Agent Y sends a message to a non-existent agent (will be logged by message bus)
-    non_existent_response = agent_Y.send_message(recipient_agent_id="AgentZ", message_content={"data": "Test to Z"}, message_type="info_update")
-    print(f"{agent_Y.agent_id} sending to non-existent AgentZ, response: {non_existent_response}")
-    print("--- End of 'Ping' and Message Bus Demonstration ---\n")
-
-
-    # --- DomainExpertAgent Persistence Demonstration ---
-    print("\n--- DomainExpertAgent Persistence Demonstration ---")
-    dea_knowledge_file = "domain_expert_orchestrator_demo.json"
-    # Initial instantiation (might create the file with defaults)
-    domain_expert_1 = DomainExpertAgent(message_bus=demo_bus, knowledge_file_path=dea_knowledge_file)
-    # Ensure knowledge base is populated, especially if file didn't exist
-    if not domain_expert_1.knowledge_base:
-        print("Warning: DomainExpertAgent knowledge base is empty after init. Loading defaults for demo.")
-        domain_expert_1.knowledge_base = domain_expert_1._get_default_knowledge()
-
-
-    print(f"Initial medical keywords from instance 1: {domain_expert_1.knowledge_base.get('medical', {}).get('keywords', [])}")
-
-    # Modify knowledge
-    if 'medical' not in domain_expert_1.knowledge_base:
-        domain_expert_1.knowledge_base['medical'] = {'keywords': [], 'constraints': [], 'evaluation_tips': [], 'sample_prompt_starters': []}
-    if 'keywords' not in domain_expert_1.knowledge_base['medical']:
-        domain_expert_1.knowledge_base['medical']['keywords'] = []
-
-    domain_expert_1.knowledge_base['medical']['keywords'].append("orchestrator_added_keyword")
-    print(f"Modified medical keywords in instance 1: {domain_expert_1.knowledge_base['medical']['keywords']}")
-
-    domain_expert_1.save_knowledge()
-    print(f"Knowledge saved by instance 1 to '{dea_knowledge_file}'.")
-
-    # New instance loading from the same file
-    domain_expert_2 = DomainExpertAgent(message_bus=demo_bus, knowledge_file_path=dea_knowledge_file)
-    print(f"Medical keywords from instance 2 (should include modification): {domain_expert_2.knowledge_base.get('medical', {}).get('keywords', [])}")
-    print("--- End of DomainExpertAgent Persistence Demonstration ---\n")
-
-    # --- PromptCriticAgent Persistence Demonstration ---
-    print("\n--- PromptCriticAgent Persistence Demonstration ---")
-    pca_knowledge_file = "critic_orchestrator_demo.json"
-    # Initial instantiation
-    critic_agent_1 = PromptCriticAgent(message_bus=demo_bus, knowledge_file_path=pca_knowledge_file)
-    if not critic_agent_1.critique_rules:
-        print("Warning: PromptCriticAgent critique rules are empty after init. Loading defaults for demo.")
-        critic_agent_1.critique_rules = critic_agent_1._get_default_critique_rules()
-
-    rule_name_to_check = "PromptTooShort"
-    initial_rule = next((rule for rule in critic_agent_1.critique_rules if rule.get("name") == rule_name_to_check), None)
-    print(f"Initial '{rule_name_to_check}' rule from instance 1: {initial_rule}")
-
-    # Modify a rule
-    modified_min_genes = 1 # Change from default 3
-    rule_modified = False
-    if critic_agent_1.critique_rules:
-        for rule in critic_agent_1.critique_rules:
-            if rule.get("name") == rule_name_to_check:
-                rule["min_genes"] = modified_min_genes
-                rule_modified = True
-                break
-    if rule_modified:
-        print(f"Modified '{rule_name_to_check}' rule in instance 1 to have min_genes: {modified_min_genes}")
-    else:
-        print(f"Could not find or modify rule '{rule_name_to_check}' in instance 1. Rules: {critic_agent_1.critique_rules}")
-
-    critic_agent_1.save_knowledge()
-    print(f"Knowledge saved by Critic instance 1 to '{pca_knowledge_file}'.")
-
-    # New instance loading from the same file
-    critic_agent_2 = PromptCriticAgent(message_bus=demo_bus, knowledge_file_path=pca_knowledge_file)
-    loaded_rule = next((rule for rule in critic_agent_2.critique_rules if rule.get("name") == rule_name_to_check), None)
-    print(f"'{rule_name_to_check}' rule from instance 2 (should reflect modification): {loaded_rule}")
-    print("--- End of PromptCriticAgent Persistence Demonstration ---\n")
-
-
-    # --- MetaLearnerAgent Persistence Demonstration ---
-    print("\n--- MetaLearnerAgent Persistence Demonstration ---")
-    # MetaLearnerAgent needs a message bus to be instantiated, even if not used in this simple demo part
-    if SessionLocal is not None:
-        meta_learner_bus = MessageBus(
-            db_session_factory=SessionLocal, connection_manager=websocket_manager
-        )  # Using demo_bus for consistency if preferred, or a new one.
-    else:
-        print(
-            "Warning: SessionLocal not available. MetaLearner MessageBus will not log to the database."
-        )
-        meta_learner_bus = MessageBus(connection_manager=websocket_manager)
-    meta_learner_agent = MetaLearnerAgent(message_bus=meta_learner_bus, knowledge_file_path="meta_learner_knowledge_orchestrator_demo.json")
-
-    print(f"Initial knowledge base keys: {list(meta_learner_agent.knowledge_base.keys())}")
-    print(f"Initial data log size: {len(meta_learner_agent.data_log)}")
-
-    # Simulate some data processing
-    # This data is simplified and doesn't fully match real agent outputs, for demo purposes.
-    # In a real scenario, these would be actual evaluation/critique results.
-    dummy_eval_data_1 = {
-        "prompt_chromosome": PromptChromosome(genes=["Evaluable prompt 1 gene 1", "Evaluable prompt 1 gene 2"]), # Dummy chromosome
-        "fitness_score": 0.8
-    }
-    meta_learner_agent.process_request({"data_type": "evaluation_result", "data": dummy_eval_data_1})
-
-    dummy_critique_data_1 = {
-        "feedback_points": ["Critique: Too verbose.", "Critique: Lacks clarity."]
-    }
-    meta_learner_agent.process_request({"data_type": "critique_result", "data": dummy_critique_data_1})
-
-    # Simulate another round of processing
-    dummy_eval_data_2 = {
-        "prompt_chromosome": PromptChromosome(genes=["Evaluable prompt 2 gene 1"]),
-        "fitness_score": 0.92
-    }
-    # This call should trigger an internal save as data_log length will be 3
-    meta_learner_agent.process_request({"data_type": "evaluation_result", "data": dummy_eval_data_2})
-
-    print(f"Knowledge base successful features after processing: {meta_learner_agent.knowledge_base.get('successful_prompt_features')}")
-    print(f"Knowledge base common critique themes after processing: {meta_learner_agent.knowledge_base.get('common_critique_themes')}")
-    print(f"Data log size after processing: {len(meta_learner_agent.data_log)}")
-
-    # Explicitly call save_knowledge (though it might have been called internally already)
-    meta_learner_agent.save_knowledge()
-    print("MetaLearnerAgent knowledge explicitly saved.")
-    print(f"Knowledge file '{meta_learner_agent.knowledge_file_path}' should now contain the latest data.")
-    print("--- End of MetaLearnerAgent Persistence Demonstration ---\n")
-
-    # Example parameters for a direct run of the GA loop
-    example_task = "Describe quantum entanglement in simple terms."
-    example_keywords = ["quantum", "physics", "entanglement", "spooky"]
-    example_gens = 3 # Keep it short for example
-    example_pop = 5  # Small pop for example
-    example_elitism = 1
-
-    best_chromosome = main_ga_loop(
-        task_desc=example_task,
-        keywords=example_keywords,
-        num_generations=example_gens,
-        population_size=example_pop,
-        elitism_count=example_elitism,
-        execution_mode=ExecutionMode.TEST,
-        parallel_workers=None,
-        population_path=None, # Example: Use default path from config
-        # population_path="custom_ga_run_population.json", # Example: Override path
-        save_frequency_override=None, # Example: Use default frequency from config
-        # save_frequency_override=3, # Example: Override save frequency to every 3 generations
-        return_best=True
-    )
-    if best_chromosome:
-        print(f"\nExample Run - Best Chromosome Fitness: {best_chromosome.fitness_score}")
-        print(f"Example Run - Best Chromosome Prompt: {best_chromosome.to_prompt_string()}")
-    else:
-        print("\nExample Run - No best chromosome found.")
-    print("\nOrchestration complete.")
