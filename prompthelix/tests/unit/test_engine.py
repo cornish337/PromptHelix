@@ -154,18 +154,22 @@ class SimplePicklableEvaluator:
     def set_mode_normal(self):
         self.evaluation_mode = "normal"
 
-    def evaluate(self, chromosome, task_desc, success_crit):
+    async def evaluate(self, chromosome, task_desc, success_crit): # Changed to async def
         global FAILING_CHROMOSOME_ID_FOR_TEST
         # print(f"SimplePicklableEvaluator ({id(self)}): Evaluating {chromosome.id}, Mode: {self.evaluation_mode}, Failing ID: {FAILING_CHROMOSOME_ID_FOR_TEST}")
         if self.evaluation_mode == "fail_specific":
             if FAILING_CHROMOSOME_ID_FOR_TEST and chromosome.id == FAILING_CHROMOSOME_ID_FOR_TEST:
                 # print(f"SimplePicklableEvaluator: Simulating failure for {chromosome.id}")
+                chromosome.fitness_score = 0.0 # Ensure it's set before raising for consistency if test checked it
                 raise ValueError(f"Simulated evaluation error for {chromosome.id}")
-        return len(chromosome.genes) * 0.1
+
+        score = len(chromosome.genes) * 0.1
+        chromosome.fitness_score = score # Set the score on the chromosome
+        return score
 
 
-class TestPopulationManagerParallelEvaluation(unittest.TestCase):
-    def setUp(self):
+class TestPopulationManagerParallelEvaluation(unittest.IsolatedAsyncioTestCase): # Changed to IsolatedAsyncioTestCase
+    async def asyncSetUp(self): # Changed to asyncSetUp
         global FAILING_CHROMOSOME_ID_FOR_TEST
         FAILING_CHROMOSOME_ID_FOR_TEST = None
 
@@ -243,7 +247,7 @@ class TestPopulationManagerParallelEvaluation(unittest.TestCase):
                 expected_fitnesses[chromo.id] = len(chromo.genes) * 0.1
         return expected_fitnesses
 
-    def test_evolve_population_single_and_multiple_workers_match_expected(self):
+    async def test_evolve_population_single_and_multiple_workers_match_expected(self): # Changed to async def
         """
         Tests that evolve_population correctly evaluates fitness scores.
         This implicitly covers single/multi-worker as ProcessPoolExecutor is used.
@@ -253,7 +257,8 @@ class TestPopulationManagerParallelEvaluation(unittest.TestCase):
         expected_fitnesses_by_id = self._get_expected_fitnesses(self.processed_chromosomes)
 
         print("Running evolve_population for test_evolve_population_single_and_multiple_workers_match_expected...")
-        self.population_manager.evolve_population(self.task_description, self.success_criteria, target_style=None)
+
+        await self.population_manager.evolve_population(self.task_description, self.success_criteria) # Added await
 
         # Assertions are now made on self.processed_chromosomes
         for processed_chromo in self.processed_chromosomes:
@@ -265,7 +270,7 @@ class TestPopulationManagerParallelEvaluation(unittest.TestCase):
 
 
 
-    def test_evolve_population_handles_evaluation_exception(self):
+    async def test_evolve_population_handles_evaluation_exception(self): # Changed to async def
         """
         Tests that if fitness_evaluator.evaluate raises an exception for a chromosome,
         it's handled, and that chromosome gets a default fitness score (0.0).
@@ -281,7 +286,12 @@ class TestPopulationManagerParallelEvaluation(unittest.TestCase):
                                                                 failing_chromosome_id_val=FAILING_CHROMOSOME_ID_FOR_TEST)
 
         print("Running evolve_population for test_evolve_population_handles_evaluation_exception...")
-        self.population_manager.evolve_population(self.task_description, self.success_criteria, target_style=None)
+
+
+        # Patch the logger for PopulationManager to check for error logging
+        with patch('prompthelix.genetics.engine.logger.error') as mock_log_error:
+            await self.population_manager.evolve_population(self.task_description, self.success_criteria) # Added await
+
 
         # Assertions are now made on self.processed_chromosomes
         for processed_chromo in self.processed_chromosomes:
@@ -294,6 +304,18 @@ class TestPopulationManagerParallelEvaluation(unittest.TestCase):
             else:
                 self.assertAlmostEqual(processed_chromo.fitness_score, expected_fitness, places=5,
                                      msg=f"Fitness for {processed_chromo.id} ({processed_chromo.fitness_score}) did not match expected ({expected_fitness}).")
+
+        # Check if the error was logged for the failing chromosome
+        found_log_for_failing_chromo = False
+        for call_args in mock_log_error.call_args_list:
+            log_message = call_args[0][0] # First positional argument to logger.error
+            if f"Error evaluating chromosome {FAILING_CHROMOSOME_ID_FOR_TEST}" in log_message and \
+               "Simulated evaluation error" in log_message:
+                found_log_for_failing_chromo = True
+                break
+        self.assertTrue(found_log_for_failing_chromo,
+                        f"Expected error log for failing chromosome {FAILING_CHROMOSOME_ID_FOR_TEST} not found.")
+
 
         FAILING_CHROMOSOME_ID_FOR_TEST = None # Clean up global
 

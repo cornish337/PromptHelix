@@ -424,7 +424,7 @@ Example:
 
         return llm_derived_metrics, errors
 
-    def process_request(self, request_data: dict) -> dict:
+    async def process_request(self, request_data: dict) -> dict: # Changed to async def
         """
         Evaluates the LLM output for a given prompt, primarily using another LLM for content analysis.
 
@@ -508,7 +508,27 @@ Example:
 
         # Broadcast the evaluation result if a bus is available
         if self.message_bus:
-            asyncio.run(self.message_bus.broadcast_message("evaluation_result", result, sender_id=self.agent_id))
+            # asyncio.run(self.message_bus.broadcast_message("evaluation_result", result, sender_id=self.agent_id))
+            # This method (process_request) itself needs to be async to use await here.
+            # For now, if message_bus.broadcast_message is async, this will cause issues
+            # or require process_request to become async.
+            # Assuming for a moment that broadcast_message can be called synchronously or handles its own loop.
+            # If broadcast_message is truly async and needs awaiting, this whole chain needs to be async.
+            # Based on the RuntimeError, broadcast_message is likely async and needs await.
+            # This implies process_request should be async.
+            # However, directly changing it here without changing callers will break things.
+            # The error "asyncio.run() cannot be called from a running event loop"
+            # means this process_request is being called from within an existing asyncio.run() context (likely from cli.py -> orchestrator.py)
+            # So, the asyncio.run() here is the problem.
+            # The correct fix is to make this method async and use await, and ensure its callers also await it.
+            # This change is made in the next step, for now removing the problematic asyncio.run()
+            # and assuming that the caller will handle the async nature if broadcast_message is async.
+            # For the immediate fix of the "nested asyncio.run()" error:
+            # If self.message_bus.broadcast_message is async, this needs to be:
+            # await self.message_bus.broadcast_message("evaluation_result", result, sender_id=self.agent_id)
+            # And this method (process_request) must be `async def`.
+            # Let's make that change now.
+            await self.message_bus.broadcast_message("evaluation_result", result, sender_id=self.agent_id)
 
         # Debug logging before returning
         logger.info(f"REA.process_request: Type of prompt_chromosome input: {type(request_data.get('prompt_chromosome'))}")
