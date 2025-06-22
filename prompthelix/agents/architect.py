@@ -1,6 +1,6 @@
 from prompthelix.agents.base import BaseAgent
 from prompthelix.genetics.chromosome import PromptChromosome # Updated import
-from prompthelix.utils.llm_utils import call_llm_api, DEFAULT_FALLBACK_PROVIDER, DEFAULT_FALLBACK_MODEL # Removed LLMProvider
+from prompthelix.utils.llm_utils import call_llm_api # Removed LLMProvider
 from prompthelix.config import AGENT_SETTINGS, KNOWLEDGE_DIR # Keep KNOWLEDGE_DIR for default path construction
 import os
 import json
