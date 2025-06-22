@@ -198,7 +198,8 @@ def list_tests_for_suite(suite_id: str) -> List[str]:
         if os.path.isdir(tests_dir):
             discovered_suite = loader.discover(
                 start_dir=tests_dir,
-                pattern=suite_config.get("pattern", "test_*.py") # Use configured pattern
+                pattern=suite_config.get("pattern", "test_*.py"), # Use configured pattern
+                top_level_dir=project_root # Explicitly set top_level_dir
             )
             _collect_from_suite(discovered_suite, all_test_names)
         else:
