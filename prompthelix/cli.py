@@ -11,6 +11,7 @@ import os
 import subprocess
 import sys
 import unittest
+import asyncio # Added import
 
 from prompthelix.config import settings
 from prompthelix.logging_config import setup_logging
@@ -361,7 +362,8 @@ def main_cli():
 
             print("CLI: Running Genetic Algorithm with specified parameters...")
             try:
-                best_chromosome = main_ga_loop(
+                # best_chromosome = main_ga_loop( # Old synchronous call
+                best_chromosome = asyncio.run(main_ga_loop( # New asynchronous call
                     task_desc=task_desc,
                     keywords=keywords,
                     num_generations=num_generations,
@@ -375,7 +377,7 @@ def main_cli():
                     parallel_workers=args.parallel_workers,  # Pass the new argument
                     return_best=True,
                     metrics_file_path=args.metrics_file,
-                )
+                )) # Extra closing parenthesis added here
 
                 if best_chromosome:
                     logger.info("CLI: Genetic Algorithm completed successfully.")

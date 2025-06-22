@@ -24,8 +24,6 @@ websocket_manager = ConnectionManager()
 # Definition for the active Genetic Algorithm runner
 active_ga_runner: Optional["GeneticAlgorithmRunner"] = None
 
-# Fitness history collected during GA runs
-ga_history: list[dict] = []
 
 # Prometheus metrics gauges (initialized lazily by metrics_exporter)
 generation_gauge: Gauge | None = None

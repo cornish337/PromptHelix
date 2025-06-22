@@ -93,6 +93,7 @@ def add_generation_metric(
     best_fitness: float,
     avg_fitness: float,
     population_diversity: float,
+    population_size: int,
 ) -> GAGenerationMetrics:
     metric = GAGenerationMetrics(
         run_id=run.id,
@@ -100,6 +101,7 @@ def add_generation_metric(
         best_fitness=best_fitness,
         avg_fitness=avg_fitness,
         population_diversity=population_diversity,
+        population_size=population_size,
     )
     db.add(metric)
     db.commit()

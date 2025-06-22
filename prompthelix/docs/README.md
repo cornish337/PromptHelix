@@ -17,13 +17,13 @@ The core components of PromptHelix are organized as follows:
 -   `prompthelix/evaluation/`: Modules for evaluating prompt performance.
 -   `prompthelix/genetics/`: Core logic for the genetic algorithm (chromosomes, operators, population), including the Prompt DNA system.
 -   `prompthelix/utils/llm_utils.py`: Utility functions for interacting with various LLM providers.
--   `prompthelix/main.py`: Main FastAPI application entry point for the web server and API.
+-   `prompthelix/main.py`: Main FastAPI application entry point for the web server and API (there is no `main.py` at the repository root).
 -   `prompthelix/schemas/`: Pydantic schemas for data validation and serialization.
 -   `prompthelix/services/`: Business logic and services.
 -   `prompthelix/tests/`: Unit and integration tests.
     -   `unit/`: Contains unit tests for individual components.
     -   `integration/`: Contains integration tests.
--   `prompthelix/ui/`: HTML templates and static files for the web UI.
+-   `prompthelix/templates/`: HTML templates for the web UI. Static assets are in `prompthelix/static/`.
 -   `prompthelix/utils/`: Utility functions and helpers.
 -   `.env.example`: Example environment variable file.
 -   `alembic/`: Alembic migration scripts and configuration for database schema management.

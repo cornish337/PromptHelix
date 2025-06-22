@@ -293,8 +293,8 @@ This section lists observations about parts of the codebase that might be redund
 
 ### 6.5. Code Clarity and Maintainability
 1.  **`if __name__ == "__main__":` in `prompthelix.orchestrator.py`**:
-    *   This block contains extensive demonstration and test code for various components. While useful for development, it makes the file very long.
-    *   **Suggestion**: Move this demonstration/test code into separate scripts in a `examples/` or `scripts/` directory, or into integration tests. This would keep `orchestrator.py` focused on its core logic.
+    *   Earlier versions embedded extensive demonstration and test code directly in `orchestrator.py`.
+    *   That example code now lives in `examples/orchestrator_demo.py`, keeping `orchestrator.py` focused on production logic.
 2.  **Error Handling in `FitnessEvaluator` (Default)**:
     *   The default `FitnessEvaluator` in `prompthelix.genetics.engine.py` might pass an empty `llm_output` to `ResultsEvaluatorAgent` if not in `TEST` mode. This relies on the agent to handle it gracefully.
     *   **Suggestion**: Clarify if the `FitnessEvaluator`'s role includes invoking the LLM or if it strictly evaluates a provided `llm_output`. If the former, it should handle LLM calls in `REAL` mode.
