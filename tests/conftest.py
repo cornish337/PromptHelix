@@ -1,20 +1,21 @@
-
 import pytest
-from prompthelix.tests.conftest import *  # re-export fixtures for root tests
-from prompthelix.config import settings
-from prompthelix.logging_config import configure_logging
 
-configure_logging(settings.DEBUG)
+from prompthelix.logging_config import setup_logging
+from prompthelix.tests.conftest import *  # re-export fixtures for root tests
+
+setup_logging()
+
 
 @pytest.fixture(autouse=True)
 def mock_llm_api(monkeypatch):
     """Return a constant response for all llm_api calls during tests."""
+
     def _mock_call(*args, **kwargs):
         return "MOCK_RESPONSE"
 
     # Patch the central utility
     monkeypatch.setattr("prompthelix.utils.llm_utils.call_llm_api", _mock_call)
-    
+
     # Also patch already-imported agent modules
     modules = [
         "prompthelix.agents.architect",
@@ -24,5 +25,3 @@ def mock_llm_api(monkeypatch):
     ]
     for mod in modules:
         monkeypatch.setattr(f"{mod}.call_llm_api", _mock_call, raising=False)
-
-
