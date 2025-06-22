@@ -426,15 +426,30 @@ def get_ga_experiment_status():
     "/api/ga/history",
     response_model=List[schemas.GAGenerationMetric],
     tags=["GA Control"],
-    summary="Get GA fitness history",
+    summary="Get GA fitness history for a specific run or the latest run.",
 )
 def get_ga_history(
-    run_id: int,
+    run_id: Optional[int] = None, # Made run_id optional
     skip: int = 0,
-    limit: int = 100,
+    limit: int = 1000, # Increased limit for history fetching
     db: DbSession = Depends(get_db),
 ):
+    """
+    Retrieves GA generation metrics. If run_id is provided, fetches for that run.
+    Otherwise, fetches for the most recent GA experiment run.
+    """
+    # The service function get_generation_metrics_for_run now handles the logic
+    # for fetching the latest run if run_id is None.
     metrics = get_generation_metrics_for_run(db=db, run_id=run_id)
+    if not metrics and run_id is None:
+        # This case means no runs were found at all by the service
+        # Or the latest run had no metrics (less likely if runs always have metrics)
+        # Return empty list, client-side will handle "no data"
+        pass
+    elif not metrics and run_id is not None:
+        # Specific run_id provided, but no metrics found (or run_id invalid)
+        raise HTTPException(status_code=404, detail=f"No generation metrics found for run_id {run_id}.")
+
     return metrics[skip : skip + limit]
 
 

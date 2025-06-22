@@ -602,38 +602,101 @@ def load_population(self, file_path: Optional[str] = None) -> None:
         self.generation_number = data.get("generation_number", 0)
         loaded_population_data = data.get("population", [])
 
-        if not isinstance(loaded_population_data, list):
-            logger.error(
-                f"Error loading population from {file_path}: 'population' key is not a list. "
-                f"Found type: {type(loaded_population_data)}"
-            )
-            self.population = []
-        else:
-            self.population = [
-                PromptChromosome(
-                    genes=item.get("genes", []),
-                    fitness_score=item.get("fitness_score", 0.0),
-                    parent_ids=item.get("parents", []),
-                    mutation_strategy=item.get("mutation_strategy"),
+
+    async def broadcast_ga_update(
+        self,
+        event_type: str,
+        selected_parent_ids=None,
+        additional_data=None,
+        include_population_sample: bool = False,
+        sample_size: int = 5
+    ):
+        if (
+            self.message_bus
+            and getattr(self.message_bus, "connection_manager", None)
+        ):
+            fitness_scores = [c.fitness_score for c in self.population if c.fitness_score is not None] # Ensure scores are not None
+
+            if fitness_scores: # Check if list is not empty after filtering
+                best_fitness = max(fitness_scores) if fitness_scores else None
+                fitness_min = min(fitness_scores)
+                fitness_max = max(fitness_scores)
+                fitness_mean = statistics.mean(fitness_scores)
+                fitness_median = statistics.median(fitness_scores)
+                fitness_std_dev = (
+                    statistics.stdev(fitness_scores)
+                    if len(fitness_scores) > 1
+                    else 0.0
                 )
-                for item in loaded_population_data
-                if isinstance(item, dict)
-            ]
+                fittest_chromosome_string = (
+                    self.get_fittest_individual().to_prompt_string()
+                )
+            else:
+                best_fitness = None
+                fitness_min = None
+                fitness_max = None
+                fitness_mean = None
+                fitness_median = None
+                fitness_std_dev = None
+                fittest_chromosome_string = None
 
-        if self.population:
-            self.population_size = len(self.population)
+            payload = {
+                "type": event_type,
+                "data": {
+                    "status": self.status,
+                    "generation": self.generation_number,
+                    "population_size": len(self.population),
+                    "best_fitness": best_fitness,
+                    "fitness_min": fitness_min,
+                    "fitness_max": fitness_max,
+                    "fitness_mean": fitness_mean,
+                    "fitness_median": fitness_median,
+                    "fitness_std_dev": fitness_std_dev,
+                    "fittest_chromosome_string": fittest_chromosome_string,
+                    "population_diversity": fitness_std_dev, # Add population_diversity, using std_dev as proxy
+                    "is_paused": self.is_paused,
+                    "should_stop": self.should_stop,
+                    "selected_parent_ids": selected_parent_ids,
+                    "timestamp": datetime.utcnow().isoformat(),
+                },
+            }
+            if additional_data:
+                payload["data"].update(additional_data)
 
-    except json.JSONDecodeError as e:
-        logger.error(f"Error loading population from {file_path} due to JSON decoding error: {e}")
-        self.population = []
-        self.generation_number = 0
-    except Exception as e:
-        logger.error(f"Unexpected error loading population from {file_path}: {e}", exc_info=True)
-        self.population = []
-        self.generation_number = 0
+            if include_population_sample and self.population:
+                # Sort population by fitness to get the top N (if not already sorted)
+                # Assuming self.population is already sorted by fitness_score descending
+                # from evolve_population or initialize_population
+                sample = self.population[:sample_size]
+                payload["data"]["population_sample"] = [
+                    {
+                        "id": str(chromo.id),
+                        "genes": chromo.genes,
+                        "fitness_score": chromo.fitness_score,
+                        "parent_ids": chromo.parent_ids, # Ensure this is part of PromptChromosome
+                        "mutation_strategy": chromo.mutation_strategy
+                    }
+                    for chromo in sample
+                ]
+            else:
+                payload["data"]["population_sample"] = []
+
+
+            try:
+                await self.message_bus.connection_manager.broadcast_json(payload)
+            except Exception as e:
+                logger.error(f"Error during broadcast_json in broadcast_ga_update: {e}", exc_info=True)
+                # Decide if this should raise or just log. For now, logging.
 
 
     async def evolve_population(self, task_description: str, success_criteria: Optional[Dict] = None, db_session=None, experiment_run=None): # Changed to async def
+        # Ensure status is RUNNING at the start of a generation evolution
+        if self.status != "RUNNING" and not self.is_paused and not self.should_stop:
+            self.status = "RUNNING"
+            # Initial broadcast for this generation starting, could include sample if desired
+            await self.broadcast_ga_update(event_type="ga_generation_started", include_population_sample=True)
+
+
 
         if not self.population:
             logger.warning("PopulationManager: evolve_population called with an empty population.")
@@ -736,6 +799,15 @@ def load_population(self, file_path: Optional[str] = None) -> None:
         logger.info(f"PopulationManager: Generation {self.generation_number + 1} evaluation complete. Best Fitness: {best_chromosome.fitness_score:.4f}, Avg Fitness: {avg_fitness:.4f}")
         logger.info(f"PopulationManager: Best chromosome ID {best_chromosome.id} in gen {self.generation_number + 1}, Prompt: \"{best_chromosome.to_prompt_string()[:150]}...\"")
 
+        # Broadcast update for the evaluated generation, including its sample
+        # Using "ga_update" as the event type since the dashboard handles this for population samples.
+        # This broadcast represents the state of the population *after* evaluation for the current generation number.
+        await self.broadcast_ga_update(
+            event_type="ga_update", # Dashboard handles 'ga_update' for population sample
+            include_population_sample=True
+            # selected_parent_ids could be passed if relevant to this specific broadcast context
+        )
+
         try:
             from prompthelix.services import add_generation_metric
             add_generation_metric( # Note: generation_number is 0 for initial, then increments
@@ -750,4 +822,61 @@ def load_population(self, file_path: Optional[str] = None) -> None:
             logger.debug(f"PopulationManager: Generation {self.generation_number} metrics (best: {best_chromosome.fitness_score:.4f}, avg: {avg_fitness:.4f}, size: {len(self.population)}) sent to DB.")
         except Exception as e:
             logger.warning(f"PopulationManager: Failed to add generation metric to DB for generation {self.generation_number}. Error: {e}", exc_info=True)
-            pass
+            # pass # Original line
+
+        # Calculate some form of diversity. For now, using fitness standard deviation as a proxy.
+        # A more sophisticated diversity metric might consider genotypic or phenotypic variance.
+        current_fitness_scores = [c.fitness_score for c in self.population if c.fitness_score is not None]
+        population_diversity_metric = 0.0
+        if len(current_fitness_scores) > 1:
+            population_diversity_metric = statistics.stdev(current_fitness_scores)
+
+        # Update the call to add_generation_metric to include actual population_diversity_metric
+        # This part is tricky because add_generation_metric is called *before* the main broadcast_ga_update
+        # that includes the population sample.
+        # The broadcast_ga_update itself calculates fitness_std_dev. Let's use that.
+
+        # The broadcast_ga_update method already calculates fitness_std_dev.
+        # We need to ensure that value is also passed to add_generation_metric.
+        # And that broadcast_ga_update includes a field called 'population_diversity'.
+
+        # Let's ensure the `add_generation_metric` call receives a proper diversity value.
+        # The `evolve_population` method has `best_chromosome` and `avg_fitness`.
+        # It needs `fitness_std_dev` (as a proxy for population_diversity) to pass to `add_generation_metric`.
+        # This means `fitness_std_dev` should be calculated before calling `add_generation_metric`.
+
+        # Re-evaluating: add_generation_metric is called. The broadcast happens within handleGaDataUpdate on client
+        # based on data that should include population_diversity.
+        # The broadcast_ga_update method in PopulationManager is the source of this data.
+
+        # The issue is that `add_generation_metric` is called with 0.0 for diversity.
+        # Let's fix that first.
+
+        # Calculate std_dev for the current population's fitness scores
+        # This is already done within broadcast_ga_update, but we need it here for add_generation_metric
+
+        # Recalculate std_dev here for add_generation_metric
+        # (This is slightly redundant with broadcast_ga_update, but ensures DB gets a non-zero value if appropriate)
+        _fitness_scores_for_db_metric = [c.fitness_score for c in self.population if c.fitness_score is not None]
+        _population_diversity_for_db = 0.0
+        if len(_fitness_scores_for_db_metric) > 1:
+            _population_diversity_for_db = statistics.stdev(_fitness_scores_for_db_metric)
+
+        # Corrected call to add_generation_metric
+        try:
+            from prompthelix.services import add_generation_metric # Already imported
+            # This was the original location of add_generation_metric call
+            # We need to ensure the generation_number is correct (current one being completed)
+            add_generation_metric(
+                db_session,
+                experiment_run,
+                self.generation_number, # generation_number is the one just completed
+                best_chromosome.fitness_score,
+                avg_fitness,
+                _population_diversity_for_db, # Use calculated diversity
+                len(self.population)
+            )
+            logger.debug(f"PopulationManager: Generation {self.generation_number} metrics (diversity: {_population_diversity_for_db:.4f}) updated in DB.")
+        except Exception as e:
+            logger.warning(f"PopulationManager: Failed to update generation metric in DB for generation {self.generation_number} with diversity. Error: {e}", exc_info=True)
+            pass # Keep original pass for this specific try-except for DB logging
