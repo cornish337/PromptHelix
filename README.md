@@ -136,6 +136,9 @@ You can set these variables in a few ways:
     When the application first runs (e.g., `uvicorn prompthelix.main:app`), the `init_db()` function is called. For SQLite (the default for development), this will create the database file (e.g., `prompthelix.db`) and all necessary tables if they don't already exist. This is convenient for getting started quickly in a development environment.
     For production environments, and for managing database schema changes over time (migrations) in any environment, PromptHelix uses Alembic. See the "Database Migrations" subsection under "Manual Deployment" for details on using Alembic.
     The SQLite database file is not included in the repository and will be created automatically.
+
+    The FastAPI application itself lives in `prompthelix/main.py`. There is no
+    `main.py` at the project root.
 5.  **Run the Web UI (Development Server):**
     ```bash
     uvicorn prompthelix.main:app --reload
@@ -225,6 +228,22 @@ The repository includes a `docker-compose.yaml` that runs both the application a
 3.  **Access the application:**
     The API and UI will be available at [http://localhost:8000](http://localhost:8000).
 
+### Starting the Celery Worker
+
+PromptHelix uses Celery for background task processing. A running Redis instance
+is required as both the broker and result backend. The included
+`docker-compose.yaml` starts Redis and sets the `CELERY_BROKER_URL` and
+`CELERY_RESULT_BACKEND_URL` environment variables automatically.
+
+To start a worker locally once Redis is available, run:
+
+```bash
+celery -A prompthelix.celery_app worker -l info
+```
+
+Leave this process running so asynchronous tasks dispatched by the application
+can be executed.
+
 
 ### Manual Deployment
 
@@ -245,7 +264,7 @@ For a manual production setup, consider the following steps:
 3.  **Database Setup (Production):**
     *   For production, it's highly recommended to use a robust database like PostgreSQL.
     *   Set the `DATABASE_URL` environment variable to point to your production database.
-    *   **Database Migrations**: PromptHelix uses Alembic for managing database schema changes (migrations). This is crucial for updating your database schema in a controlled way as the application evolves, especially in production.
+    *   **Database Migrations**: PromptHelix uses Alembic for managing database schema changes (migrations). Check `alembic/` for migration scripts. This is crucial for updating your database schema in a controlled way as the application evolves, especially in production.
         *   The `init_db()` function called on application startup is suitable for initial table creation in development (especially with SQLite) but does **not** handle schema migrations.
         *   To apply migrations, use Alembic commands. For example, to upgrade your database to the latest schema version:
             ```bash
@@ -339,8 +358,10 @@ PromptHelix also provides an API endpoint to trigger the genetic algorithm.
     ```
 
 
+
 3.  **Try the Prompt UI**:
     The UI for adding and viewing prompts is backed by `PromptService` and can be accessed as described in the "Setup and Run the Web UI" section.
+
 
 4.  **Expected Response**:
     The endpoint now launches the experiment asynchronously. It immediately
@@ -412,3 +433,9 @@ You can also launch the interactive runner from the command line:
 ```bash
 python -m prompthelix.cli test --interactive
 ```
+
+### Example Scripts
+
+Demonstration code that previously lived in `prompthelix/orchestrator.py` has
+been moved to the `examples/` directory. See `examples/orchestrator_demo.py` for
+MessageBus and agent persistence demos as well as a small GA run example.

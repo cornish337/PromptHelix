@@ -81,7 +81,10 @@ class TestOrchestratorGAControl(unittest.TestCase):
         self.controlled_pop_manager.is_paused = False
         self.controlled_pop_manager.should_stop = False
         self.controlled_pop_manager.status = "IDLE"
-        self.controlled_pop_manager.population_path = "mock/integration_population.json" # Added this line
+        # These are accessed by GeneticAlgorithmRunner when creating experiment_parameters
+        self.controlled_pop_manager.population_size = 5 # Mocked value
+        self.controlled_pop_manager.elitism_count = 1   # Mocked value
+        # self.controlled_pop_manager.population_path = "mock/integration_population.json" # Not needed on PM mock
         self.controlled_pop_manager.message_bus = self.message_bus # Runner might use this via PM
         # Ensure methods that return values are configured if the runner uses them directly
         self.controlled_pop_manager.get_fittest_individual.return_value = self.controlled_pop_manager.population[0]
@@ -89,7 +92,7 @@ class TestOrchestratorGAControl(unittest.TestCase):
 
     @patch('prompthelix.orchestrator.PopulationManager', new_callable=MagicMock)
     # No longer patching time.sleep for the orchestrator's pause loop here
-    def test_main_ga_loop_pause_and_resume(self, MockPmConstructorInOrchestrator):
+    async def test_main_ga_loop_pause_and_resume(self, MockPmConstructorInOrchestrator): # Changed to async def
         # Configure the patched PopulationManager constructor in orchestrator.py
         # to return our MagicMock instance.
         MockPmConstructorInOrchestrator.return_value = self.controlled_pop_manager
@@ -165,7 +168,7 @@ class TestOrchestratorGAControl(unittest.TestCase):
 
         self.controlled_pop_manager.evolve_population.side_effect = custom_evolve_side_effect
 
-        main_ga_loop(
+        await main_ga_loop( # Added await
             task_desc="test task", keywords=["test"],
             num_generations=num_generations, population_size=5, elitism_count=1,
             execution_mode=ExecutionMode.TEST,
@@ -191,7 +194,7 @@ class TestOrchestratorGAControl(unittest.TestCase):
 
 
     @patch('prompthelix.orchestrator.PopulationManager', new_callable=MagicMock)
-    def test_main_ga_loop_stop(self, MockPmConstructorInOrchestrator):
+    async def test_main_ga_loop_stop(self, MockPmConstructorInOrchestrator): # Changed to async def
         MockPmConstructorInOrchestrator.return_value = self.controlled_pop_manager
 
         self.controlled_pop_manager.reset_mock()
@@ -238,7 +241,7 @@ class TestOrchestratorGAControl(unittest.TestCase):
 
         self.controlled_pop_manager.evolve_population.side_effect = side_effect_evolve_for_stop
 
-        main_ga_loop(
+        await main_ga_loop( # Added await
             task_desc="test task", keywords=["test"],
             num_generations=num_generations_target, population_size=5, elitism_count=1,
             execution_mode=ExecutionMode.TEST,
