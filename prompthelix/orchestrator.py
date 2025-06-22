@@ -277,11 +277,13 @@ def main_ga_loop(
     metrics_logger_instance = logging.getLogger("prompthelix.ga_metrics")
     genetic_ops = GeneticOperators(
         style_optimizer_agent=style_optimizer,
-        metrics_logger=metrics_logger_instance
-    ) # Add settings if needed
+        # metrics_logger=metrics_logger_instance # metrics_logger is not an expected argument
+        mutation_strategies=None, # Pass None to use default, or load from config
+        strategy_settings=global_ph_config.AGENT_SETTINGS.get("GeneticOperatorsStrategySettings")
+    )
 # old
     # Pass the potentially None style_optimizer to GeneticOperators
-    genetic_ops = GeneticOperators(style_optimizer_agent=style_optimizer, strategy_settings=global_ph_config.AGENT_SETTINGS.get("GeneticOperatorsStrategySettings"))
+    # genetic_ops = GeneticOperators(style_optimizer_agent=style_optimizer, strategy_settings=global_ph_config.AGENT_SETTINGS.get("GeneticOperatorsStrategySettings"))
 
 
     # Load and instantiate FitnessEvaluator from configuration
@@ -320,6 +322,7 @@ def main_ga_loop(
         raise ValueError(f"Could not instantiate FitnessEvaluator {FitnessEvaluatorClass.__name__}") from te
 #
 
+    fitness_eval = fitness_eval_instance
 
     pop_manager = PopulationManager(
         genetic_operators=genetic_ops,
@@ -327,13 +330,10 @@ def main_ga_loop(
         prompt_architect_agent=prompt_architect,  # Architect is used for initial prompt generation
         population_size=population_size,
         elitism_count=elitism_count,
-        population_path=actual_population_path,  # Use determined path
         initial_prompt_str=initial_prompt_str,
         parallel_workers=parallel_workers,
         message_bus=message_bus,  # Added
-        agents_used=agent_names,  # Pass the collected agent names/IDs
 
-        wandb_enabled=current_wandb_enabled, # Pass W&B status
 # old
 #        metrics_file_path=metrics_file_path,
 

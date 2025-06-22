@@ -6,7 +6,8 @@ import logging
 from unittest.mock import MagicMock, patch
 
 # Assuming prompthelix.genetics.engine and other necessary modules are in PYTHONPATH
-from prompthelix.genetics.engine import PopulationManager, PromptChromosome, GeneticOperators, FitnessEvaluator
+from prompthelix.genetics.engine import PopulationManager, GeneticOperators, FitnessEvaluator
+from prompthelix.genetics.chromosome import PromptChromosome
 from prompthelix.agents.architect import PromptArchitectAgent
 from prompthelix.agents.results_evaluator import ResultsEvaluatorAgent # Import the base class
 from prompthelix.enums import ExecutionMode
@@ -99,8 +100,7 @@ class TestPopulationManagerPersistence(unittest.TestCase):
             prompt_architect_agent=self.mock_architect_agent,
             population_size=population_size,
             initial_prompt_str=initial_prompt_str,
-            parallel_workers=p_workers,
-            evaluation_timeout=eval_timeout
+            parallel_workers=p_workers
         )
         # Manually add some chromosomes for testing save/load if initialize_population is too complex here
         pm.population = [

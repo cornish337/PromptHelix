@@ -23,7 +23,7 @@ from prompthelix import globals as ph_globals
 from prompthelix.models.user_models import User as UserModel # For get_current_user return type
 from prompthelix.utils import llm_utils
 from prompthelix.orchestrator import main_ga_loop
-from prompthelix.genetics.engine import PromptChromosome
+from prompthelix.genetics.chromosome import PromptChromosome # Updated import
 
 from . import conversation_routes # Added for conversation logs
 from .dependencies import get_current_user, oauth2_scheme

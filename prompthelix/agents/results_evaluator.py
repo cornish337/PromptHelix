@@ -1,5 +1,5 @@
 from prompthelix.agents.base import BaseAgent
-from prompthelix.genetics.engine import PromptChromosome
+from prompthelix.genetics.chromosome import PromptChromosome # Updated import
 from prompthelix.utils.llm_utils import call_llm_api
 from prompthelix.evaluation import metrics as ph_metrics # Added import
 import random  # For placeholder metric generation
