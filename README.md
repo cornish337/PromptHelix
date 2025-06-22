@@ -245,7 +245,7 @@ For a manual production setup, consider the following steps:
 3.  **Database Setup (Production):**
     *   For production, it's highly recommended to use a robust database like PostgreSQL.
     *   Set the `DATABASE_URL` environment variable to point to your production database.
-    *   **Database Migrations**: PromptHelix uses Alembic for managing database schema changes (migrations). This is crucial for updating your database schema in a controlled way as the application evolves, especially in production.
+    *   **Database Migrations**: PromptHelix uses Alembic for managing database schema changes (migrations). Check `alembic/` for migration scripts. This is crucial for updating your database schema in a controlled way as the application evolves, especially in production.
         *   The `init_db()` function called on application startup is suitable for initial table creation in development (especially with SQLite) but does **not** handle schema migrations.
         *   To apply migrations, use Alembic commands. For example, to upgrade your database to the latest schema version:
             ```bash
