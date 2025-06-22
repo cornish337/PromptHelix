@@ -33,6 +33,7 @@
         <p><strong>Parameters Used:</strong></p>
         <pre>{{ version.parameters_used | tojson(indent=2) }}</pre>
         {% endif %}
+        <p><a href="{{ url_for('edit_prompt_version_form_ui', prompt_id=prompt.id, version_id=version.id) }}" class="button-secondary">Edit this version</a></p>
     </li>
     <hr>
     {% endfor %}

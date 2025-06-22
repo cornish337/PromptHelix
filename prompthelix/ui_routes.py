@@ -568,6 +568,65 @@ async def ui_logout_alias(request: Request):
     return RedirectResponse(url=str(request.url_for("ui_logout")))
 
 
+@router.get("/prompts/{prompt_id}/versions/{version_id}/edit_form", name="edit_prompt_version_form_ui")
+async def edit_prompt_version_form_ui(
+    request: Request,
+    prompt_id: int,
+    version_id: int,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user_ui) # Add user dependency for consistency/future use
+):
+    db_prompt = crud.get_prompt(db, prompt_id=prompt_id)
+    if not db_prompt:
+        raise HTTPException(status_code=404, detail=f"Prompt with id {prompt_id} not found.")
+
+    # Ensure the prompt belongs to the user or they have rights (if such logic is added later)
+    # For now, just check existence.
+
+    db_version = crud.get_prompt_version(db, prompt_version_id=version_id)
+    if not db_version or db_version.prompt_id != prompt_id:
+        raise HTTPException(status_code=404, detail=f"Version with id {version_id} not found for prompt {prompt_id}.")
+
+    return templates.TemplateResponse(
+        "edit_prompt_version.html",
+        {"request": request, "prompt": db_prompt, "version": db_version}
+    )
+
+@router.post("/prompts/{prompt_id}/versions/create_from_existing", name="create_prompt_version_from_existing_ui")
+async def create_prompt_version_from_existing_ui(
+    request: Request,
+    prompt_id: int,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user_ui), # Add user dependency
+    content: str = Form(...),
+    original_version_id: int = Form(...) # To know which version it was based on, if needed for logging or other features
+):
+    # Verify the parent prompt exists and user has access (basic check for now)
+    db_prompt = crud.get_prompt(db, prompt_id=prompt_id)
+    if not db_prompt:
+        raise HTTPException(status_code=404, detail=f"Cannot create version for non-existent prompt {prompt_id}.")
+
+    # Optional: Check if original_version_id is valid for this prompt_id if you need to use it
+    # original_db_version = crud.get_prompt_version(db, prompt_version_id=original_version_id)
+    # if not original_db_version or original_db_version.prompt_id != prompt_id:
+    #     raise HTTPException(status_code=400, detail="Invalid original version ID for the given prompt.")
+
+    version_data = schemas.PromptVersionCreate(content=content)
+    # Potentially copy other fields from original_db_version if needed, e.g., parameters_used
+    # For now, only content is specified in the form.
+
+    new_db_version = crud.create_prompt_version(db, version=version_data, prompt_id=prompt_id)
+    if not new_db_version:
+        # This case should ideally be handled by exceptions in crud if creation fails
+        raise HTTPException(status_code=500, detail="Failed to create new prompt version.")
+
+    message = f"New version (ID: {new_db_version.id}) created successfully based on version {original_version_id}."
+    redirect_url = str(request.url_for('view_prompt_ui', prompt_id=prompt_id))
+    redirect_url += f"?message={message}&new_version_id={new_db_version.id}"
+
+    return RedirectResponse(url=redirect_url, status_code=HTTP_303_SEE_OTHER)
+
+
 @router.get("/dashboard", response_class=HTMLResponse, name="ui_dashboard")
 async def get_dashboard_ui(request: Request):
     """Serves the UI page for the real-time monitoring dashboard."""
