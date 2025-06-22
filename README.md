@@ -358,11 +358,10 @@ PromptHelix also provides an API endpoint to trigger the genetic algorithm.
     ```
 
 
-3.  **Try the Prompt Manager UI** *(deprecated)*:
-    The original in-memory Prompt Manager has been replaced by the
-    database-backed `PromptService`. The existing UI still works but now
-    delegates all operations to `PromptService`. See "Setup and Run the
-    Web UI" for details.
+
+3.  **Try the Prompt UI**:
+    The UI for adding and viewing prompts is backed by `PromptService` and can be accessed as described in the "Setup and Run the Web UI" section.
+
 
 4.  **Expected Response**:
     The endpoint now launches the experiment asynchronously. It immediately
