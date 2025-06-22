@@ -3,7 +3,6 @@ import json
 import os
 import random
 import copy # Added for deepcopy
-import asyncio # Added for asyncio.gather
 from typing import List, Optional, Dict # Added Dict
 import logging # Added for logging
 from prompthelix.genetics.mutation_strategies import NoOperationMutationStrategy # Added import
@@ -147,7 +146,7 @@ class FitnessEvaluator:
         self.llm_settings = llm_settings if llm_settings is not None else {}
 
 
-    async def evaluate(self, chromosome: PromptChromosome, task_description: str, success_criteria: Optional[Dict] = None) -> float:
+    def evaluate(self, chromosome: PromptChromosome, task_description: str, success_criteria: Optional[Dict] = None) -> float:
         """
         Evaluates a chromosome's fitness.
         In TEST mode, simulates LLM output. Otherwise, this basic evaluator might not be fully functional
@@ -192,8 +191,7 @@ class FitnessEvaluator:
             "success_criteria": success_criteria if success_criteria is not None else {}
         }
 
-        # ResultsEvaluatorAgent.process_request is now async
-        evaluation_result = await self.results_evaluator_agent.process_request(eval_request_data)
+        evaluation_result = self.results_evaluator_agent.process_request(eval_request_data)
 
         fitness_score = evaluation_result.get("fitness_score", 0.0)
         chromosome.fitness_score = fitness_score
@@ -228,9 +226,9 @@ class PopulationManager:
         self.is_paused: bool = False
         self.should_stop: bool = False
 
-    async def initialize_population(self, initial_task_description: str, initial_keywords: List[str],
-                                  constraints: Optional[Dict] = None,
-                                  success_criteria: Optional[Dict] = None): # Removed initial_prompt_str, use self.initial_prompt_str
+    def initialize_population(self, initial_task_description: str, initial_keywords: List[str],
+                              constraints: Optional[Dict] = None,
+                              success_criteria: Optional[Dict] = None):
         self.status = "INITIALIZING"
         self.broadcast_ga_update(event_type="population_initialization_started")
         self.population = []
@@ -251,28 +249,21 @@ class PopulationManager:
         # Assuming PromptArchitectAgent.process_request is async for now
         num_to_generate = self.population_size - len(self.population)
 
-        # Create a list of tasks for asyncio.gather
-        arch_tasks = []
+        new_chromosomes = []
         for _ in range(num_to_generate):
             request_data = {
                 "task_description": initial_task_description,
                 "keywords": initial_keywords,
                 "constraints": constraints if constraints is not None else {}
             }
-            # Assuming process_request is async
-            arch_tasks.append(self.prompt_architect_agent.process_request(request_data))
+            new_chromosomes.append(self.prompt_architect_agent.process_request(request_data))
 
-        if arch_tasks:
-            new_chromosomes = await asyncio.gather(*arch_tasks)
+        if new_chromosomes:
             self.population.extend(new_chromosomes)
 
         # Evaluate the initial population
-        eval_tasks = []
         for chromo in self.population:
-            eval_tasks.append(self.fitness_evaluator.evaluate(chromo, initial_task_description, success_criteria))
-
-        if eval_tasks:
-            await asyncio.gather(*eval_tasks)
+            self.fitness_evaluator.evaluate(chromo, initial_task_description, success_criteria)
 
         self.population.sort(key=lambda c: c.fitness_score, reverse=True)
         self.status = "IDLE" # Or RUNNING if it immediately proceeds to evolve
@@ -365,14 +356,14 @@ class PopulationManager:
                 payload["data"].update(additional_data)
             self.message_bus.connection_manager.broadcast_json(payload)
 
-    async def evolve_population(self, task_description: str, success_criteria: Optional[Dict] = None, db_session=None, experiment_run=None): # Added success_criteria, made async
+    def evolve_population(self, task_description: str, success_criteria: Optional[Dict] = None, db_session=None, experiment_run=None):
         if not self.population:
             return
 
         # Evaluate fitness for each chromosome
         # This part needs to be async if self.fitness_evaluator.evaluate is async
         for chromosome in self.population:
-            await self.fitness_evaluator.evaluate(chromosome, task_description, success_criteria)
+            self.fitness_evaluator.evaluate(chromosome, task_description, success_criteria)
 
         # Sort population by fitness score in descending order
         self.population.sort(key=lambda c: c.fitness_score, reverse=True)

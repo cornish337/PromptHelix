@@ -282,7 +282,7 @@ class ResultsEvaluatorAgent(BaseAgent):
         logger.info(f"Agent '{self.agent_id}': Constraint check result - Metrics={metrics}, Errors#={len(errors)}")
         return {"metrics": metrics, "errors": errors}
 
-    async def _analyze_content(self, llm_output: str, task_desc: str, prompt_chromosome: PromptChromosome) -> tuple[dict, list]:
+    def _analyze_content(self, llm_output: str, task_desc: str, prompt_chromosome: PromptChromosome) -> tuple[dict, list]:
         """
         Analyzes LLM output content using another LLM for quality, relevance, coherence, etc.
         Falls back to placeholder values if LLM analysis fails.
@@ -349,7 +349,7 @@ Example:
 
         # Pass self.db if available and needed by call_llm_api. Assuming self.db might be None.
         # call_llm_api is designed to handle db=None.
-        response_str = await call_llm_api(prompt_str_for_llm, provider=self.llm_provider, model=self.evaluation_llm_model, db=self.db)
+        response_str = call_llm_api(prompt_str_for_llm, provider=self.llm_provider, model=self.evaluation_llm_model, db=self.db)
 
         if response_str in LLM_API_ERROR_STRINGS:
             logger.warning(f"Agent '{self.agent_id}': LLM call for content analysis failed with error code: {response_str}. Using fallback metrics.")
@@ -418,7 +418,7 @@ Example:
 
         return llm_derived_metrics, errors
 
-    async def process_request(self, request_data: dict) -> dict:
+    def process_request(self, request_data: dict) -> dict:
         """
         Evaluates the LLM output for a given prompt, primarily using another LLM for content analysis.
 
@@ -462,7 +462,7 @@ Example:
         errors.extend(constraint_feedback.get("errors", [])) # Constraint violations are added to 'errors'
         metrics.update(constraint_feedback.get("metrics", {}))
         
-        content_metrics, content_errors = await self._analyze_content(llm_output, task_desc, prompt_chromosome)
+        content_metrics, content_errors = self._analyze_content(llm_output, task_desc, prompt_chromosome)
         metrics.update(content_metrics)
         errors.extend(content_errors) # Errors from the LLM analysis process itself
         
@@ -502,11 +502,7 @@ Example:
 
         # Broadcast the evaluation result if a bus is available
         if self.message_bus:
-            try:
-                loop = asyncio.get_running_loop()
-                loop.create_task(self.message_bus.broadcast_message("evaluation_result", result, sender_id=self.agent_id))
-            except RuntimeError:
-                asyncio.run(self.message_bus.broadcast_message("evaluation_result", result, sender_id=self.agent_id))
+            asyncio.run(self.message_bus.broadcast_message("evaluation_result", result, sender_id=self.agent_id))
 
         # Debug logging before returning
         logger.info(f"REA.process_request: Type of prompt_chromosome input: {type(request_data.get('prompt_chromosome'))}")
