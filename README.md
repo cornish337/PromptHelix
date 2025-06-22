@@ -1,3 +1,4 @@
+
 # PromptHelix
 
 A Python framework for AI prompt generation and optimization using a Prompt DNA System.
@@ -132,8 +133,9 @@ You can set these variables in a few ways:
     `setup.py` reads this same file to populate `install_requires`, keeping
     dependency definitions in a single place and reducing drift.
 4.  **Initialize the database:**
-    If using SQLite (the default for development), the database (`prompthelix.db`) will be automatically created and initialized on the first run via `init_db()` in `main.py`. For production, see the "Deployment" section for database setup and migrations.
-    This SQLite database file is not included in the repository and will be created automatically when you run the application.
+    When the application first runs (e.g., `uvicorn prompthelix.main:app`), the `init_db()` function is called. For SQLite (the default for development), this will create the database file (e.g., `prompthelix.db`) and all necessary tables if they don't already exist. This is convenient for getting started quickly in a development environment.
+    For production environments, and for managing database schema changes over time (migrations) in any environment, PromptHelix uses Alembic. See the "Database Migrations" subsection under "Manual Deployment" for details on using Alembic.
+    The SQLite database file is not included in the repository and will be created automatically.
 5.  **Run the Web UI (Development Server):**
     ```bash
     uvicorn prompthelix.main:app --reload
@@ -243,13 +245,15 @@ For a manual production setup, consider the following steps:
 3.  **Database Setup (Production):**
     *   For production, it's highly recommended to use a robust database like PostgreSQL.
     *   Set the `DATABASE_URL` environment variable to point to your production database.
-    *   **Database Migrations**: If you are using a database like PostgreSQL, you will need to manage database schema changes. It's mentioned that the project might consider Alembic. If Alembic is integrated (check `prompthelix/alembic`), you would typically run migrations like this:
-        ```bash
-        # Ensure ALEMBIC_CONFIG is set or alembic.ini is configured
-        cd /path/to/PromptHelix
-        alembic upgrade head
-        ```
-        Run this command whenever deploying to a new environment so your production database schema matches the models. If Alembic is not yet fully set up, you might need to initialize it or use manual SQL scripts for schema management. The current `init_db()` is for SQLite and development.
+    *   **Database Migrations**: PromptHelix uses Alembic for managing database schema changes (migrations). This is crucial for updating your database schema in a controlled way as the application evolves, especially in production.
+        *   The `init_db()` function called on application startup is suitable for initial table creation in development (especially with SQLite) but does **not** handle schema migrations.
+        *   To apply migrations, use Alembic commands. For example, to upgrade your database to the latest schema version:
+            ```bash
+            # Ensure your DATABASE_URL environment variable is set correctly for the target database
+            alembic upgrade head
+            ```
+        *   You should run `alembic upgrade head` when deploying new versions of the application to ensure your database schema is up to date.
+        *   When creating new models or modifying existing ones, you'll need to generate new migration scripts with Alembic (e.g., `alembic revision -m "create_new_table"` and then edit the script).
 
 4.  **Environment Variables:**
     Ensure all required environment variables (API keys, `DATABASE_URL`, etc.) are securely set in your production environment.
