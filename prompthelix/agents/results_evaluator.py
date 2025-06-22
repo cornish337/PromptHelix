@@ -15,7 +15,13 @@ logger = logging.getLogger(__name__)
 # Default knowledge filename if nothing else is provided
 FALLBACK_LLM_PROVIDER = "openai"
 FALLBACK_EVAL_MODEL = "gpt-4"
-FALLBACK_FITNESS_WEIGHTS = {"constraint_adherence": 0.5, "llm_quality_assessment": 0.5}
+# Weights for calculating a prompt's overall fitness score if no
+# configuration is provided via settings or AGENT_SETTINGS.  These
+# values balance constraint adherence and LLM-assessed quality equally.
+FALLBACK_FITNESS_WEIGHTS = {
+    "constraint_adherence": 0.5,
+    "llm_quality_assessment": 0.5,
+}
 FALLBACK_KNOWLEDGE_FILE = "results_evaluator_config.json"
 
 
