@@ -131,11 +131,3 @@ def initialize_ga_metrics():
 # For now, we'll rely on them being set during the GA lifecycle.
 # If the app restarts, gauges will reset to 0 by default if not set.
 # Counters will effectively restart from 0 for the new process.
-"""old
-This block previously exposed a `/metrics` endpoint and helper
-functions for updating GA metrics. The implementation was replaced by
-`initialize_ga_metrics` and Prometheus gauges above and is retained
-only for reference. All former helper functions such as
-``update_ga_metrics`` and ``record_generation`` have been removed as
-they are no longer used.
-"""
