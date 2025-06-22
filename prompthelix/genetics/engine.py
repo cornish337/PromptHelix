@@ -571,36 +571,71 @@ class PopulationManager:
         except (IOError, OSError) as e:
             logger.error(f"Error saving population to {file_path}: {e}", exc_info=True)
 
-def load_population(self, file_path: Optional[str] = None) -> None:
-    file_path = file_path or self.population_path
-    if not file_path or not os.path.exists(file_path):
-        logger.info(f"PopulationManager: No population file at {file_path}; starting fresh.")
+    def load_population(self, file_path: Optional[str] = None) -> None:
+        file_path = file_path or self.population_path
+        if not file_path or not os.path.exists(file_path):
+            logger.info(f"PopulationManager: No population file at {file_path}; starting fresh.")
         self.population = []
         self.generation_number = 0
         return
 
-    try:
-        with open(file_path, "r", encoding="utf-8") as fh:
-            content = fh.read()
-            if not content.strip():  # Check for empty or whitespace-only content
-                logger.error(f"Error loading population from {file_path}: File is empty.")
+        try:
+            with open(file_path, "r", encoding="utf-8") as fh:
+                content = fh.read()
+                if not content.strip():  # Check for empty or whitespace-only content
+                    logger.error(f"Error loading population from {file_path}: File is empty.")
+                    self.population = []
+                    self.generation_number = 0
+                    return
+
+                data = json.loads(content)
+
+            if not isinstance(data, dict):
+                logger.error(
+                    f"Error loading population from {file_path}: File content is not a JSON object (dictionary). "
+                    f"Loaded type: {type(data)}"
+                )
                 self.population = []
                 self.generation_number = 0
                 return
 
-            data = json.loads(content)
+            self.generation_number = data.get("generation_number", 0)
+            loaded_population_data = data.get("population", [])
+            # Assuming PromptChromosome can be reconstructed from the dicts in loaded_population_data
+            # This part might need adjustment based on how PromptChromosome is serialized/deserialized
+            self.population = []
+            for chromo_data in loaded_population_data:
+                # This is a placeholder for actual deserialization logic
+                # For example, if PromptChromosome takes genes, fitness_score, etc. in its constructor:
+                try:
+                    chromosome = PromptChromosome(
+                        genes=chromo_data.get("genes", []),
+                        # id=chromo_data.get("id"), # ID should be regenerated or handled carefully
+                        fitness_score=chromo_data.get("fitness_score", 0.0)
+                    )
+                    chromosome.parent_ids = chromo_data.get("parents", [])
+                    chromosome.mutation_strategy = chromo_data.get("mutation_strategy")
+                    self.population.append(chromosome)
+                except Exception as e_chromo:
+                    logger.error(f"Error deserializing chromosome data: {chromo_data}. Error: {e_chromo}", exc_info=True)
+            logger.info(f"PopulationManager: Population loaded successfully from {file_path}. Generation: {self.generation_number}, Size: {len(self.population)}")
 
-        if not isinstance(data, dict):
-            logger.error(
-                f"Error loading population from {file_path}: File content is not a JSON object (dictionary). "
-                f"Loaded type: {type(data)}"
-            )
+        except FileNotFoundError:
+            logger.info(f"PopulationManager: Population file {file_path} not found. Starting fresh.")
             self.population = []
             self.generation_number = 0
-            return
-
-        self.generation_number = data.get("generation_number", 0)
-        loaded_population_data = data.get("population", [])
+        except json.JSONDecodeError as e_json:
+            logger.error(f"Error decoding JSON from {file_path}: {e_json}. Initializing empty population.", exc_info=True)
+            self.population = []
+            self.generation_number = 0
+        except (IOError, OSError) as e_io:
+            logger.error(f"IOError/OSError reading population from {file_path}: {e_io}. Initializing empty population.", exc_info=True)
+            self.population = []
+            self.generation_number = 0
+        except Exception as e: # Catch-all for other unexpected errors
+            logger.error(f"Unexpected error loading population from {file_path}: {e}. Initializing empty population.", exc_info=True)
+            self.population = []
+            self.generation_number = 0
 
 
     async def broadcast_ga_update(
