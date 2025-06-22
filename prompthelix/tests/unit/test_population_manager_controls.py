@@ -192,6 +192,7 @@ class TestPopulationManagerControls(unittest.TestCase):
         self.mock_genetic_operators.mutate.return_value = mock_child_chromo.clone()
         self.pop_manager.population = [self.fittest_chromo, self.other_chromo]
 
+
         # evolve_population is synchronous.
         self.pop_manager.evolve_population("task desc")
 

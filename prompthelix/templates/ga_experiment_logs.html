@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+
+{% block title %}GA Experiment Logs - {{ experiment_id }}{% endblock %}
+
+{% block content %}
+<div class="container mx-auto p-4">
+    <div class="flex justify-between items-center mb-4">
+        <h1 class="text-2xl font-bold">GA Experiment Logs: <span class="font-mono text-xl">{{ experiment_id }}</span></h1>
+        <a href="{{ url_for('ui_dashboard') }}" class="text-blue-600 hover:text-blue-800 transition-colors">
+            &larr; Back to Dashboard
+        </a>
+    </div>
+
+    {% if error_message %}
+    <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+        <strong class="font-bold">Error:</strong>
+        <span class="block sm:inline">{{ error_message }}</span>
+    </div>
+    {% endif %}
+
+    {% if logs %}
+    <div class="overflow-x-auto bg-white rounded shadow border border-gray-200">
+        <table class="min-w-full text-sm divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Timestamp</th>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gen</th>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Operation</th>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Chromo ID</th>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fitness</th>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prompt Text (Genes)</th>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Parent IDs</th>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mutation Strategy</th>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Metadata</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+                {% for log_entry in logs %}
+                <tr class="hover:bg-gray-50 transition-colors">
+                    <td class="px-3 py-2 whitespace-nowrap font-mono text-xs">{{ log_entry.timestamp | format_datetime_local }}</td>
+                    <td class="px-3 py-2 whitespace-nowrap text-center text-xs">{{ log_entry.generation }}</td>
+                    <td class="px-3 py-2 whitespace-nowrap">
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full
+                                     {% if log_entry.operation == 'initialization' %} bg-blue-100 text-blue-800
+                                     {% elif log_entry.operation == 'evaluation' %} bg-green-100 text-green-800
+                                     {% elif log_entry.operation == 'crossover' %} bg-purple-100 text-purple-800
+                                     {% elif log_entry.operation == 'mutation' %} bg-yellow-100 text-yellow-800
+                                     {% else %} bg-gray-100 text-gray-800 {% endif %}">
+                            {{ log_entry.operation }}
+                        </span>
+                    </td>
+                    <td class="px-3 py-2 whitespace-nowrap font-mono text-xs" title="{{ log_entry.chromosome_id }}">{{ log_entry.chromosome_id[:8] }}...</td>
+                    <td class="px-3 py-2 whitespace-nowrap text-xs">
+                        {{ "%.4f"|format(log_entry.fitness_score) if log_entry.fitness_score is not none else '-' }}
+                    </td>
+                    <td class="px-3 py-2 text-xs">
+                        <div class="w-48 overflow-hidden overflow-ellipsis whitespace-nowrap" title="{{ log_entry.prompt_text }}">
+                            {{ log_entry.prompt_text }}
+                        </div>
+                    </td>
+                    <td class="px-3 py-2 whitespace-nowrap text-xs">
+                        {% if log_entry.parent_ids %}
+                            {{ log_entry.parent_ids | join(', ') }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td class="px-3 py-2 whitespace-nowrap text-xs">{{ log_entry.mutation_strategy if log_entry.mutation_strategy else '-' }}</td>
+                    <td class="px-3 py-2 text-xs">
+                        {% if log_entry.metadata %}
+                        <div class="w-40 overflow-hidden overflow-ellipsis whitespace-nowrap" title="{{ log_entry.metadata | tojson_pretty }}">
+                            {{ log_entry.metadata | tojson_pretty }}
+                        </div>
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% elif not error_message %}
+    <div class="bg-yellow-50 border border-yellow-300 text-yellow-700 px-4 py-3 rounded relative" role="alert">
+        <strong class="font-bold">No logs found!</strong>
+        <span class="block sm:inline">No GA metrics logs found for this experiment ID, or the log file is empty/missing.</span>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+// Helper function to format ISO datetime string to local timezone and more readable format
+function formatDatetimeLocal(isoString) {
+    if (!isoString) return '-';
+    try {
+        const date = new Date(isoString);
+        // Example: "Oct 28, 2023, 10:35:12 AM"
+        // Adjust options as needed for your preferred format
+        return date.toLocaleString(undefined, {
+            year: 'numeric', month: 'short', day: 'numeric',
+            hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true
+        });
+    } catch (e) {
+        console.error("Error formatting date:", isoString, e);
+        return isoString; // fallback to original string if parsing fails
+    }
+}
+
+// Apply the formatting to all relevant timestamp cells after the page loads
+document.addEventListener('DOMContentLoaded', function() {
+    const timestampCells = document.querySelectorAll('td:first-child.font-mono'); // Assuming first column is timestamp
+    timestampCells.forEach(cell => {
+        const originalTimestamp = cell.textContent.trim();
+        if (originalTimestamp && originalTimestamp !== '-') {
+             // Check if it's already formatted (e.g. by Jinja filter if one was added)
+            if (!originalTimestamp.includes(',')) { // Simple check, adjust if needed
+                cell.textContent = formatDatetimeLocal(originalTimestamp);
+            }
+        }
+    });
+
+    // Make table sortable (optional, basic example using query params)
+    // More advanced would use a JS library or more complex client-side sorting
+    const headers = document.querySelectorAll("th");
+    headers.forEach(header => {
+        header.addEventListener("click", () => {
+            const column = header.innerText.toLowerCase().replace(/\s+/g, '_'); // e.g. "fitness_score"
+            const currentUrl = new URL(window.location);
+            const currentSort = currentUrl.searchParams.get("sort_by");
+            const currentOrder = currentUrl.searchParams.get("order") || "asc";
+
+            let newOrder = "asc";
+            if (currentSort === column && currentOrder === "asc") {
+                newOrder = "desc";
+            }
+            currentUrl.searchParams.set("sort_by", column);
+            currentUrl.searchParams.set("order", newOrder);
+            window.location.href = currentUrl.toString();
+        });
+    });
+});
+</script>
+{% endblock %}

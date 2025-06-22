@@ -57,7 +57,9 @@
                 <button id="ga-pause-btn" class="bg-amber-500 hover:bg-amber-600 text-white font-bold py-2 px-4 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150 ease-in-out">Pause</button>
                 <button id="ga-resume-btn" class="bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 px-4 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150 ease-in-out">Resume</button>
                 <button id="ga-cancel-btn" class="bg-rose-500 hover:bg-rose-600 text-white font-bold py-2 px-4 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150 ease-in-out">Cancel</button>
+                <a id="ga-logs-link" href="#" class="hidden bg-sky-500 hover:bg-sky-600 text-white font-bold py-2 px-4 rounded transition-colors duration-150 ease-in-out">View Detailed Logs</a>
             </div>
+            <div id="ga-run-id-display" class="mt-2 text-sm text-gray-600">Experiment Run ID: <span class="font-mono">-</span></div>
             <!-- Chart.js Canvas -->
             <div class="mt-4 flex items-center space-x-3">
                 <input type="checkbox" id="toggle-chart" class="h-4 w-4" checked>
@@ -169,18 +171,22 @@
         const gaStdDevFitness = document.getElementById('ga-stddev-fitness'); // New
         const gaAgentsUsed = document.getElementById('ga-agents-used');
         const gaFittestChromosome = document.getElementById('ga-fittest-chromosome');
-        const populationSampleContainer = document.getElementById('population-sample-container'); // Added
+        const populationSampleContainer = document.getElementById('population-sample-container');
         const logsContainer = document.getElementById('logs-container');
         const agentMetricsData = document.getElementById('agent-metrics-data');
-        const debugLogsContainer = document.getElementById('debug-logs-container'); // Add this
-        const toggleDebugLogs = document.getElementById('toggle-debug-logs'); // Add this
+        const debugLogsContainer = document.getElementById('debug-logs-container');
+        const toggleDebugLogs = document.getElementById('toggle-debug-logs');
 
         const gaPauseBtn = document.getElementById('ga-pause-btn');
         const gaResumeBtn = document.getElementById('ga-resume-btn');
         const gaCancelBtn = document.getElementById('ga-cancel-btn');
+        const gaLogsLink = document.getElementById('ga-logs-link'); // Link for detailed logs
+        const gaRunIdDisplay = document.getElementById('ga-run-id-display').querySelector('span'); // Span to show current run_id
+
 
         let fitnessChart = null;
-        let gaHistoryData = [];
+        let gaHistoryData = []; // To store {generation, best_fitness, fitness_mean, fitness_min} for CSV download
+        let currentGaRunId = null; // To store the current experiment run ID for the logs link
         const chartData = {
             labels: [],
             datasets: [
@@ -266,6 +272,34 @@
             }
             gaFittestChromosome.textContent = data.fittest_chromosome_string || 'N/A';
             updateGaControlButtons(data.status);
+
+            // Update current run_id and logs link
+            if (data.run_id) { // Assuming run_id is part of the GA status update
+                currentGaRunId = data.run_id;
+                gaRunIdDisplay.textContent = currentGaRunId;
+                if (gaLogsLink) {
+                    // Construct URL for the logs page, assuming ui_routes.py has a route named 'ui_view_ga_experiment_logs'
+                    // The actual URL construction might need adjustment based on FastAPI's url_for or how base URLs are handled client-side.
+                    // For simplicity, we'll use a relative path.
+                    gaLogsLink.href = `/ui/experiments/${currentGaRunId}/logs`;
+                    gaLogsLink.classList.remove('hidden');
+                }
+            } else if (data.status === 'IDLE' || data.status === 'COMPLETED' || data.status === 'ERROR' || data.status === 'STOPPED') {
+                // If GA is not active, or currentGaRunId is not part of this specific message,
+                // keep the existing currentGaRunId (if any from a previous run) or hide the link if no run_id is active.
+                // If currentGaRunId is already set from a completed/stopped run, the link should remain.
+                // If there's no currentGaRunId at all (e.g. fresh dashboard load, no active/past run info with run_id), hide.
+                if (!currentGaRunId && gaLogsLink) {
+                     gaLogsLink.classList.add('hidden');
+                     gaRunIdDisplay.textContent = '-';
+                } else if (currentGaRunId && gaLogsLink) {
+                    // Ensure link is visible if a run_id is set, even if current message doesn't have it but status is inactive
+                    gaLogsLink.href = `/ui/experiments/${currentGaRunId}/logs`;
+                    gaLogsLink.classList.remove('hidden');
+                    gaRunIdDisplay.textContent = currentGaRunId;
+                }
+            }
+
 
             if (data.agent_metrics) {
                 const metricsContainer = document.getElementById('agent-metrics-data');
@@ -522,6 +556,18 @@
                         gaAgentsUsed.textContent = 'N/A';
                     }
                     gaFittestChromosome.textContent = statusData.fittest_chromosome_string || 'N/A';
+
+                    if (statusData.run_id) { // Assuming the /api/ga/status endpoint returns run_id
+                        currentGaRunId = statusData.run_id;
+                        gaRunIdDisplay.textContent = currentGaRunId;
+                        if (gaLogsLink) {
+                            gaLogsLink.href = `/ui/experiments/${currentGaRunId}/logs`;
+                            gaLogsLink.classList.remove('hidden');
+                        }
+                    } else if (gaLogsLink) {
+                        gaLogsLink.classList.add('hidden');
+                        gaRunIdDisplay.textContent = '-';
+                    }
 
                     updateGaControlButtons(statusData.status);
 
