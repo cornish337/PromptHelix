@@ -177,3 +177,7 @@ cython_debug/
 prompthelix.db
 *.db
 *.burp
+
+# Ignore Knowlege
+*.json
+*.jsonl
