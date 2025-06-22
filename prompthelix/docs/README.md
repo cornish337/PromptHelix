@@ -12,13 +12,12 @@ The core components of PromptHelix are organized as follows:
 -   `prompthelix/api/`: Defines the FastAPI endpoints and routing.
 -   `prompthelix/cli.py`: Command-line interface entry point and commands. See detailed CLI usage below.
 -   `prompthelix/config.py`: Application configuration settings. See the main `README.md` for how to configure API keys and database URLs via environment variables.
--   `prompthelix/core/`: Core functionalities like the Prompt DNA system.
 -   `prompthelix/database/`: Database models (SQLAlchemy), session management, and initialization.
 -   `prompthelix/docs/`: Project documentation, including this file and `agent_specifications.md`.
 -   `prompthelix/evaluation/`: Modules for evaluating prompt performance.
--   `prompthelix/genetics/`: Core logic for the genetic algorithm (chromosomes, operators, population).
+-   `prompthelix/genetics/`: Core logic for the genetic algorithm (chromosomes, operators, population), including the Prompt DNA system.
 -   `prompthelix/utils/llm_utils.py`: Utility functions for interacting with various LLM providers.
--   `prompthelix/main.py`: Main FastAPI application entry point.
+-   `prompthelix/main.py`: Main FastAPI application entry point for the web server and API.
 -   `prompthelix/schemas/`: Pydantic schemas for data validation and serialization.
 -   `prompthelix/services/`: Business logic and services.
 -   `prompthelix/tests/`: Unit and integration tests.
@@ -27,8 +26,8 @@ The core components of PromptHelix are organized as follows:
 -   `prompthelix/ui/`: HTML templates and static files for the web UI.
 -   `prompthelix/utils/`: Utility functions and helpers.
 -   `.env.example`: Example environment variable file.
--   `alembic/`: Alembic migration scripts and configuration (if used for DB migrations).
--   `main.py`: (Potentially a root-level script, verify if it's different from `prompthelix/main.py` or if this is a typo in original, assuming `prompthelix/main.py` is the primary one).
+-   `alembic/`: Alembic migration scripts and configuration for database schema management.
+-   `runserver.py`: (Root directory) A convenience script to run the development server (which uses `prompthelix/main.py`).
 -   `requirements.txt`: Project dependencies.
 -   `Dockerfile`: Docker configuration for containerization.
 -   `CONTRIBUTING.md`: Guidelines for contributing (in root directory).
