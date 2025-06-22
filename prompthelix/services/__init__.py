@@ -24,11 +24,8 @@ from .evolution_service import (
     create_experiment_run,
     complete_experiment_run,
     add_chromosome_record,
-
     add_generation_metric,
-
-   # add_generation_metrics,
-
+    add_generation_metrics,
     get_chromosomes_for_run,
     get_experiment_runs,
     get_experiment_run,
@@ -60,6 +57,7 @@ __all__ = [
     "add_chromosome_record",
 
     "add_generation_metric",
+    "add_generation_metrics",
     "get_chromosomes_for_run",
     "get_experiment_runs",
     "get_experiment_run",

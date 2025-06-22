@@ -17,13 +17,11 @@ class TestPopulationManager(unittest.TestCase):
         """Set up common mock objects for PopulationManager tests."""
         self.mock_genetic_ops = MagicMock(spec=GeneticOperators)
 
-        # FitnessEvaluator.evaluate is now async
         self.mock_fitness_eval = MagicMock(spec=FitnessEvaluator)
-        self.mock_fitness_eval.evaluate = unittest.mock.AsyncMock(return_value=0.5) # Make it an AsyncMock
+        self.mock_fitness_eval.evaluate = MagicMock(return_value=0.5)
 
-        # PromptArchitectAgent.process_request is now async
         self.mock_architect_agent = MagicMock(spec=PromptArchitectAgent)
-        self.mock_architect_agent.process_request = unittest.mock.AsyncMock(return_value=PromptChromosome(genes=["Default gene"]))
+        self.mock_architect_agent.process_request = MagicMock(return_value=PromptChromosome(genes=["Default gene"]))
 
         self.mock_message_bus = MagicMock(spec=MessageBus)
         self.mock_connection_manager = MagicMock()
@@ -70,7 +68,7 @@ class TestPopulationManager(unittest.TestCase):
             PopulationManager(self.mock_genetic_ops, self.mock_fitness_eval, self.mock_architect_agent, population_size=10, elitism_count=11)
 
     # --- Test initialize_population ---
-    async def test_initialize_population(self): # Made async
+    def test_initialize_population(self):
         """Test population initialization."""
         pop_size = 5
         manager = PopulationManager(
@@ -79,12 +77,10 @@ class TestPopulationManager(unittest.TestCase):
         )
         
         # Configure architect to return distinct chromosomes for checking
-        # Since process_request is AsyncMock, side_effect should provide awaitables or direct values
         self.mock_architect_agent.process_request.side_effect = [
             PromptChromosome(genes=[f"GeneSet{i}"]) for i in range(pop_size)
         ]
-        # Ensure evaluate is also an AsyncMock for the calls during initialization
-        self.mock_fitness_eval.evaluate = unittest.mock.AsyncMock(return_value=0.6)
+        self.mock_fitness_eval.evaluate = MagicMock(return_value=0.6)
 
 
         task_desc = "Initial task"
@@ -92,7 +88,7 @@ class TestPopulationManager(unittest.TestCase):
         constraints = {"max_len": 10}
         success_criteria_for_init = {"some_init_criterion": True} # For evaluate call
         
-        await manager.initialize_population(task_desc, keywords, constraints, success_criteria=success_criteria_for_init)
+        manager.initialize_population(task_desc, keywords, constraints, success_criteria=success_criteria_for_init)
 
         self.assertEqual(len(manager.population), pop_size)
         self.assertEqual(self.mock_architect_agent.process_request.call_count, pop_size)
@@ -105,7 +101,7 @@ class TestPopulationManager(unittest.TestCase):
         for i, chromo in enumerate(manager.population):
             self.assertEqual(chromo.genes, [f"GeneSet{i}"])
 
-    async def test_initialize_population_with_initial_prompt_str(self): # Made async
+    def test_initialize_population_with_initial_prompt_str(self):
         """Test population initialization when initial_prompt_str is provided."""
         pop_size = 3
         initial_prompt = "This is a seeded prompt."
@@ -119,11 +115,11 @@ class TestPopulationManager(unittest.TestCase):
         self.mock_architect_agent.process_request.side_effect = [
             PromptChromosome(genes=[f"ArchitectGeneSet{i}"]) for i in range(pop_size - 1)
         ]
-        self.mock_fitness_eval.evaluate = unittest.mock.AsyncMock(return_value=0.6) # Ensure evaluate is AsyncMock
+        self.mock_fitness_eval.evaluate = MagicMock(return_value=0.6)
 
         task_desc = "Initial task with seed"
         # initial_prompt_str is not passed to initialize_population anymore
-        await manager.initialize_population(task_desc, keywords=[], constraints={})
+        manager.initialize_population(task_desc, keywords=[], constraints={})
 
         self.assertEqual(len(manager.population), pop_size)
         self.assertEqual(self.mock_architect_agent.process_request.call_count, pop_size - 1)
@@ -140,7 +136,7 @@ class TestPopulationManager(unittest.TestCase):
         self.assertEqual(architect_chromosomes_found, pop_size - 1, "Incorrect number of architect-generated chromosomes.")
         self.assertEqual(manager.generation_number, 0)
 
-    async def test_initialize_population_with_initial_prompt_str_pop_size_1(self): # Made async
+    def test_initialize_population_with_initial_prompt_str_pop_size_1(self):
         """Test population initialization with initial_prompt_str and population size of 1."""
         pop_size = 1
         initial_prompt = "Only seeded prompt."
@@ -149,10 +145,10 @@ class TestPopulationManager(unittest.TestCase):
             population_size=pop_size, elitism_count=0,
             initial_prompt_str=initial_prompt # Passed to __init__
         )
-        self.mock_fitness_eval.evaluate = unittest.mock.AsyncMock(return_value=0.6) # Ensure evaluate is AsyncMock
+        self.mock_fitness_eval.evaluate = MagicMock(return_value=0.6)
 
         task_desc = "Initial task with seed, pop 1"
-        await manager.initialize_population(task_desc, keywords=[], constraints={})
+        manager.initialize_population(task_desc, keywords=[], constraints={})
 
         self.assertEqual(len(manager.population), pop_size)
         self.mock_architect_agent.process_request.assert_not_called() # Architect should not be called
@@ -160,7 +156,7 @@ class TestPopulationManager(unittest.TestCase):
         self.assertTrue(len(manager.population) == 1 and manager.population[0].genes == [initial_prompt])
         self.assertEqual(manager.generation_number, 0)
 
-    async def test_initialize_population_without_initial_prompt_str(self): # Made async
+    def test_initialize_population_without_initial_prompt_str(self):
         """Test population initialization when initial_prompt_str is NOT provided."""
         pop_size = 3
         manager = PopulationManager(
@@ -172,10 +168,10 @@ class TestPopulationManager(unittest.TestCase):
         self.mock_architect_agent.process_request.side_effect = [
             PromptChromosome(genes=[f"ArchitectGeneSet{i}"]) for i in range(pop_size)
         ]
-        self.mock_fitness_eval.evaluate = unittest.mock.AsyncMock(return_value=0.6) # Ensure evaluate is AsyncMock
+        self.mock_fitness_eval.evaluate = MagicMock(return_value=0.6)
 
         task_desc = "Initial task no seed"
-        await manager.initialize_population(task_desc, keywords=[], constraints={})
+        manager.initialize_population(task_desc, keywords=[], constraints={})
 
         self.assertEqual(len(manager.population), pop_size)
         self.assertEqual(self.mock_architect_agent.process_request.call_count, pop_size)
@@ -207,7 +203,7 @@ class TestPopulationManager(unittest.TestCase):
 
 
     # --- Test evolve_population ---
-    async def test_evolve_population_flow(self): # Made async
+    def test_evolve_population_flow(self):
         """Test the overall flow of evolve_population."""
         pop_size = 4
         elitism_count = 1
@@ -252,7 +248,7 @@ class TestPopulationManager(unittest.TestCase):
 
         task_desc = "Evolution task"
         # evolve_population now takes success_criteria
-        await manager.evolve_population(task_desc, success_criteria={})
+        manager.evolve_population(task_desc, success_criteria={})
 
         # 1. Test fitness_evaluator.evaluate calls
         self.assertEqual(self.mock_fitness_eval.evaluate.call_count, pop_size)
@@ -284,14 +280,14 @@ class TestPopulationManager(unittest.TestCase):
         found_mutated_child = any("_mutated" in gene for chromo in manager.population for gene in chromo.genes)
         self.assertTrue(found_mutated_child, "Mutated offspring not found in the new population.")
 
-    async def test_evolve_population_empty(self): # Made async
+    def test_evolve_population_empty(self):
         """Test evolve_population with an initially empty population."""
         manager = PopulationManager(
             self.mock_genetic_ops, self.mock_fitness_eval, self.mock_architect_agent,
             population_size=5, elitism_count=1
         )
         # manager.population is []
-        await manager.evolve_population("Test task") # Added await
+        manager.evolve_population("Test task")
         self.assertEqual(manager.generation_number, 0, "Generation number should not change for empty population.")
         self.assertEqual(len(manager.population), 0, "Population should remain empty.")
         self.mock_fitness_eval.evaluate.assert_not_called()
@@ -426,7 +422,7 @@ class TestPopulationManager(unittest.TestCase):
         self.assertAlmostEqual(data["fitness_std_dev"], 0.0) # stdev of a single value is 0 or not well-defined, implementation returns 0.0
 
     @patch('prompthelix.genetics.engine.PopulationManager.broadcast_ga_update')
-    async def test_initialize_population_broadcast_calls(self, mock_broadcast): # Made async
+    def test_initialize_population_broadcast_calls(self, mock_broadcast):
         """Test that initialize_population calls broadcast_ga_update correctly."""
         pop_size = 2
         manager = PopulationManager(
@@ -436,10 +432,10 @@ class TestPopulationManager(unittest.TestCase):
         self.mock_architect_agent.process_request.side_effect = [
             PromptChromosome(genes=[f"GeneSet{i}"]) for i in range(pop_size)
         ]
-        self.mock_fitness_eval.evaluate = unittest.mock.AsyncMock(return_value=0.6)
+        self.mock_fitness_eval.evaluate = MagicMock(return_value=0.6)
 
 
-        await manager.initialize_population("task_desc", keywords=[], constraints={}) # Added await
+        manager.initialize_population("task_desc", keywords=[], constraints={})
 
         expected_calls = [
             # call(event_type="ga_manager_initialized"), # __init__ no longer calls broadcast
@@ -462,7 +458,7 @@ class TestPopulationManager(unittest.TestCase):
 
 
     @patch('prompthelix.genetics.engine.PopulationManager.broadcast_ga_update')
-    async def test_evolve_population_broadcast_calls(self, mock_broadcast): # Made async
+    def test_evolve_population_broadcast_calls(self, mock_broadcast):
         """Test that evolve_population calls broadcast_ga_update at key stages."""
         pop_size = 2
         manager = PopulationManager(
@@ -483,7 +479,7 @@ class TestPopulationManager(unittest.TestCase):
         self.mock_genetic_ops.mutate.side_effect = lambda c, **kwargs: c # Return as is
 
         # evolve_population now also takes success_criteria
-        await manager.evolve_population("evolution_task", success_criteria={}) # Added await and success_criteria
+        manager.evolve_population("evolution_task", success_criteria={})
 
         # Check the sequence of broadcast calls from evolve_population
         # evolve_population in engine.py does not currently have broadcast calls.
