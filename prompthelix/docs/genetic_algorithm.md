@@ -63,7 +63,7 @@ This class provides the mechanisms for creating new generations of prompts:
 
 The `evolve_population` method in `PopulationManager` executes the core GA steps in sequence:
 
-1.  **Evaluate Fitness**: For each `PromptChromosome` in the current population, its fitness is determined by the `FitnessEvaluator`. This step is now performed in parallel for all chromosomes using Python's `concurrent.futures.ProcessPoolExecutor`. This allows multiple chromosomes to be evaluated simultaneously, significantly speeding up the evaluation phase, especially for large populations or when fitness evaluation involves time-consuming operations (like actual LLM calls). The `FitnessEvaluator` itself involves simulating an LLM call and using the `ResultsEvaluatorAgent`.
+1.  **Evaluate Fitness**: For each `PromptChromosome` in the current population, its fitness is determined by the `FitnessEvaluator`. At present this evaluation is carried out sequentially. The `parallel_workers` setting is included for potential future support of parallel execution using `concurrent.futures.ProcessPoolExecutor` or similar. The `FitnessEvaluator` itself involves simulating an LLM call and using the `ResultsEvaluatorAgent`.
 2.  **Sort Population**: The entire population is sorted by the newly calculated fitness scores, from highest to lowest.
 3.  **Apply Elitism**: The top N individuals (defined by `elitism_count`) are directly copied to the next generation's population list.
 4.  **Generate Offspring**:

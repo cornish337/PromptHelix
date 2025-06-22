@@ -198,15 +198,23 @@ class TestAgentPersistence(unittest.TestCase):
         agent_dummy.save_knowledge()
 
         with open(temp_file, 'w') as f:
-            f.write("this is not valid json")
+            f.write("this is not valid json {") # Ensure it's definitely invalid JSON
 
-        with patch('logging.error') as mock_log_error:
+        # Patch the specific logger used by MetaLearnerAgent
+        with patch('prompthelix.agents.meta_learner.logger.error') as mock_log_error:
             agent = MetaLearnerAgent(knowledge_file_path=temp_file, message_bus=self.mock_bus)
-            # Compare with the structure _get_default_knowledge provides
+
             expected_default_kb = agent._default_knowledge_base_structure
             self.assertEqual(agent.knowledge_base, expected_default_kb,
                              "MetaLearnerAgent should fall back to default knowledge structure on corrupted file.")
-            mock_log_error.assert_called()
+
+            found_log = False
+            for call_args in mock_log_error.call_args_list:
+                log_message = call_args[0][0] # First positional argument
+                if f"Agent '{agent.agent_id}' failed to load knowledge due to JSON decoding error" in log_message:
+                    found_log = True
+                    break
+            self.assertTrue(found_log, "Expected error log for JSON decoding failure not found.")
 
 if __name__ == '__main__':
     unittest.main()
