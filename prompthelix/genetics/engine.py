@@ -571,10 +571,10 @@ class PopulationManager:
         except (IOError, OSError) as e:
             logger.error(f"Error saving population to {file_path}: {e}", exc_info=True)
 
-def load_population(self, file_path: Optional[str] = None) -> None:
-    file_path = file_path or self.population_path
-    if not file_path or not os.path.exists(file_path):
-        logger.info(f"PopulationManager: No population file at {file_path}; starting fresh.")
+    def load_population(self, file_path: Optional[str] = None) -> None:
+        file_path = file_path or self.population_path
+        if not file_path or not os.path.exists(file_path):
+            logger.info(f"PopulationManager: No population file at {file_path}; starting fresh.")
         self.population = []
         self.generation_number = 0
         return
