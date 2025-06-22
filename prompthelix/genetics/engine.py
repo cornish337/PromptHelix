@@ -171,6 +171,7 @@ class FitnessEvaluator:
                 f"Keywords found: {keywords_snippet}. "
                 f"Random number: {random_num}"
             )
+            logger.debug(f"FitnessEvaluator: ExecutionMode is TEST. Simulated LLM output for chromosome {chromosome.id}: \"{llm_output[:100]}...\"")
         else:
             # In REAL mode, this basic FitnessEvaluator would need to call an LLM
             # to get the llm_output based on prompt_string.
@@ -187,10 +188,14 @@ class FitnessEvaluator:
             # This is consistent with it being a "small wrapper for tests".
             # A real FitnessEvaluator would handle the llm_utils.call_llm_api itself.
             logger.debug(f"FitnessEvaluator: ExecutionMode is not TEST. LLM output is empty for chromosome {chromosome.id}.")
+
             pass # llm_output remains "" if not TEST mode, to be evaluated by REA
 
         if self.execution_mode == ExecutionMode.TEST: # Added this line to ensure the log is conditional
             logger.debug(f"FitnessEvaluator: ExecutionMode is TEST. Simulated LLM output for chromosome {chromosome.id}: \"{llm_output[:100]}...\"")
+
+
+            # llm_output remains "" as initialized
 
 
         eval_request_data = {

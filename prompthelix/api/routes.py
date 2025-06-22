@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session as DbSession # Use DbSession for type hinting
 from sqlalchemy.exc import IntegrityError
@@ -6,6 +7,7 @@ from typing import List, Optional
 from pathlib import Path
 import asyncio
 import subprocess
+import traceback # Added for formatting traceback
 from datetime import datetime, timedelta
 import secrets
 import uuid # Added for task_id generation
@@ -478,7 +480,8 @@ def list_chromosomes_for_run(
 async def test_llm_prompt_route(request_data: schemas.LLMTestRequest, db: DbSession = Depends(get_db)):
 
     try:
-        response_text = await llm_utils.call_llm_api(
+        # llm_utils.call_llm_api is a synchronous function, so remove await
+        response_text = llm_utils.call_llm_api(
             prompt=request_data.prompt_text, provider=request_data.llm_service, db=db
         )
         try:
@@ -489,8 +492,18 @@ async def test_llm_prompt_route(request_data: schemas.LLMTestRequest, db: DbSess
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:
+        # Log the exception with traceback to the server console
         print(f"Unexpected error in test_llm_prompt_route: {e}")
-        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
+        traceback.print_exc()
+        # Return a JSONResponse with traceback
+        return JSONResponse(
+            status_code=500,
+            content={
+                "message": "An unexpected error occurred in test_llm_prompt_route.",
+                "detail": str(e),
+                "traceback": traceback.format_exc(),
+            },
+        )
 
 @router.get("/api/llm/statistics", response_model=List[schemas.LLMStatistic], name="get_llm_statistics", tags=["LLM Utilities"], summary="Get LLM usage statistics", description="Retrieves statistics on the usage of different LLM services, such as call counts.")
 async def get_llm_statistics_route(db: DbSession = Depends(get_db)):

@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Edit Prompt: {{ prompt.name }}</h1>
+<p>Creating a new version based on Version {{ version.version_number }} (ID: {{ version.id }})</p>
+
+<form method="post" action="{{ url_for('create_prompt_version_from_existing_ui', prompt_id=prompt.id) }}">
+    <input type="hidden" name="original_version_id" value="{{ version.id }}">
+
+    <div>
+        <label for="content">Prompt Content:</label>
+        <textarea name="content" id="content" rows="15" style="width: 100%;">{{ version.content }}</textarea>
+    </div>
+
+    <button type="submit">Save Changes as New Version</button>
+    <a href="{{ url_for('view_prompt_ui', prompt_id=prompt.id) }}" class="button-secondary">Cancel</a>
+</form>
+
+{% endblock %}
