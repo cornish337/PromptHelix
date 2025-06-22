@@ -136,11 +136,11 @@ async def ui_index_page_alias(request: Request):
     return RedirectResponse(url=str(request.url_for("ui_index")))
 
 @router.get("/prompts", name="list_prompts_ui")
-async def list_prompts_ui(request: Request, db: Session = Depends(get_db), new_version_id: Optional[int] = Query(None)):
+async def list_prompts_ui(request: Request, db: Session = Depends(get_db), new_version_id: Optional[int] = Query(None), message: Optional[str] = Query(None)):
     db_prompts = crud.get_prompts(db)
     return templates.TemplateResponse(
         "prompts.html",
-        {"request": request, "prompts": db_prompts, "new_version_id": new_version_id}
+        {"request": request, "prompts": db_prompts, "new_version_id": new_version_id, "message": message}
     )
 
 @router.get("/prompts.html", include_in_schema=False)
@@ -241,26 +241,35 @@ async def run_experiment_ui_submit(
             )
             response.raise_for_status()  # Raises an exception for 4XX/5XX responses
 
-            returned_prompt_version_data = response.json()
-            # Ensure data can be parsed into PromptVersion schema; API returns this.
-            created_version = schemas.PromptVersion(**returned_prompt_version_data)
+            # The API now returns a GARunResponse, not the created PromptVersion directly
+            ga_run_response_data = response.json()
+            ga_run_info = schemas.GARunResponse(**ga_run_response_data)
 
-            # Redirect to the prompt detail page, highlighting the new version
-            message = f"New version (ID: {created_version.id}) created successfully from experiment."
-            redirect_url = str(request.url_for('view_prompt_ui', prompt_id=created_version.prompt_id)) # Convert URL to string
-            redirect_url += f"?new_version_id={created_version.id}&message={message}" # Pass as query param
+            # Redirect to the prompts list page with a message indicating the experiment has started
+            message = f"Experiment started successfully. Task ID: {ga_run_info.task_id}. You can monitor its progress or find the result in the prompts list once completed."
+            # Consider redirecting to a dedicated experiment tracking page if one exists,
+            # or the prompts list page, or the dashboard.
+            # For now, redirecting to the prompts list page.
+            redirect_url = str(request.url_for('list_prompts_ui'))
+            redirect_url += f"?message={message}" # Pass message as query param
             return RedirectResponse(url=redirect_url, status_code=303)
 
         except httpx.HTTPStatusError as e:
             error_detail = e.response.text
-            error_message = f"API Error: {e.response.status_code} - {error_detail}"
+            try:
+                # Attempt to parse error detail if it's JSON
+                error_json = e.response.json()
+                error_message = f"API Error: {e.response.status_code} - {error_json.get('detail', error_detail)}"
+            except ValueError: # if error_detail is not JSON
+                error_message = f"API Error: {e.response.status_code} - {error_detail}"
+
             if e.response.status_code == 401:
                 error_message = f"Authentication failed. Please ensure you are logged in and try again. Detail: {error_detail}"
         except Exception as e: # Catch other errors like connection errors
             error_message = f"An unexpected error occurred: {str(e)}"
 
     # If error, re-render form with error message and previous data
-    available_prompts = crud.get_prompts(db, limit=1000)
+    available_prompts = crud.get_prompts(db, limit=1000) # Get a list of prompts for dropdown
     form_data_retained = {
         "task_description": task_description,
         "keywords": keywords,
