@@ -159,6 +159,7 @@ class FitnessEvaluator:
             raise TypeError("chromosome must be an instance of PromptChromosome.")
 
         prompt_string = chromosome.to_prompt_string()
+        logger.debug(f"FitnessEvaluator: Evaluating chromosome {chromosome.id} with prompt string: \"{prompt_string[:200]}...\"")
         llm_output = ""
 
         if self.execution_mode == ExecutionMode.TEST:
@@ -170,6 +171,7 @@ class FitnessEvaluator:
                 f"Keywords found: {keywords_snippet}. "
                 f"Random number: {random_num}"
             )
+            logger.debug(f"FitnessEvaluator: ExecutionMode is TEST. Simulated LLM output for chromosome {chromosome.id}: \"{llm_output[:100]}...\"")
         else:
             # In REAL mode, this basic FitnessEvaluator would need to call an LLM
             # to get the llm_output based on prompt_string.
@@ -185,19 +187,30 @@ class FitnessEvaluator:
             # which ResultsEvaluatorAgent will then score poorly.
             # This is consistent with it being a "small wrapper for tests".
             # A real FitnessEvaluator would handle the llm_utils.call_llm_api itself.
-            pass # llm_output remains "" if not TEST mode, to be evaluated by REA
+            logger.debug(f"FitnessEvaluator: ExecutionMode is not TEST. LLM output is empty for chromosome {chromosome.id}.")
+            # llm_output remains "" as initialized
 
         eval_request_data = {
-            "prompt_chromosome": chromosome,
-            "llm_output": llm_output, # This is the generated output for the prompt
+            "prompt_chromosome": chromosome.id, # Logging ID instead of full object for brevity
+            "llm_output_snippet": llm_output[:100] + "..." if llm_output else "N/A",
             "task_description": task_description,
             "success_criteria": success_criteria if success_criteria is not None else {}
         }
+        logger.debug(f"FitnessEvaluator: Sending request to ResultsEvaluatorAgent for chromosome {chromosome.id}: {eval_request_data}")
 
-        evaluation_result = self.results_evaluator_agent.process_request(eval_request_data)
+        evaluation_result = self.results_evaluator_agent.process_request(
+            {
+                "prompt_chromosome": chromosome, # Agent expects the full chromosome
+                "llm_output": llm_output,
+                "task_description": task_description,
+                "success_criteria": success_criteria if success_criteria is not None else {}
+            }
+        )
+        logger.debug(f"FitnessEvaluator: Received evaluation result for chromosome {chromosome.id}: {evaluation_result}")
 
         fitness_score = evaluation_result.get("fitness_score", 0.0)
         chromosome.fitness_score = fitness_score
+        logger.info(f"FitnessEvaluator: Chromosome {chromosome.id} evaluated. Fitness: {fitness_score:.4f}")
         return fitness_score
 
 
@@ -233,6 +246,7 @@ class PopulationManager:
                               constraints: Optional[Dict] = None,
                               success_criteria: Optional[Dict] = None):
         self.status = "INITIALIZING"
+        logger.info(f"PopulationManager: Initializing population. Task: '{initial_task_description}', Keywords: {initial_keywords}")
         self.broadcast_ga_update(event_type="population_initialization_started")
         self.population = []
         self.generation_number = 0
@@ -263,12 +277,24 @@ class PopulationManager:
 
         if new_chromosomes:
             self.population.extend(new_chromosomes)
+        logger.info(f"PopulationManager: Generated {len(self.population)} initial chromosomes.")
 
         # Evaluate the initial population
-        for chromo in self.population:
+        logger.info("PopulationManager: Evaluating initial population...")
+        for i, chromo in enumerate(self.population):
+            logger.debug(f"PopulationManager: Evaluating initial chromosome {i+1}/{len(self.population)}, ID: {chromo.id}")
             self.fitness_evaluator.evaluate(chromo, initial_task_description, success_criteria)
+            # FitnessEvaluator now logs the score, so no need to duplicate here unless for summary
 
         self.population.sort(key=lambda c: c.fitness_score, reverse=True)
+        logger.info("PopulationManager: Initial population evaluation complete and sorted.")
+        if self.population:
+            for i in range(min(3, len(self.population))): # Log top 3
+                chromo = self.population[i]
+                logger.info(f"PopulationManager: Initial Top {i+1}: Chromosome ID {chromo.id}, Fitness {chromo.fitness_score:.4f}, Prompt: \"{chromo.to_prompt_string()[:150]}...\"")
+        else:
+            logger.warning("PopulationManager: Population is empty after initialization and evaluation.")
+
         self.status = "IDLE" # Or RUNNING if it immediately proceeds to evolve
         self.broadcast_ga_update(event_type="population_initialized", additional_data={"population_size": len(self.population)})
 
@@ -400,31 +426,69 @@ class PopulationManager:
             }
             if additional_data:
                 payload["data"].update(additional_data)
-            self.message_bus.connection_manager.broadcast_json(payload)
+
+            # Schedule the broadcast_json coroutine on the event loop
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(self.message_bus.connection_manager.broadcast_json(payload))
+            except RuntimeError:
+                # This might happen if no event loop is running, though less common in FastAPI context
+                # For robustness, one might consider asyncio.run() if appropriate,
+                # but create_task is generally preferred if an event loop is expected.
+                logger.warning("No running asyncio event loop found for broadcasting GA update. Message may not be sent.")
+                # Fallback or error handling if needed, e.g., asyncio.run(self.message_bus.connection_manager.broadcast_json(payload))
+                # However, directly calling asyncio.run() here can be problematic if called from within an already running loop
+                # or from a thread that isn't the main thread for asyncio.
+                # For now, we'll log a warning. The original code had a RuntimeWarning because it wasn't awaited OR scheduled.
+                # This at least attempts to schedule it.
+                pass
+
 
     def evolve_population(self, task_description: str, success_criteria: Optional[Dict] = None, db_session=None, experiment_run=None):
         if not self.population:
+            logger.warning("PopulationManager: evolve_population called with an empty population.")
             return
+
+        logger.info(f"PopulationManager: Starting evolution for generation {self.generation_number + 1}. Population size: {len(self.population)}")
 
         # Evaluate fitness for each chromosome
         # This part needs to be async if self.fitness_evaluator.evaluate is async
-        for chromosome in self.population:
+        # This loop might be for re-evaluating or evaluating newly created children in a full GA cycle
+        # For the initial population, evaluation is done in initialize_population.
+        # If this is called immediately after initialize_population without new individuals, it might be redundant.
+        # Assuming this is part of a larger evolution loop that generates new individuals before this.
+        logger.debug(f"PopulationManager: Evaluating fitness for {len(self.population)} chromosomes in generation {self.generation_number + 1}...")
+        for i, chromosome in enumerate(self.population):
+            # FitnessEvaluator now logs individual fitness, so we don't need to log it again here
+            # unless it's a summary or different context.
+            logger.debug(f"PopulationManager: Evaluating chromosome {i+1}/{len(self.population)}, ID: {chromosome.id} for generation {self.generation_number + 1}")
             self.fitness_evaluator.evaluate(chromosome, task_description, success_criteria)
 
         # Sort population by fitness score in descending order
         self.population.sort(key=lambda c: c.fitness_score, reverse=True)
+        logger.info(f"PopulationManager: Population sorted for generation {self.generation_number + 1}.")
 
-        best = self.population[0] # Best is now the first element after sorting
-        avg = sum(c.fitness_score for c in self.population) / len(self.population)
+        if not self.population: # Should not happen if we checked above, but defensive
+            logger.error("PopulationManager: Population became empty after evaluation and sorting in evolve_population. This should not happen.")
+            return
+
+        best_chromosome = self.population[0] # Best is now the first element after sorting
+        avg_fitness = sum(c.fitness_score for c in self.population) / len(self.population)
+
+        logger.info(f"PopulationManager: Generation {self.generation_number + 1} evaluation complete. Best Fitness: {best_chromosome.fitness_score:.4f}, Avg Fitness: {avg_fitness:.4f}")
+        logger.info(f"PopulationManager: Best chromosome ID {best_chromosome.id} in gen {self.generation_number + 1}, Prompt: \"{best_chromosome.to_prompt_string()[:150]}...\"")
+
         try:
             from prompthelix.services import add_generation_metric
-            add_generation_metric(
+            add_generation_metric( # Note: generation_number is 0 for initial, then increments
                 db_session,
                 experiment_run,
-                self.generation_number,
-                best.fitness_score,
-                avg,
-                0.0
+                self.generation_number, # This might be off by 1 if it's called before incrementing gen_number for the current evolution
+                best_chromosome.fitness_score,
+                avg_fitness,
+                0.0 # Assuming min_fitness or other metric might go here
             )
-        except Exception:
+            logger.debug(f"PopulationManager: Generation {self.generation_number} metrics (best: {best_chromosome.fitness_score:.4f}, avg: {avg_fitness:.4f}) sent to DB.")
+        except Exception as e:
+            logger.warning(f"PopulationManager: Failed to add generation metric to DB for generation {self.generation_number}. Error: {e}", exc_info=True)
             pass
