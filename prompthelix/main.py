@@ -113,11 +113,7 @@ async def websocket_dashboard_endpoint(websocket: WebSocket):
     WebSocket endpoint for dashboard real-time updates.
     """
     await websocket_manager.connect(websocket)
-    try:
-        from prompthelix import globals as ph_globals
-        await websocket_manager.send_personal_json({"type": "ga_history", "data": ph_globals.ga_history}, websocket)
-    except Exception as e:  # pragma: no cover - simple log
-        print(f"Failed to send GA history: {e}")
+    # Optionally, GA history could be sent here if retrieved from the database.
     await websocket_manager.broadcast_json({"message": "A new client has connected!"})
     try:
         while True:
