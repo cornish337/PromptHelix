@@ -19,7 +19,6 @@ from prompthelix.templating import templates # Import templates object
 
 from prompthelix.api import routes as api_routes
 from prompthelix.ui_routes import router as ui_router  # Import the UI router
-from prompthelix import metrics as ph_metrics
 
 # from prompthelix.websocket_manager import ConnectionManager # No longer imported directly for instantiation
 from prompthelix.globals import websocket_manager  # Import the global instance
