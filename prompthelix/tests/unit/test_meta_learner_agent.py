@@ -521,14 +521,17 @@ class TestMetaLearnerAgent(unittest.TestCase):
         m = mock_open(read_data=json.dumps(mock_data_type_mismatch))
         with patch('os.path.exists', return_value=True):
             with patch('builtins.open', m):
-                 with self.assertLogs(level='WARNING') as log_watcher:
+                with patch('prompthelix.agents.meta_learner.logger.warning') as mock_log_warning:
                     learner = MetaLearnerAgent(message_bus=mock_bus, knowledge_file_path=self.default_test_file_path)
 
-        self.assertTrue(any("Key 'successful_prompt_features' missing or type mismatch" in msg for msg in log_watcher.output))
-        self.assertTrue(any("Key 'prompt_metric_stats' missing or type mismatch" in msg for msg in log_watcher.output))
-        self.assertTrue(any("Key 'statistical_prompt_metric_trends' missing or type mismatch" in msg for msg in log_watcher.output))
-        self.assertTrue(any("Key 'legacy_common_pitfalls' missing or type mismatch" in msg for msg in log_watcher.output))
-        self.assertTrue(any("Loaded data_log is not a list" in msg for msg in log_watcher.output))
+        # Check specific log messages
+        logged_messages = [call_args[0][0] for call_args in mock_log_warning.call_args_list]
+
+        self.assertTrue(any("Key 'successful_prompt_features' missing or type mismatch" in msg for msg in logged_messages))
+        self.assertTrue(any("Key 'prompt_metric_stats' missing or type mismatch" in msg for msg in logged_messages))
+        self.assertTrue(any("Key 'statistical_prompt_metric_trends' missing or type mismatch" in msg for msg in logged_messages))
+        self.assertTrue(any("Key 'legacy_common_pitfalls' missing or type mismatch" in msg for msg in logged_messages))
+        self.assertTrue(any("Loaded data_log is not a list" in msg for msg in logged_messages))
 
         self.assertEqual(learner.knowledge_base["successful_prompt_features"], []) # Default
         self.assertEqual(learner.knowledge_base["prompt_metric_stats"], []) # Default
@@ -735,10 +738,17 @@ class TestMetaLearnerAgent(unittest.TestCase):
             {"prompt_id": "p1", "fitness_score": 0.9, "critic_score": 0.8, "prompt_text": "pt1"},
             {"prompt_id": "p2", "fitness_score": 0.8, "critic_score": 0.75, "prompt_text": "pt2"} # Only 2 relevant individuals
         ]
-        with self.assertLogs(level='WARNING') as log_watcher:
+        with patch('prompthelix.agents.meta_learner.logger.warning') as mock_log_warning:
             agent.analyze_generation(generation_data)
+
         self.assertEqual(agent.knowledge_base["agent_effectiveness_signals"]["CriticAgent_score_vs_fitness_trend"], initial_trend)
-        self.assertTrue(any("Not enough relevant individuals" in msg for msg in log_watcher.output))
+
+        found_log = False
+        for call_args in mock_log_warning.call_args_list:
+            if "Not enough relevant individuals" in call_args[0][0]:
+                found_log = True
+                break
+        self.assertTrue(found_log, "Expected warning log for insufficient data not found.")
 
 
     def test_analyze_generation_diversity_heuristic_low_diversity(self):
@@ -796,12 +806,18 @@ class TestMetaLearnerAgent(unittest.TestCase):
         initial_kb = json.loads(json.dumps(agent.knowledge_base)) # Deep copy
         initial_log_len = len(agent.data_log)
 
-        with self.assertLogs(level='WARNING') as log_watcher:
+        with patch('prompthelix.agents.meta_learner.logger.warning') as mock_log_warning:
             agent.analyze_generation([])
 
         self.assertEqual(agent.knowledge_base, initial_kb) # Knowledge base should not change
         self.assertEqual(len(agent.data_log), initial_log_len) # Data log should not change
-        self.assertTrue(any("analyze_generation called with empty generation_data" in msg for msg in log_watcher.output))
+
+        found_log = False
+        for call_args in mock_log_warning.call_args_list:
+            if "analyze_generation called with empty generation_data" in call_args[0][0]:
+                found_log = True
+                break
+        self.assertTrue(found_log, "Expected warning log for empty generation data not found.")
 
     def test_analyze_generation_diversity_uses_genes_then_prompt_id_fallback(self):
         """Test diversity heuristic fallback for prompt representation."""

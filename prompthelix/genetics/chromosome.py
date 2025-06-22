@@ -34,18 +34,24 @@ class PromptChromosome:
 
     def __str__(self) -> str:
         """Returns a human-readable string representation of the chromosome."""
-        gene_summary = self.to_prompt_string(separator=" ")[:100]
-        if not self.genes:
-            gene_summary = "(No genes)"
+        if self.genes:
+            genes_str = "\n".join([f"  - {str(g)}" for g in self.genes])
+        else:
+            genes_str = "  - (No genes)"
         return (
-            f"PromptChromosome(ID: {self.id}, Fitness: {self.fitness_score:.4f}, "
-            f"Genes: '{gene_summary}...', Parents: {self.parent_ids}, MutationOp: {self.mutation_strategy})"
+            f"PromptChromosome(\n"
+            f"  ID: {self.id},\n"
+            f"  Fitness: {self.fitness_score:.4f},\n"
+            f"  Genes:\n{genes_str},\n"
+            f"  Parents: {self.parent_ids},\n"
+            f"  MutationOp: {self.mutation_strategy}\n"
+            f")"
         )
 
     def __repr__(self) -> str:
         """Returns an unambiguous string representation of the chromosome."""
         return (
             f"PromptChromosome(id='{self.id}', genes={self.genes!r}, "
-            f"fitness_score={self.fitness_score!r}, parent_ids={self.parent_ids!r}, "
+            f"fitness_score={self.fitness_score:.4f}, parent_ids={self.parent_ids!r}, " # Changed format for fitness_score
             f"mutation_strategy={self.mutation_strategy!r})"
         )

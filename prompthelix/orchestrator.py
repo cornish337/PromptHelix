@@ -50,7 +50,7 @@ except Exception as e:  # broaden exception handling to avoid startup failure
     wandb = None
 
 
-def main_ga_loop(
+async def main_ga_loop( # Changed to async def
     task_desc: str,
     keywords: List[str],
     num_generations: int,
@@ -360,7 +360,7 @@ def main_ga_loop(
     if not pop_manager.population:
         logger.info("--- Initializing Population ---")
         # PopulationManager uses initial_prompt_str if provided
-        pop_manager.initialize_population(
+        await pop_manager.initialize_population( # Added await
             initial_task_description=task_desc, # This might be redundant if initial_prompt_str is primary
             initial_keywords=keywords
         )
@@ -372,9 +372,16 @@ def main_ga_loop(
     # (evolve_population also does this, but this shows the state *before* any evolution)
     if pop_manager.population:
         print("Evaluating initial population...")
+        # This loop needs to be async if evaluate is async
+        initial_evaluation_tasks = []
         for chromo in pop_manager.population:
             # Ensure fitness is evaluated based on the primary task and criteria
-            fitness_eval.evaluate(chromo, evaluation_task_desc, evaluation_success_criteria)
+            initial_evaluation_tasks.append(
+                fitness_eval.evaluate(chromo, evaluation_task_desc, evaluation_success_criteria)
+            )
+        if initial_evaluation_tasks:
+            await asyncio.gather(*initial_evaluation_tasks) # Await all evaluations
+
         pop_manager.population.sort(key=lambda c: c.fitness_score, reverse=True)
         fittest_initial = pop_manager.get_fittest_individual()
         if fittest_initial:
@@ -398,7 +405,8 @@ def main_ga_loop(
     runner = GeneticAlgorithmRunner(
         population_manager=pop_manager,
         num_generations=num_generations,
-        save_frequency=actual_save_frequency # Pass determined save frequency
+        save_frequency=actual_save_frequency, # Pass determined save frequency
+        population_persistence_path=actual_population_path # Pass the path
     )
 
     # evaluation_task_desc and evaluation_success_criteria are defined earlier in main_ga_loop

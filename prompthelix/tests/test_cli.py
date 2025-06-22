@@ -37,7 +37,7 @@ class TestCli(unittest.TestCase):
             self.assertEqual(result.returncode, 0, f"CLI command failed with stderr: {result.stderr}")
 
             # Check for expected output fragments
-            self.assertIn("CLI: Running Genetic Algorithm...", result.stdout, "CLI start message not found.")
+            self.assertIn("CLI: Running Genetic Algorithm with specified parameters...", result.stdout, "CLI start message not found.")
             self.assertIn("Generation", result.stdout, "Generation keyword not found in output.")
             self.assertIn("Overall Best Prompt Found", result.stdout, "Final best prompt message not found.") # Changed this line
             self.assertTrue(len(result.stdout.splitlines()) > 5, "Output seems too short.") # Basic check for some iteration
@@ -117,8 +117,9 @@ class TestCli(unittest.TestCase):
                 "run", "ga",
                 "--prompt", seed_prompt,
                 "--output-file", output_file_path,
-                "--num-generations", "1", # Keep it minimal
-                "--population-size", "2",  # Keep it minimal
+                "--num-generations", "1", # Keep it minimal (or even 0 if supported for just init and output)
+                "--population-size", "1",  # Set to 1 to ensure only seed prompt is used
+                "--elitism-count", "1", # Ensure the one prompt is kept
                 "--execution-mode", "TEST" # Ensure no real LLM calls
             ]
             result = self._run_cli_command(args)

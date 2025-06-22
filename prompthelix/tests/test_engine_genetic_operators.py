@@ -39,15 +39,28 @@ class MockStrategyB(BaseMutationStrategy):
 class TestGeneticOperators(unittest.TestCase):
 
     def setUp(self):
-        # logging.disable(logging.CRITICAL) # Removed for more targeted log testing
         self.chromosome = PromptChromosome(genes=["gene1"], fitness_score=0.5)
         self.mock_style_optimizer_agent = MagicMock(spec=StyleOptimizerAgent)
         self.logger_name = "prompthelix.genetics.engine" # Logger used in GeneticOperators
 
+        # Ensure the specific logger is enabled and at a level that allows capturing
+        logger_to_test = logging.getLogger(self.logger_name)
+        self.original_level = logger_to_test.level
+        self.original_disabled_state = logger_to_test.disabled
+        self.original_handlers = list(logger_to_test.handlers) # Store a copy
+
+        logger_to_test.setLevel(logging.DEBUG) # Set to DEBUG to capture INFO, WARNING, ERROR
+        logger_to_test.disabled = False
+        # If we are adding a handler for all tests in the class, do it here.
+        # However, assertLogs itself adds a temporary handler.
+        # So, ensuring the logger level and enabled status is usually sufficient.
+
 
     def tearDown(self):
-        pass
-        # logging.disable(logging.NOTSET) # Removed
+        logger_to_test = logging.getLogger(self.logger_name)
+        logger_to_test.setLevel(self.original_level)
+        logger_to_test.disabled = self.original_disabled_state
+        logger_to_test.handlers = self.original_handlers # Restore original handlers
 
     def test_init_default_strategies(self):
         # When no strategies are provided, it should default to NoOperationMutationStrategy.
@@ -175,7 +188,9 @@ class TestGeneticOperators(unittest.TestCase):
             style_optimizer_agent=self.mock_style_optimizer_agent
         )
 
-        with self.assertLogs(self.logger_name, level='WARNING') as log_watcher:
+        # with self.assertLogs(self.logger_name, level='WARNING') as log_watcher:
+        #     final_chromosome = operators.mutate(self.chromosome, mutation_rate=1.0, target_style="concise")
+        with patch.object(logging.getLogger(self.logger_name), 'warning') as mock_log_warning:
             final_chromosome = operators.mutate(self.chromosome, mutation_rate=1.0, target_style="concise")
 
         self.mock_style_optimizer_agent.process_request.assert_called_once()
@@ -184,7 +199,11 @@ class TestGeneticOperators(unittest.TestCase):
         self.assertIn("base_mutated", final_chromosome.genes)
         self.assertEqual(final_chromosome.fitness_score, 0.0) # Still reset from base strategy
 
-        self.assertTrue(any("StyleOptimizerAgent did not return a PromptChromosome" in msg for msg in log_watcher.output))
+        # self.assertTrue(any("StyleOptimizerAgent did not return a PromptChromosome" in msg for msg in log_watcher.output))
+        mock_log_warning.assert_called_once()
+        args, _ = mock_log_warning.call_args
+        log_message = args[0]
+        self.assertIn(f"StyleOptimizerAgent did not return a PromptChromosome for {base_mutated_chromosome.id}", log_message)
 
 
     def test_mutate_with_style_optimizer_agent_raises_exception(self):
@@ -202,15 +221,24 @@ class TestGeneticOperators(unittest.TestCase):
             style_optimizer_agent=self.mock_style_optimizer_agent
         )
 
-        with self.assertLogs(self.logger_name, level='ERROR') as log_watcher:
+        # with self.assertLogs(self.logger_name, level='ERROR') as log_watcher:
+        #     final_chromosome = operators.mutate(self.chromosome, mutation_rate=1.0, target_style="concise")
+        with patch.object(logging.getLogger(self.logger_name), 'error') as mock_log_error:
             final_chromosome = operators.mutate(self.chromosome, mutation_rate=1.0, target_style="concise")
+
 
         self.mock_style_optimizer_agent.process_request.assert_called_once()
         self.assertEqual(final_chromosome, base_mutated_chromosome) # Fallback to pre-style-optimization chromosome
         self.assertIn("base_mutated", final_chromosome.genes)
         self.assertEqual(final_chromosome.fitness_score, 0.0)
 
-        self.assertTrue(any(f"Style optimization failed for {base_mutated_chromosome.id}" in msg and "Agent Error" in msg for msg in log_watcher.output))
+        # self.assertTrue(any(f"Style optimization failed for {base_mutated_chromosome.id}" in msg and "Agent Error" in msg for msg in log_watcher.output))
+        mock_log_error.assert_called_once()
+        args, _ = mock_log_error.call_args
+        log_message = args[0]
+        self.assertIn(f"Style optimization failed for {base_mutated_chromosome.id}", log_message)
+        self.assertIn("Agent Error", log_message)
+
 
     def test_mutate_no_style_optimizer_agent_but_target_style_provided(self):
         mock_base_strategy = MagicMock(spec=BaseMutationStrategy)
@@ -224,11 +252,20 @@ class TestGeneticOperators(unittest.TestCase):
             style_optimizer_agent=None # Agent not provided
         )
 
-        with self.assertLogs(self.logger_name, level='WARNING') as log_watcher:
+        # Temporarily use direct logger patching for this test to diagnose assertLogs issue
+        # with self.assertLogs(self.logger_name, level='WARNING') as log_watcher:
+        #     final_chromosome = operators.mutate(self.chromosome, mutation_rate=1.0, target_style="concise")
+
+        with patch.object(logging.getLogger(self.logger_name), 'warning') as mock_log_warning:
             final_chromosome = operators.mutate(self.chromosome, mutation_rate=1.0, target_style="concise")
 
         self.assertEqual(final_chromosome, base_mutated_chromosome)
-        self.assertTrue(any(f"target_style 'concise' for {base_mutated_chromosome.id}, but StyleOptimizerAgent not available. Skipping." in msg for msg in log_watcher.output))
+
+        # Check if logger.warning was called and with the expected message content
+        mock_log_warning.assert_called_once()
+        args, _ = mock_log_warning.call_args
+        log_message = args[0]
+        self.assertIn(f"target_style 'concise' for {base_mutated_chromosome.id}, but StyleOptimizerAgent not available. Skipping.", log_message)
 
 
 if __name__ == '__main__':
