@@ -1,45 +1,48 @@
 import unittest
-from unittest.mock import MagicMock, patch, call, AsyncMock
+from unittest.mock import MagicMock, patch, call, AsyncMock, ANY
 import logging
-import asyncio # For asyncio.create_task patching
+import asyncio
 
-# Ensure imports for classes being tested or mocked
 from prompthelix.experiment_runners.ga_runner import GeneticAlgorithmRunner
 from prompthelix.genetics.engine import PopulationManager, PromptChromosome
-from prompthelix.message_bus import MessageBus # For mocking if PopulationManager needs it
-from prompthelix.websocket_manager import ConnectionManager # Added import
+from prompthelix.message_bus import MessageBus
+from prompthelix.websocket_manager import ConnectionManager
 
-# Disable most logging for unit tests unless specifically testing log output
-logging.disable(logging.CRITICAL) # Global disable
+logging.disable(logging.CRITICAL)
 
 class TestGeneticAlgorithmRunner(unittest.TestCase):
 
     def setUp(self):
-        # ... (existing setUp code) ...
         self.mock_pop_manager = MagicMock(spec=PopulationManager)
         self.mock_pop_manager.generation_number = 0
         self.mock_pop_manager.should_stop = False
         self.mock_pop_manager.status = "IDLE"
-        # Mock the broadcast method that GeneticAlgorithmRunner might call on pop_manager
-        self.mock_pop_manager.broadcast_ga_update = MagicMock()
-        # Mock get_fittest_individual to return a consistent mock chromosome
+        self.mock_pop_manager.population_size = 10
+        self.mock_pop_manager.elitism_count = 1
+
+        # Make PopulationManager's async methods AsyncMocks
+        self.mock_pop_manager.broadcast_ga_update = AsyncMock()
+        self.mock_pop_manager.pause_evolution = AsyncMock()
+        self.mock_pop_manager.resume_evolution = AsyncMock()
+        self.mock_pop_manager.stop_evolution = AsyncMock()
+        self.mock_pop_manager.evolve_population = AsyncMock() # Now async
+
         self.mock_fittest_chromosome = MagicMock(spec=PromptChromosome)
         self.mock_fittest_chromosome.fitness_score = 0.9
-        self.mock_fittest_chromosome.id = "mock_chromosome_id_123" # Add id attribute
+        self.mock_fittest_chromosome.id = "mock_chromosome_id_123"
         self.mock_pop_manager.get_fittest_individual.return_value = self.mock_fittest_chromosome
 
-        # Mock evolve_population to simulate generation progression
         self.shared_evolve_side_effect_details = {'generations_run_in_test': 0}
 
-        def default_evolve_side_effect(*args, **kwargs):
+        async def default_async_evolve_side_effect(*args, **kwargs): # Made async
             if not self.mock_pop_manager.should_stop:
                 self.mock_pop_manager.generation_number += 1
                 self.shared_evolve_side_effect_details['generations_run_in_test'] = self.mock_pop_manager.generation_number
-                self.mock_pop_manager.status = "RUNNING" # Runner should determine COMPLETED
+                self.mock_pop_manager.status = "RUNNING"
             else:
                 self.mock_pop_manager.status = "STOPPED"
 
-        self.default_evolve_side_effect = default_evolve_side_effect
+        self.default_evolve_side_effect = default_async_evolve_side_effect # Keep name for ref if needed
         self.mock_pop_manager.evolve_population.side_effect = self.default_evolve_side_effect
         self.num_generations_for_test = 3
 
@@ -51,123 +54,106 @@ class TestGeneticAlgorithmRunner(unittest.TestCase):
         self.ga_runner_logger.setLevel(logging.INFO)
         self.ga_runner_logger.disabled = False
 
-        # This test class might add its own handler for specific tests,
-        # so original handlers are stored to be restored.
-
     def tearDown(self):
         self.ga_runner_logger.setLevel(self.original_ga_runner_logger_level)
         self.ga_runner_logger.disabled = self.original_ga_runner_logger_disabled_status
-        # Restore original handlers, removing any added during tests
         self.ga_runner_logger.handlers = self.original_ga_runner_logger_handlers
 
     def test_init_successful(self):
-        runner = GeneticAlgorithmRunner(self.mock_pop_manager, 5)
+        runner = GeneticAlgorithmRunner(self.mock_pop_manager, 5, population_persistence_path="mock/path.json")
         self.assertIsInstance(runner, GeneticAlgorithmRunner)
         self.assertEqual(runner.population_manager, self.mock_pop_manager)
         self.assertEqual(runner.num_generations, 5)
 
     def test_init_invalid_pop_manager_type(self):
         with self.assertRaisesRegex(TypeError, "population_manager must be an instance of PopulationManager."):
-            GeneticAlgorithmRunner("not_a_pop_manager", 5)
+            GeneticAlgorithmRunner("not_a_pop_manager", 5, population_persistence_path=None)
 
     def test_init_invalid_num_generations(self):
         with self.assertRaisesRegex(ValueError, "num_generations must be a positive integer."):
-            GeneticAlgorithmRunner(self.mock_pop_manager, 0)
+            GeneticAlgorithmRunner(self.mock_pop_manager, 0, population_persistence_path=None)
         with self.assertRaisesRegex(ValueError, "num_generations must be a positive integer."):
-            GeneticAlgorithmRunner(self.mock_pop_manager, -1)
+            GeneticAlgorithmRunner(self.mock_pop_manager, -1, population_persistence_path=None)
 
-    def test_run_completes_all_generations(self):
-        self.num_generations_for_test = 3 # Specific to this test, used by the default side_effect
-        # Reset generation_number and other relevant states for this specific test run
+    async def test_run_completes_all_generations(self): # Changed to async
+        self.num_generations_for_test = 3
         self.mock_pop_manager.generation_number = 0
         self.mock_pop_manager.should_stop = False
-        self.mock_pop_manager.status = "IDLE" # Initial status before run
+        self.mock_pop_manager.status = "IDLE"
         self.shared_evolve_side_effect_details['generations_run_in_test'] = 0
-        # Ensure the default side effect is used for this test
         self.mock_pop_manager.evolve_population.side_effect = self.default_evolve_side_effect
 
-
-        runner = GeneticAlgorithmRunner(self.mock_pop_manager, self.num_generations_for_test)
+        runner = GeneticAlgorithmRunner(self.mock_pop_manager, self.num_generations_for_test, population_persistence_path=None)
 
         run_kwargs = {"task_description": "test task", "success_criteria": {}, "target_style": "formal"}
-        best_chromosome = runner.run(**run_kwargs)
+        best_chromosome = await runner.run(**run_kwargs) # await
 
         self.assertEqual(self.mock_pop_manager.evolve_population.call_count, self.num_generations_for_test)
-        # runner.current_generation is updated: self.current_generation = self.population_manager.generation_number + 1
-        # After 3 successful evolutions, pop_manager.generation_number will be 3.
-        # In the loop, runner.current_generation will be 1, then 2, then 3.
         self.assertEqual(runner.current_generation, self.num_generations_for_test)
-        self.assertEqual(self.mock_pop_manager.status, "COMPLETED") # Set by runner
+        self.assertEqual(self.mock_pop_manager.status, "COMPLETED")
         self.mock_pop_manager.broadcast_ga_update.assert_any_call(event_type="ga_run_completed_runner")
         self.assertEqual(best_chromosome, self.mock_fittest_chromosome)
 
         expected_call = call(
             task_description="test task",
             success_criteria={},
-            target_style="formal"
+            db_session=ANY,
+            experiment_run=ANY
         )
         self.mock_pop_manager.evolve_population.assert_has_calls([expected_call] * self.num_generations_for_test)
 
 
-    def test_run_stops_early_if_should_stop_is_true(self):
-        num_target_generations_for_runner = 5 # Runner aims for 5
+    async def test_run_stops_early_if_should_stop_is_true(self): # Changed to async
+        num_target_generations_for_runner = 5
         self.mock_pop_manager.generation_number = 0
         self.mock_pop_manager.should_stop = False
         self.mock_pop_manager.status = "IDLE"
         self.shared_evolve_side_effect_details['generations_run_in_test'] = 0
 
-        runner = GeneticAlgorithmRunner(self.mock_pop_manager, num_target_generations_for_runner)
+        runner = GeneticAlgorithmRunner(self.mock_pop_manager, num_target_generations_for_runner, population_persistence_path=None)
 
         generations_evolved_in_test = 0
-        def evolve_side_effect_with_early_stop(*args, **kwargs):
+        async def evolve_side_effect_with_early_stop(*args, **kwargs): # Made async
             nonlocal generations_evolved_in_test
-            # This side effect is specific to this test
             if self.mock_pop_manager.should_stop:
-                self.mock_pop_manager.status = "STOPPED" # PM might set this if it detects stop early
+                self.mock_pop_manager.status = "STOPPED"
                 return
 
             self.mock_pop_manager.generation_number += 1
             generations_evolved_in_test += 1
 
-            if generations_evolved_in_test == 2: # After 2 successful evolutions
-                self.mock_pop_manager.should_stop = True # Signal stop *before* the next generation check in runner
-                self.mock_pop_manager.status = "RUNNING" # Status after current evolution completes
-            else: # Should not be called if should_stop is true earlier
+            if generations_evolved_in_test == 2:
+                self.mock_pop_manager.should_stop = True
+                self.mock_pop_manager.status = "RUNNING"
+            else:
                 self.mock_pop_manager.status = "RUNNING"
 
         self.mock_pop_manager.evolve_population.side_effect = evolve_side_effect_with_early_stop
 
         run_kwargs = {"task_description": "test task"}
-        runner.run(**run_kwargs)
+        await runner.run(**run_kwargs) # await
 
-        self.assertEqual(self.mock_pop_manager.evolve_population.call_count, 2) # Evolved twice
-        # current_generation is set at the start of the loop iteration.
-        # Gen 1: current_generation = 1, evolve runs.
-        # Gen 2: current_generation = 2, evolve runs, should_stop becomes true.
-        # Gen 3: current_generation = 3, loop starts, should_stop is true, breaks.
-        # So runner.current_generation will be 3 when it breaks.
+        self.assertEqual(self.mock_pop_manager.evolve_population.call_count, 2)
         self.assertEqual(runner.current_generation, 3)
-        self.assertEqual(self.mock_pop_manager.status, "STOPPED") # Runner sets this
+        self.assertEqual(self.mock_pop_manager.status, "STOPPED")
         self.mock_pop_manager.broadcast_ga_update.assert_any_call(event_type="ga_run_stopped_runner_signal")
 
 
-    def test_run_handles_exception_in_evolve_population(self):
+    async def test_run_handles_exception_in_evolve_population(self): # Changed to async
         num_target_generations = 3
         self.mock_pop_manager.generation_number = 0
         self.mock_pop_manager.should_stop = False
         self.mock_pop_manager.status = "IDLE"
         self.shared_evolve_side_effect_details['generations_run_in_test'] = 0
 
-        runner = GeneticAlgorithmRunner(self.mock_pop_manager, num_target_generations)
+        runner = GeneticAlgorithmRunner(self.mock_pop_manager, num_target_generations, population_persistence_path=None)
 
         evolve_call_count = 0
-        def evolve_exception_side_effect(*args, **kwargs):
+        async def evolve_exception_side_effect(*args, **kwargs): # Made async
             nonlocal evolve_call_count
             evolve_call_count += 1
-            if evolve_call_count == 1: # Raise exception on the first call
-                # PM's generation_number would not have incremented yet by this mock
+            if evolve_call_count == 1:
                 raise Exception("Evolve failed!")
-            # Fallback (should not be reached in this test if exception is handled)
             self.mock_pop_manager.generation_number +=1
             self.mock_pop_manager.status="RUNNING"
 
@@ -175,43 +161,38 @@ class TestGeneticAlgorithmRunner(unittest.TestCase):
 
         run_kwargs = {"task_description": "test task"}
         with self.assertRaisesRegex(Exception, "Evolve failed!"):
-            runner.run(**run_kwargs)
+            await runner.run(**run_kwargs) # await
 
-        self.assertEqual(self.mock_pop_manager.status, "ERROR") # Set by runner's except block
+        self.assertEqual(self.mock_pop_manager.status, "ERROR")
         self.mock_pop_manager.broadcast_ga_update.assert_any_call(
             event_type="ga_run_error_runner",
             additional_data={"error": "Evolve failed!"}
         )
         self.assertEqual(self.mock_pop_manager.evolve_population.call_count, 1)
-        # runner.current_generation would be 1 when the exception occurred.
         self.assertEqual(runner.current_generation, 1)
 
 
-    def test_pause_calls_pop_manager_pause(self):
-        runner = GeneticAlgorithmRunner(self.mock_pop_manager, 3)
-        runner.pause()
+    async def test_pause_calls_pop_manager_pause(self): # Changed to async
+        runner = GeneticAlgorithmRunner(self.mock_pop_manager, 3, population_persistence_path=None)
+        await runner.pause() # await
         self.mock_pop_manager.pause_evolution.assert_called_once()
 
-    def test_resume_calls_pop_manager_resume(self):
-        runner = GeneticAlgorithmRunner(self.mock_pop_manager, 3)
-        runner.resume()
+    async def test_resume_calls_pop_manager_resume(self): # Changed to async
+        runner = GeneticAlgorithmRunner(self.mock_pop_manager, 3, population_persistence_path=None)
+        await runner.resume() # await
         self.mock_pop_manager.resume_evolution.assert_called_once()
 
-    def test_stop_calls_pop_manager_stop(self):
-        runner = GeneticAlgorithmRunner(self.mock_pop_manager, 3)
-        runner.stop()
+    async def test_stop_calls_pop_manager_stop(self): # Changed to async
+        runner = GeneticAlgorithmRunner(self.mock_pop_manager, 3, population_persistence_path=None)
+        await runner.stop() # await
         self.mock_pop_manager.stop_evolution.assert_called_once()
 
     def test_get_status_combines_statuses(self):
         runner_target_generations = 5
-        runner = GeneticAlgorithmRunner(self.mock_pop_manager, runner_target_generations)
-
-        # Simulate runner being partway through, about to start generation 2
+        runner = GeneticAlgorithmRunner(self.mock_pop_manager, runner_target_generations, population_persistence_path=None)
         runner.current_generation = 2
-
-        # Simulate PopulationManager's actual state: completed 1 generation
         self.mock_pop_manager.generation_number = 1
-        self.mock_pop_manager.status = "RUNNING" # PM status
+        self.mock_pop_manager.status = "RUNNING"
 
         mock_pm_status_payload = {
             "status": "RUNNING",
@@ -220,11 +201,8 @@ class TestGeneticAlgorithmRunner(unittest.TestCase):
             "best_fitness": 0.8
         }
         self.mock_pop_manager.get_ga_status.return_value = mock_pm_status_payload
-
         expected_pm_id = id(self.mock_pop_manager)
-
         status_report = runner.get_status()
-
         self.mock_pop_manager.get_ga_status.assert_called_once()
         expected_combined_status = {
             "status": "RUNNING",
@@ -237,46 +215,24 @@ class TestGeneticAlgorithmRunner(unittest.TestCase):
         }
         self.assertEqual(status_report, expected_combined_status)
 
-    @patch('prompthelix.globals.websocket_manager.broadcast_json', new_callable=AsyncMock) # Reverted to AsyncMock
-    @patch('prompthelix.logging_handlers.asyncio.create_task') # Corrected patch target for create_task
-    def test_ga_runner_init_logs_are_sent_via_websocket_handler(self, mock_create_task, mock_broadcast_json_patched_on_globals): # Name back to original
-        # This test verifies the integration of ga_runner's logging with WebSocketLogHandler.
-
-        # The WebSocketLogHandler in ga_runner.py is added at module import time and
-        # captures the original websocket_manager.broadcast_json.
-        # Patching prompthelix.globals.websocket_manager.broadcast_json directly in the test
-        # won't affect the already configured handler instance.
-        # Instead, we need to replace the handler or its connection_manager's broadcast_json.
-
+    @patch('prompthelix.globals.websocket_manager.broadcast_json', new_callable=AsyncMock)
+    @patch('prompthelix.logging_handlers.asyncio.create_task')
+    def test_ga_runner_init_logs_are_sent_via_websocket_handler(self, mock_create_task, mock_broadcast_json_patched_on_globals):
         ga_logger = logging.getLogger('prompthelix.experiment_runners.ga_runner')
-        original_handlers = list(ga_logger.handlers) # Store original handlers
-
-        # Find the existing WebSocketLogHandler and temporarily replace its connection_manager's method
-        # OR, more robustly, remove it and add a new one with a mock connection manager.
-
-        # Create a new mock connection manager for this test
+        original_handlers = list(ga_logger.handlers)
         test_mock_connection_manager = MagicMock(spec=ConnectionManager)
-        test_mock_connection_manager.broadcast_json = mock_broadcast_json_patched_on_globals # Use original name
-
-        # Import WebSocketLogHandler here to avoid issues if it's not yet fully imported elsewhere
+        test_mock_connection_manager.broadcast_json = mock_broadcast_json_patched_on_globals
         from prompthelix.logging_handlers import WebSocketLogHandler
         test_ws_log_handler = WebSocketLogHandler(connection_manager=test_mock_connection_manager)
-        test_ws_log_handler.setLevel(logging.INFO) # Ensure it processes INFO logs
+        test_ws_log_handler.setLevel(logging.INFO)
         formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(module)s.%(funcName)s:%(lineno)d - %(message)s')
         test_ws_log_handler.setFormatter(formatter)
-
-        # Remove existing WebSocketLogHandlers and add our test-specific one
         ga_logger.handlers = [h for h in original_handlers if not isinstance(h, WebSocketLogHandler)]
         ga_logger.addHandler(test_ws_log_handler)
-
-        # Ensure logger is enabled (it's handled in setUp/tearDown generally, but double check for this specific logger)
         ga_logger.disabled = False
         ga_logger.setLevel(logging.INFO)
-
-        # Temporarily change global logging disable level for this test
         original_global_disable_level = logging.root.manager.disable
-        logging.disable(logging.NOTSET) # Allow INFO logs globally
-
+        logging.disable(logging.NOTSET)
 
         def side_effect_for_create_task(coro):
             try:
@@ -288,38 +244,18 @@ class TestGeneticAlgorithmRunner(unittest.TestCase):
             return MagicMock()
 
         mock_create_task.side_effect = side_effect_for_create_task
-
-        # Wrap the test handler's emit method to check if it's called
         original_emit = test_ws_log_handler.emit
         test_ws_log_handler.emit = MagicMock(wraps=original_emit)
-
         num_generations = 5
-        # Instantiating GeneticAlgorithmRunner should trigger its __init__ log
-        runner = GeneticAlgorithmRunner(self.mock_pop_manager, num_generations)
-
-        # Debug: Check if the test handler's emit was called
+        runner = GeneticAlgorithmRunner(self.mock_pop_manager, num_generations, population_persistence_path="mock/ws_test_path.json")
         self.assertTrue(test_ws_log_handler.emit.called, "Test WebSocketLogHandler's emit method was not called.")
-
-        # Assert that our mock (indirectly via test_mock_connection_manager) was called
-        self.assertTrue(mock_broadcast_json_patched_on_globals.called, # Use original name
+        self.assertTrue(mock_broadcast_json_patched_on_globals.called,
                         "Patched broadcast_json (via test_mock_connection_manager) was not called.")
-
         found_init_log = False
-        # The WebSocketLogHandler in ga_runner.py is configured with a specific formatter:
-        # '%(asctime)s - %(name)s - %(levelname)s - %(module)s.%(funcName)s:%(lineno)d - %(message)s'
-        # The 'message' part of the log_payload['message'] will be the raw message given to logger.info()
-        # The other fields like module, funcName, etc., are separate in log_payload.
-
-        for call_args in mock_broadcast_json_patched_on_globals.call_args_list: # Corrected variable name
+        for call_args in mock_broadcast_json_patched_on_globals.call_args_list:
             log_data_sent = call_args[0][0]
             if log_data_sent.get('type') == 'debug_log':
                 log_payload = log_data_sent.get('data', {})
-
-                # Check for the specific message from GeneticAlgorithmRunner.__init__
-                # The logged message is:
-                # f"GeneticAlgorithmRunner initialized for {num_generations} generations "
-                # f"with PopulationManager (ID: {id(population_manager)})"
-                # We check for a substring.
                 if ("GeneticAlgorithmRunner initialized" in log_payload.get('message', "") and
                     log_payload.get('module') == 'ga_runner' and
                     log_payload.get('funcName') == '__init__'):
@@ -328,206 +264,149 @@ class TestGeneticAlgorithmRunner(unittest.TestCase):
                     self.assertIn(f"for {num_generations} generations", log_payload.get('message', ""))
                     self.assertIn(f"with PopulationManager (ID: {id(self.mock_pop_manager)})", log_payload.get('message', ""))
                     break
-
         self.assertTrue(found_init_log,
-                        f"The specific GA Runner __init__ log message was not found. Calls: {mock_broadcast_json_patched_on_globals.call_args_list}") # Use original name
-
-        # Restore original handlers after the test
+                        f"The specific GA Runner __init__ log message was not found. Calls: {mock_broadcast_json_patched_on_globals.call_args_list}")
         ga_logger.handlers = original_handlers
-        # Restore global logging disable level
         logging.disable(original_global_disable_level)
 
-    # --- Tests for Periodic Saving ---
-
     @patch('prompthelix.experiment_runners.ga_runner.logger')
-    def test_periodic_save_triggered_correctly(self, mock_logger):
+    async def test_periodic_save_triggered_correctly(self, mock_logger): # Changed to async
         self.mock_pop_manager.population_path = "test/path/pop.json"
         self.mock_pop_manager.should_stop = False
         self.mock_pop_manager.status = "RUNNING"
-        self.mock_pop_manager.generation_number = 0 # Initial state
-
+        self.mock_pop_manager.generation_number = 0
         num_generations_to_run = 5
         save_freq = 2
-
-        # Local generation counter for the side effect
         current_generation_in_test = 0
-
-        def fake_evolve_population(*args, **kwargs):
+        async def fake_evolve_population(*args, **kwargs): # Made async
             nonlocal current_generation_in_test
             current_generation_in_test += 1
             self.mock_pop_manager.generation_number = current_generation_in_test
             if current_generation_in_test >= num_generations_to_run:
-                self.mock_pop_manager.should_stop = True # Signal runner to stop after this evolution
-
+                self.mock_pop_manager.should_stop = True
         self.mock_pop_manager.evolve_population.side_effect = fake_evolve_population
-
         runner = GeneticAlgorithmRunner(
             population_manager=self.mock_pop_manager,
             num_generations=num_generations_to_run,
-            save_frequency=save_freq
+            save_frequency=save_freq,
+            population_persistence_path=self.mock_pop_manager.population_path
         )
-
-        runner.run(task_description="test task for periodic save")
-
-        # Expected calls at generation 2 and 4
+        await runner.run(task_description="test task for periodic save") # await
         self.assertEqual(self.mock_pop_manager.save_population.call_count, 2)
         self.mock_pop_manager.save_population.assert_any_call("test/path/pop.json")
-
-        # Check that logger.info was called for periodic saving
-        # Example: f"Periodically saved population at generation {self.population_manager.generation_number} to {self.population_manager.population_path}"
         self.assertTrue(any("Periodically saved population at generation 2" in str(c[0][0]) for c in mock_logger.info.call_args_list))
         self.assertTrue(any("Periodically saved population at generation 4" in str(c[0][0]) for c in mock_logger.info.call_args_list))
 
-
     @patch('prompthelix.experiment_runners.ga_runner.logger')
-    def test_periodic_save_not_triggered_when_frequency_is_zero(self, mock_logger):
+    async def test_periodic_save_not_triggered_when_frequency_is_zero(self, mock_logger): # Changed to async
         self.mock_pop_manager.population_path = "test/path/pop.json"
         self.mock_pop_manager.should_stop = False
         self.mock_pop_manager.status = "RUNNING"
         self.mock_pop_manager.generation_number = 0
-
         num_generations_to_run = 3
-        save_freq = 0 # Save disabled
-
+        save_freq = 0
         current_generation_in_test = 0
-        def fake_evolve_population(*args, **kwargs):
+        async def fake_evolve_population(*args, **kwargs): # Made async
             nonlocal current_generation_in_test
             current_generation_in_test += 1
             self.mock_pop_manager.generation_number = current_generation_in_test
             if current_generation_in_test >= num_generations_to_run:
                 self.mock_pop_manager.should_stop = True
-
         self.mock_pop_manager.evolve_population.side_effect = fake_evolve_population
-
         runner = GeneticAlgorithmRunner(
             population_manager=self.mock_pop_manager,
             num_generations=num_generations_to_run,
-            save_frequency=save_freq
+            save_frequency=save_freq,
+            population_persistence_path=self.mock_pop_manager.population_path
         )
-        runner.run(task_description="test task no save freq 0")
-
+        await runner.run(task_description="test task no save freq 0") # await
         self.mock_pop_manager.save_population.assert_not_called()
 
     @patch('prompthelix.experiment_runners.ga_runner.logger')
-    def test_periodic_save_not_triggered_when_no_population_path(self, mock_logger):
-        self.mock_pop_manager.population_path = None # No path
+    async def test_periodic_save_not_triggered_when_no_population_path(self, mock_logger): # Changed to async
         self.mock_pop_manager.should_stop = False
         self.mock_pop_manager.status = "RUNNING"
         self.mock_pop_manager.generation_number = 0
-
         num_generations_to_run = 3
-        save_freq = 1 # Save enabled, but no path
-
+        save_freq = 1
         current_generation_in_test = 0
-        def fake_evolve_population(*args, **kwargs):
+        async def fake_evolve_population(*args, **kwargs): # Made async
             nonlocal current_generation_in_test
             current_generation_in_test += 1
             self.mock_pop_manager.generation_number = current_generation_in_test
             if current_generation_in_test >= num_generations_to_run:
                 self.mock_pop_manager.should_stop = True
-
         self.mock_pop_manager.evolve_population.side_effect = fake_evolve_population
-
         runner = GeneticAlgorithmRunner(
             population_manager=self.mock_pop_manager,
             num_generations=num_generations_to_run,
-            save_frequency=save_freq
+            save_frequency=save_freq,
+            population_persistence_path=None
         )
-        runner.run(task_description="test task no save path")
-
+        await runner.run(task_description="test task no save path") # await
         self.mock_pop_manager.save_population.assert_not_called()
 
     @patch('prompthelix.experiment_runners.ga_runner.logger')
-    def test_periodic_save_not_triggered_at_generation_zero(self, mock_logger):
-        # This test verifies that save is not called for generation 0.
-        # If num_generations_to_run is 1 and save_freq is 1,
-        # evolve_population will be called, self.mock_pop_manager.generation_number becomes 1.
-        # So save_population SHOULD be called.
-        # The condition is `self.population_manager.generation_number > 0`.
-        # If evolve_population is called once, generation_number becomes 1, so it should save.
-
+    async def test_periodic_save_not_triggered_at_generation_zero(self, mock_logger): # Changed to async
         self.mock_pop_manager.population_path = "test/path/pop.json"
         self.mock_pop_manager.should_stop = False
         self.mock_pop_manager.status = "RUNNING"
-        self.mock_pop_manager.generation_number = 0 # Initial state
-
-        num_generations_to_run = 1 # Run for only one generation
-        save_freq = 1 # Save frequency is 1
-
+        self.mock_pop_manager.generation_number = 0
+        num_generations_to_run = 1
+        save_freq = 1
         current_generation_in_test = 0
-        def fake_evolve_population(*args, **kwargs):
+        async def fake_evolve_population(*args, **kwargs): # Made async
             nonlocal current_generation_in_test
-            current_generation_in_test += 1 # generation_number becomes 1
+            current_generation_in_test += 1
             self.mock_pop_manager.generation_number = current_generation_in_test
             if current_generation_in_test >= num_generations_to_run:
                  self.mock_pop_manager.should_stop = True
-
         self.mock_pop_manager.evolve_population.side_effect = fake_evolve_population
-
         runner = GeneticAlgorithmRunner(
             population_manager=self.mock_pop_manager,
             num_generations=num_generations_to_run,
-            save_frequency=save_freq
+            save_frequency=save_freq,
+            population_persistence_path=self.mock_pop_manager.population_path
         )
-        runner.run(task_description="test task gen zero")
-
-        # save_population should be called once at generation 1
+        await runner.run(task_description="test task gen zero") # await
         self.assertEqual(self.mock_pop_manager.save_population.call_count, 1)
         self.mock_pop_manager.save_population.assert_called_with("test/path/pop.json")
         self.assertTrue(any("Periodically saved population at generation 1" in str(c[0][0]) for c in mock_logger.info.call_args_list))
 
-
     @patch('prompthelix.experiment_runners.ga_runner.logger')
-    def test_periodic_save_handles_exception_during_save_operation(self, mock_logger):
+    async def test_periodic_save_handles_exception_during_save_operation(self, mock_logger): # Changed to async
         self.mock_pop_manager.population_path = "test/path/pop.json"
         self.mock_pop_manager.should_stop = False
         self.mock_pop_manager.status = "RUNNING"
         self.mock_pop_manager.generation_number = 0
-
         num_generations_to_run = 2
-        save_freq = 1 # Try to save at generation 1 and 2
-
-        # Simulate save_population raising an error only on the first attempt (gen 1)
+        save_freq = 1
         save_call_count = 0
         def fake_save_population_with_error(*args, **kwargs):
             nonlocal save_call_count
             save_call_count += 1
-            if save_call_count == 1: # Error on first call (generation 1)
+            if save_call_count == 1:
                 raise IOError("Disk full!")
-            # Succeed on second call (generation 2)
-
         self.mock_pop_manager.save_population.side_effect = fake_save_population_with_error
-
         current_generation_in_test = 0
-        def fake_evolve_population(*args, **kwargs):
+        async def fake_evolve_population(*args, **kwargs): # Made async
             nonlocal current_generation_in_test
             current_generation_in_test += 1
             self.mock_pop_manager.generation_number = current_generation_in_test
             if current_generation_in_test >= num_generations_to_run:
                 self.mock_pop_manager.should_stop = True
-
         self.mock_pop_manager.evolve_population.side_effect = fake_evolve_population
-
         runner = GeneticAlgorithmRunner(
             population_manager=self.mock_pop_manager,
             num_generations=num_generations_to_run,
-            save_frequency=save_freq
+            save_frequency=save_freq,
+            population_persistence_path=self.mock_pop_manager.population_path
         )
-
-        # The runner should not crash, it should log the error and continue.
-        runner.run(task_description="test task save exception")
-
-        # save_population was attempted twice (at gen 1 and gen 2)
+        await runner.run(task_description="test task save exception") # await
         self.assertEqual(self.mock_pop_manager.save_population.call_count, 2)
-
-        # Check that logger.error was called for the failed save
-        # Example: f"Error during periodic save of population at generation {self.population_manager.generation_number}: {e}"
         self.assertTrue(any("Error during periodic save of population at generation 1" in str(c[0][0]) for c in mock_logger.error.call_args_list))
         self.assertTrue(any("Disk full!" in str(c[0][0]) for c in mock_logger.error.call_args_list))
-
-        # Check that the successful save at generation 2 was logged via logger.info
         self.assertTrue(any("Periodically saved population at generation 2" in str(c[0][0]) for c in mock_logger.info.call_args_list))
-
 
 if __name__ == '__main__':
     unittest.main()
