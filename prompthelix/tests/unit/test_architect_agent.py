@@ -29,15 +29,25 @@ class TestPromptArchitectAgent(unittest.TestCase):
 
     def test_agent_creation_and_default_config_loading(self):
         """Test basic creation and initialization of the agent, and config loading."""
-        self.assertIsNotNone(self.architect)
-        self.assertEqual(self.architect.agent_id, "PromptArchitect")
-        self.assertTrue(self.architect.templates, "Templates should be loaded and not empty.")
-        self.assertIn("summary_v1", self.architect.templates, "Default summary template should be loaded.")
-        # Check provider and model use module fallbacks when no settings provided
+        # Stop the class-level patch to set up a specific scenario for this test
+        self.architect_config_patch.stop()
+
+        # For this test, we want AGENT_SETTINGS to be effectively empty for PromptArchitectAgent
+        # so that module-level fallbacks are used.
+        with patch.dict(GLOBAL_AGENT_SETTINGS, {'PromptArchitectAgent': {}}, clear=True):
+            # Create a new agent instance within this specific patch context
+            architect_for_test = PromptArchitectAgent(knowledge_file_path=None)
+
+        self.assertIsNotNone(architect_for_test)
+        self.assertEqual(architect_for_test.agent_id, "PromptArchitect")
+        self.assertTrue(architect_for_test.templates, "Templates should be loaded and not empty.")
+        self.assertIn("summary_v1", architect_for_test.templates, "Default summary template should be loaded.")
+
         from prompthelix.agents.architect import FALLBACK_LLM_PROVIDER, FALLBACK_LLM_MODEL
-        self.assertEqual(self.architect.llm_provider, FALLBACK_LLM_PROVIDER)
-        self.assertEqual(self.architect.llm_model, FALLBACK_LLM_MODEL)
-        # Check default knowledge file path (constructed with KNOWLEDGE_DIR and FALLBACK_KNOWLEDGE_FILE)
+        self.assertEqual(architect_for_test.llm_provider, FALLBACK_LLM_PROVIDER)
+        self.assertEqual(architect_for_test.llm_model, FALLBACK_LLM_MODEL)
+
+        # Check default knowledge file path
         from prompthelix.config import KNOWLEDGE_DIR
         import os
         expected_kfp = os.path.join(KNOWLEDGE_DIR, "architect_knowledge.json") # FALLBACK_KNOWLEDGE_FILE
