@@ -63,13 +63,21 @@ def load_strategies(paths: List[str]) -> List[BaseMutationStrategy]: # Use new A
 
 @register_strategy
 class AppendCharStrategy(BaseMutationStrategy): # Inherit from new ABC
-    """
-    Mutates a gene by appending a random character.
-    """
-    def __init__(self, settings: Optional[Dict] = None, **kwargs):
+    """Mutates a gene by appending a random character."""
+
+    def __init__(
+        self,
+        settings: Optional[Dict] = None,
+        chars_to_append: str | None = None,
+        **kwargs,
+    ):
         super().__init__(settings=settings, **kwargs)
         # Specific initialization for this strategy
-        self.chars_to_append = self.settings.get("chars_to_append", "!*?_") if self.settings else "!*?_"
+        self.chars_to_append = (
+            chars_to_append
+            if chars_to_append is not None
+            else self.settings.get("chars_to_append", "!*?_") if self.settings else "!*?_"
+        )
 
 
     def mutate(self, chromosome: PromptChromosome) -> PromptChromosome:
@@ -146,12 +154,20 @@ class ReverseSliceStrategy(BaseMutationStrategy): # Inherit from new ABC
 
 @register_strategy
 class PlaceholderReplaceStrategy(BaseMutationStrategy): # Inherit from new ABC
-    """
-    Mutates a gene by replacing it or a part of it with a placeholder.
-    """
-    def __init__(self, settings: Optional[Dict] = None, **kwargs):
+    """Mutates a gene by replacing it or a part of it with a placeholder."""
+
+    def __init__(
+        self,
+        settings: Optional[Dict] = None,
+        placeholder: str | None = None,
+        **kwargs,
+    ):
         super().__init__(settings=settings, **kwargs)
-        self.placeholder = self.settings.get("placeholder", "[MUTATED_GENE_SEGMENT]") if self.settings else "[MUTATED_GENE_SEGMENT]"
+        self.placeholder = (
+            placeholder
+            if placeholder is not None
+            else self.settings.get("placeholder", "[MUTATED_GENE_SEGMENT]") if self.settings else "[MUTATED_GENE_SEGMENT]"
+        )
 
     def mutate(self, chromosome: PromptChromosome) -> PromptChromosome:
         mutated_chromosome = chromosome.clone()
