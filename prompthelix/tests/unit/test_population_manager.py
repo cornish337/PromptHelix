@@ -238,8 +238,10 @@ class TestPopulationManager(unittest.TestCase):
         self.mock_genetic_ops.mutate.side_effect = lambda chromo, *args, **kwargs: PromptChromosome(genes=chromo.genes + ["_mutated"])
 
         task_desc = "Evolution task"
+
         original_generation_number = manager.generation_number
         await manager.evolve_population(task_desc, success_criteria={}) # Added await
+
 
         self.assertEqual(self.mock_fitness_eval.evaluate.call_count, pop_size)
         for chromo in initial_chromosomes:
@@ -267,7 +269,9 @@ class TestPopulationManager(unittest.TestCase):
             self.mock_genetic_ops, self.mock_fitness_eval, self.mock_architect_agent,
             population_size=5, elitism_count=1, message_bus=self.mock_message_bus
         )
+
         manager.evolve_population("Test task")
+
         self.assertEqual(manager.generation_number, 0, "Generation number should not change for empty population.")
         self.assertEqual(len(manager.population), 0, "Population should remain empty.")
         self.mock_fitness_eval.evaluate.assert_not_called()
@@ -461,6 +465,7 @@ class TestPopulationManager(unittest.TestCase):
         manager.generation_number = 0
         self.mock_fitness_eval.evaluate.side_effect = lambda c, td, sc: c.fitness_score
         mock_broadcast_ga_update.reset_mock()
+
 
         manager.evolve_population("evolution_task", success_criteria={})
 

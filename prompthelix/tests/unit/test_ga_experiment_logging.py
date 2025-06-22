@@ -42,6 +42,7 @@ def test_population_manager_records(db_session: SQLAlchemySession, simple_pm: Po
 
     simple_pm.evolve_population(
         task_description="t",
+        target_style=None,
         db_session=db_session,
         experiment_run=run,
     )
