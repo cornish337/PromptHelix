@@ -248,7 +248,7 @@ class TestPopulationManager(unittest.TestCase):
 
         task_desc = "Evolution task"
         # evolve_population now takes success_criteria
-        manager.evolve_population(task_desc, success_criteria={})
+        manager.evolve_population(task_desc, success_criteria={}, target_style=None)
 
         # 1. Test fitness_evaluator.evaluate calls
         self.assertEqual(self.mock_fitness_eval.evaluate.call_count, pop_size)
@@ -287,7 +287,7 @@ class TestPopulationManager(unittest.TestCase):
             population_size=5, elitism_count=1
         )
         # manager.population is []
-        manager.evolve_population("Test task")
+        manager.evolve_population("Test task", target_style=None)
         self.assertEqual(manager.generation_number, 0, "Generation number should not change for empty population.")
         self.assertEqual(len(manager.population), 0, "Population should remain empty.")
         self.mock_fitness_eval.evaluate.assert_not_called()
@@ -479,7 +479,7 @@ class TestPopulationManager(unittest.TestCase):
         self.mock_genetic_ops.mutate.side_effect = lambda c, **kwargs: c # Return as is
 
         # evolve_population now also takes success_criteria
-        manager.evolve_population("evolution_task", success_criteria={})
+        manager.evolve_population("evolution_task", success_criteria={}, target_style=None)
 
         # Check the sequence of broadcast calls from evolve_population
         # evolve_population in engine.py does not currently have broadcast calls.

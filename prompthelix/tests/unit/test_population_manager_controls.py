@@ -193,7 +193,7 @@ class TestPopulationManagerControls(unittest.TestCase):
         self.pop_manager.population = [self.fittest_chromo, self.other_chromo]
 
 
-        self.pop_manager.evolve_population("task desc")
+        self.pop_manager.evolve_population("task desc", target_style=None)
 
         self.assertGreaterEqual(self.mock_message_bus.connection_manager.broadcast_json.call_count, 3)
 

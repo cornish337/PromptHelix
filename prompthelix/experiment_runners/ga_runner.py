@@ -136,7 +136,7 @@ class GeneticAlgorithmRunner(BaseExperimentRunner):
                 self.population_manager.evolve_population(
                     task_description=task_description,
                     success_criteria=success_criteria,
-                    # target_style=target_style, # target_style is not used by current evolve_population
+                    target_style=target_style,
                     db_session=self._db_session,
                     experiment_run=self._experiment_run,
                 )

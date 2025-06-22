@@ -253,7 +253,7 @@ class TestPopulationManagerParallelEvaluation(unittest.TestCase):
         expected_fitnesses_by_id = self._get_expected_fitnesses(self.processed_chromosomes)
 
         print("Running evolve_population for test_evolve_population_single_and_multiple_workers_match_expected...")
-        self.population_manager.evolve_population(self.task_description, self.success_criteria)
+        self.population_manager.evolve_population(self.task_description, self.success_criteria, target_style=None)
 
         # Assertions are now made on self.processed_chromosomes
         for processed_chromo in self.processed_chromosomes:
@@ -281,7 +281,7 @@ class TestPopulationManagerParallelEvaluation(unittest.TestCase):
                                                                 failing_chromosome_id_val=FAILING_CHROMOSOME_ID_FOR_TEST)
 
         print("Running evolve_population for test_evolve_population_handles_evaluation_exception...")
-        self.population_manager.evolve_population(self.task_description, self.success_criteria)
+        self.population_manager.evolve_population(self.task_description, self.success_criteria, target_style=None)
 
         # Assertions are now made on self.processed_chromosomes
         for processed_chromo in self.processed_chromosomes:
