@@ -309,6 +309,7 @@ async def main_ga_loop( # Changed to async def
         initial_prompt_str=initial_prompt_str,
         parallel_workers=parallel_workers,
         message_bus=message_bus,  # Added
+        population_path=actual_population_path,
 
 # old
 #        metrics_file_path=metrics_file_path,
@@ -447,7 +448,7 @@ async def main_ga_loop( # Changed to async def
     if actual_population_path:
         logger.info(f"Orchestrator: Attempting to save final population to {actual_population_path}")
         try:
-            pop_manager.save_population(actual_population_path)
+            pop_manager.save_population()
             logger.info(f"Orchestrator: Final population successfully saved to {actual_population_path}.")
         except Exception as e:
             logger.error(f"Orchestrator: Failed to save final population to {actual_population_path}. Error: {e}", exc_info=True)
