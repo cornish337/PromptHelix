@@ -136,6 +136,9 @@ You can set these variables in a few ways:
     When the application first runs (e.g., `uvicorn prompthelix.main:app`), the `init_db()` function is called. For SQLite (the default for development), this will create the database file (e.g., `prompthelix.db`) and all necessary tables if they don't already exist. This is convenient for getting started quickly in a development environment.
     For production environments, and for managing database schema changes over time (migrations) in any environment, PromptHelix uses Alembic. See the "Database Migrations" subsection under "Manual Deployment" for details on using Alembic.
     The SQLite database file is not included in the repository and will be created automatically.
+
+    The FastAPI application itself lives in `prompthelix/main.py`. There is no
+    `main.py` at the project root.
 5.  **Run the Web UI (Development Server):**
     ```bash
     uvicorn prompthelix.main:app --reload
