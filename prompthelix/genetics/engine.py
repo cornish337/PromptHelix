@@ -15,6 +15,7 @@ from prompthelix.agents.base import BaseAgent # Added for type hint
 
 
 logger = logging.getLogger(__name__) # Added logger for this module
+ga_logger = logging.getLogger("prompthelix.ga_metrics") # Dedicated logger for GA metrics
 
 class GeneticOperators:
     """Minimal genetic operators used by unit tests."""
@@ -53,6 +54,33 @@ class GeneticOperators:
 
         child1.parent_ids = [str(parent1.id), str(parent2.id)]
         child2.parent_ids = [str(parent1.id), str(parent2.id)]
+
+        # Logging for child1
+        ga_logger.info({
+            "run_id": _.get("run_id"), # Assuming run_id is passed in **_ or directly
+            "agent_id": "ga_engine",
+            "generation": _.get("generation"),
+            "chromosome_id": str(child1.id),
+            "prompt_text": child1.to_prompt_string(),
+            "fitness_score": child1.fitness_score, # Will be 0.0 or unevaluated
+            "operation": "crossover",
+            "parent_ids": child1.parent_ids,
+            "mutation_strategy": None,
+            "metadata": {"source_parents": [str(parent1.id), str(parent2.id)]}
+        })
+        # Logging for child2
+        ga_logger.info({
+            "run_id": _.get("run_id"),
+            "agent_id": "ga_engine",
+            "generation": _.get("generation"),
+            "chromosome_id": str(child2.id),
+            "prompt_text": child2.to_prompt_string(),
+            "fitness_score": child2.fitness_score, # Will be 0.0 or unevaluated
+            "operation": "crossover",
+            "parent_ids": child2.parent_ids,
+            "mutation_strategy": None,
+            "metadata": {"source_parents": [str(parent1.id), str(parent2.id)]}
+        })
         return child1, child2
 
     def mutate(
@@ -61,10 +89,14 @@ class GeneticOperators:
         mutation_rate: float = 1.0,
         gene_mutation_prob: float = 1.0, # Retained for compatibility
         target_style: Optional[str] = None,
-        **_
+        run_id: Optional[str] = None, # Added run_id
+        generation: Optional[int] = None, # Added generation
+        **_ # Captures run_id and generation if passed this way too
     ) -> PromptChromosome:
-        mutated_chromosome = chromosome.clone()
+        mutated_chromosome = chromosome.clone() # Clone first to keep original intact for logging if needed
+        original_chromosome_id = str(chromosome.id) # Save original ID for parent_ids field
         mutated_chromosome.fitness_score = 0.0
+
 
         if not self.mutation_strategies:
             logger.warning(f"GeneticOperators: No mutation strategies available. Chromosome {chromosome.id} will not be mutated.")
@@ -117,6 +149,30 @@ class GeneticOperators:
                 "but StyleOptimizerAgent not available. Skipping."
             )
 
+        # Log the mutation event
+        # The `final_chromosome` is the one that resulted from mutation (and possibly style optimization)
+        # Its parent_ids should have been set to the original chromosome's ID during the process.
+        # If style optimization occurred, final_chromosome might be a new object, ensure its parent_ids are correct.
+        # The `mutate` method in PromptChromosome's strategy should set parent_ids.
+        # Let's ensure `final_chromosome.parent_ids` is correctly set before logging.
+        # If `strategy.mutate` returns a new chromosome, it must set `parent_ids`.
+        # If it modifies in-place, `post_strategy_chromosome.parent_ids = [str(chromosome.id)]` handles it.
+        # If style optimizer returns a *new* chromosome, its parentage should trace to `post_strategy_chromosome`.
+        # For simplicity here, we log `final_chromosome` and assume its `parent_ids` correctly reflect its immediate predecessor.
+
+        ga_logger.info({
+            "run_id": run_id if run_id else _.get("run_id"), # Prioritize direct param
+            "agent_id": "ga_engine",
+            "generation": generation if generation else _.get("generation"), # Prioritize direct param
+            "chromosome_id": str(final_chromosome.id),
+            "prompt_text": final_chromosome.to_prompt_string(),
+            "fitness_score": final_chromosome.fitness_score, # Should be 0.0 as it's reset
+            "operation": "mutation",
+            "parent_ids": [original_chromosome_id], # Parent is the chromosome before mutation
+            "mutation_strategy": final_chromosome.mutation_strategy, # This is set by strategy.mutate
+            "metadata": {"applied_strategy": strategy.__class__.__name__, "target_style_attempted": bool(target_style)}
+        })
+
         return final_chromosome
 
     def selection(self, population: List[PromptChromosome], tournament_size: int = 2) -> PromptChromosome:
@@ -149,7 +205,7 @@ class FitnessEvaluator:
         self.llm_settings = llm_settings if llm_settings is not None else {}
 
 
-    async def evaluate(self, chromosome: PromptChromosome, task_description: str, success_criteria: Optional[Dict] = None) -> float: # Changed to async
+    async def evaluate(self, chromosome: PromptChromosome, task_description: str, success_criteria: Optional[Dict] = None, run_id: Optional[str] = None, generation: Optional[int] = None) -> float: # Changed to async
         """
         Evaluates a chromosome's fitness.
         In TEST mode, simulates LLM output. Otherwise, this basic evaluator might not be fully functional
@@ -218,7 +274,21 @@ class FitnessEvaluator:
 
         fitness_score = evaluation_result.get("fitness_score", 0.0)
         chromosome.fitness_score = fitness_score
-        logger.info(f"FitnessEvaluator: Chromosome {chromosome.id} evaluated. Fitness: {fitness_score:.4f}")
+        logger.info(f"FitnessEvaluator: Chromosome {chromosome.id} (Run ID: {run_id}, Gen: {generation}) evaluated. Fitness: {fitness_score:.4f}")
+
+        # Log evaluation event
+        ga_logger.info({
+            "run_id": run_id,
+            "agent_id": "ga_engine", # Or "fitness_evaluator"
+            "generation": generation,
+            "chromosome_id": str(chromosome.id),
+            "prompt_text": chromosome.to_prompt_string(),
+            "fitness_score": fitness_score,
+            "operation": "evaluation",
+            "parent_ids": chromosome.parent_ids, # Persist parent_ids if available
+            "mutation_strategy": chromosome.mutation_strategy, # Persist strategy if available
+            "metadata": {"task_description": task_description, "llm_output_snippet_eval": llm_output[:100] if llm_output else "N/A"}
+        })
         return fitness_score
 
 
@@ -272,12 +342,16 @@ class PopulationManager:
         self.status: str = "IDLE" # Possible statuses: IDLE, INITIALIZING, RUNNING, PAUSED, STOPPED, COMPLETED, ERROR
         self.is_paused: bool = False
         self.should_stop: bool = False
+        self.run_id: Optional[str] = None # Added to store the experiment run ID
 
     async def initialize_population(self, initial_task_description: str, initial_keywords: List[str],
                               constraints: Optional[Dict] = None,
-                              success_criteria: Optional[Dict] = None):
+                              success_criteria: Optional[Dict] = None,
+                              run_id: Optional[str] = None): # Added run_id parameter
         self.status = "INITIALIZING"
-        logger.info(f"PopulationManager: Initializing population. Task: '{initial_task_description}', Keywords: {initial_keywords}")
+        if run_id: # Store run_id if provided, useful if initialization is called separately
+            self.run_id = run_id
+        logger.info(f"PopulationManager (Run ID: {self.run_id}): Initializing population. Task: '{initial_task_description}', Keywords: {initial_keywords}")
         await self.broadcast_ga_update(event_type="population_initialization_started")
         self.population = []
         self.generation_number = 0
@@ -315,20 +389,43 @@ class PopulationManager:
 
         if new_chromosomes:
             self.population.extend(new_chromosomes)
-        logger.info(f"PopulationManager: Generated {len(self.population)} initial chromosomes (valid only).")
+        logger.info(f"PopulationManager (Run ID: {self.run_id}): Generated {len(self.population)} initial chromosomes (valid only).")
+
+        # Log "initialization" event for architected chromosomes before evaluation
+        for chromo in self.population: # Assuming self.population contains only newly architected ones or ones from initial_prompt_str
+            # If chromo was from initial_prompt_str, its fitness is 0.0.
+            # If from architect, fitness is also 0.0 before explicit evaluation.
+            ga_logger.info({
+                "run_id": self.run_id,
+                "agent_id": "ga_engine", # Or "prompt_architect_agent" if we want to be specific about source
+                "generation": self.generation_number, # Initial population is generation 0
+                "chromosome_id": str(chromo.id),
+                "prompt_text": chromo.to_prompt_string(),
+                "fitness_score": chromo.fitness_score, # Will be 0.0
+                "operation": "initialization",
+                "parent_ids": chromo.parent_ids, # Likely empty or None for initial
+                "mutation_strategy": None,
+                "metadata": {"source": "architect" if not self.initial_prompt_str or chromo.genes != [self.initial_prompt_str] else "initial_prompt_str"}
+            })
 
         # Evaluate the initial population
-        logger.info("PopulationManager: Evaluating initial population...")
+        logger.info(f"PopulationManager (Run ID: {self.run_id}): Evaluating initial population...")
         evaluation_tasks = []
         for i, chromo in enumerate(self.population):
-            logger.debug(f"PopulationManager: Scheduling evaluation for initial chromosome {i+1}/{len(self.population)}, ID: {chromo.id}")
-            evaluation_tasks.append(self.fitness_evaluator.evaluate(chromo, initial_task_description, success_criteria))
+            logger.debug(f"PopulationManager (Run ID: {self.run_id}): Scheduling evaluation for initial chromosome {i+1}/{len(self.population)}, ID: {chromo.id}")
+            evaluation_tasks.append(self.fitness_evaluator.evaluate(
+                chromosome=chromo,
+                task_description=initial_task_description,
+                success_criteria=success_criteria,
+                run_id=self.run_id, # Pass run_id
+                generation=self.generation_number # generation is 0 for initial population
+            ))
 
         await asyncio.gather(*evaluation_tasks) # Evaluate concurrently
             # FitnessEvaluator now logs the score, so no need to duplicate here unless for summary
 
         self.population.sort(key=lambda c: c.fitness_score, reverse=True)
-        logger.info("PopulationManager: Initial population evaluation complete and sorted.")
+        logger.info(f"PopulationManager (Run ID: {self.run_id}): Initial population evaluation complete and sorted.")
         if self.population:
             for i in range(min(3, len(self.population))): # Log top 3
                 chromo = self.population[i]
@@ -527,7 +624,13 @@ class PopulationManager:
         for i, chromosome in enumerate(self.population):
             logger.debug(f"PopulationManager: Scheduling evaluation for chromosome {i+1}/{len(self.population)}, ID: {chromosome.id} for generation {self.generation_number + 1}")
             evaluation_tasks.append(
-                self.fitness_evaluator.evaluate(chromosome, task_description, success_criteria)
+                self.fitness_evaluator.evaluate(
+                    chromosome=chromosome,
+                    task_description=task_description,
+                    success_criteria=success_criteria,
+                    run_id=self.run_id, # Pass run_id
+                    generation=self.generation_number + 1 # Pass current generation number
+                )
             )
 
         # Use return_exceptions=True to handle individual task failures

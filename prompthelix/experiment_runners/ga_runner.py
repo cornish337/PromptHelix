@@ -105,13 +105,24 @@ class GeneticAlgorithmRunner(BaseExperimentRunner):
             "num_generations": self.num_generations,
             "population_size": self.population_manager.population_size,
             "elitism_count": self.population_manager.elitism_count,
-            "run_kwargs": kwargs,
+            "run_kwargs": kwargs, # Storing kwargs for potential later inspection or full parameter logging
         }
         self._experiment_run = create_experiment_run(
-            self._db_session, parameters=experiment_parameters
+            self._db_session, parameters=experiment_parameters # Pass experiment_parameters, not just kwargs
         )
-        self.population_manager.status = "RUNNING"  # Ensure status is RUNNING at start
-        await self.population_manager.broadcast_ga_update(event_type="ga_run_started_runner") # Added await
+        # Ensure experiment_run object and its ID are available
+        if not self._experiment_run or not hasattr(self._experiment_run, 'id'):
+            logger.error("GeneticAlgorithmRunner: Failed to create or retrieve experiment run ID from database.")
+            # Handle error appropriately, e.g., raise an exception or stop execution
+            # For now, let's log and attempt to continue, but run_id will be None.
+            # This situation should ideally not occur if DB operations are successful.
+            self.population_manager.run_id = None # Explicitly set to None
+        else:
+            self.population_manager.run_id = self._experiment_run.id # Set run_id on PopulationManager
+            logger.info(f"GeneticAlgorithmRunner: Experiment run created with ID: {self._experiment_run.id}. Propagated to PopulationManager.")
+
+        self.population_manager.status = "RUNNING"
+        await self.population_manager.broadcast_ga_update(event_type="ga_run_started_runner")
 
         # Extract GA evolution parameters from kwargs
         task_description = kwargs.get("task_description")
