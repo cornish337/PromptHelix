@@ -178,6 +178,11 @@ prompthelix.db
 *.db
 *.burp
 
+# Auxiliary scripts and API responses
+get-pip.py
+*response_code.txt
+test_prompt_owner.py
+
 # Ignore Knowlege
 *.json
 *.jsonl
