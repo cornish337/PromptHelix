@@ -339,14 +339,20 @@ PromptHelix also provides an API endpoint to trigger the genetic algorithm.
     The Prompt Manager UI, for adding and viewing prompts, can be accessed as described in the "Setup and Run the Web UI" section.
 
 4.  **Expected Response**:
-    The API will return a JSON response containing the best prompt found by the genetic algorithm and its fitness score:
+    The endpoint now launches the experiment asynchronously. It immediately
+    returns a `GARunResponse` object with the task identifier and a URL for
+    checking progress:
+
     ```json
     {
-        "best_prompt": "some generated prompt text",
-        "fitness": 20
+      "message": "GA experiment started in background.",
+      "task_id": "<uuid>",
+      "status_endpoint": "/api/ga/status/<uuid>"
     }
     ```
-    Note: The actual prompt and fitness score will vary with each run due to the nature of the genetic algorithm.
+
+    The generation results can be monitored via the `status_endpoint` or by
+    visiting the GA dashboard at `/ui/dashboard`.
 
 ## Metrics and Monitoring
 
