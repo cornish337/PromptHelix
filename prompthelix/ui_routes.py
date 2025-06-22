@@ -237,21 +237,38 @@ async def run_experiment_ui_submit(
             response = await client.post(
                 str(api_experiment_url),
                 json=ga_params.model_dump(exclude_none=True),
-                headers=headers # Pass the headers
+                headers=headers  # Pass the headers
             )
             response.raise_for_status()  # Raises an exception for 4XX/5XX responses
 
-            # The API now returns a GARunResponse, not the created PromptVersion directly
-            ga_run_response_data = response.json()
-            ga_run_info = schemas.GARunResponse(**ga_run_response_data)
+            response_data = response.json()
+            message = None
+            redirect_url = None
 
-            # Redirect to the prompts list page with a message indicating the experiment has started
-            message = f"Experiment started successfully. Task ID: {ga_run_info.task_id}. You can monitor its progress or find the result in the prompts list once completed."
-            # Consider redirecting to a dedicated experiment tracking page if one exists,
-            # or the prompts list page, or the dashboard.
-            # For now, redirecting to the prompts list page.
-            redirect_url = str(request.url_for('list_prompts_ui'))
-            redirect_url += f"?message={message}" # Pass message as query param
+            # Preferred format: GARunResponse with task ID
+            try:
+                ga_run_info = schemas.GARunResponse(**response_data)
+                message = ga_run_info.message
+                if ga_run_info.task_id:
+                    message += f" Task ID: {ga_run_info.task_id}"
+                redirect_url = str(request.url_for("ui_dashboard"))
+            except Exception:
+                # Fallback to old behaviour expecting a PromptVersion structure
+                if "id" in response_data and "prompt_id" in response_data:
+                    pv = schemas.PromptVersion(**response_data)
+                    message = (
+                        f"New version (ID: {pv.id}) created successfully from experiment."
+                    )
+                    redirect_url = str(
+                        request.url_for("view_prompt_ui", prompt_id=pv.prompt_id)
+                    )
+                    redirect_url += f"?new_version_id={pv.id}"
+                else:
+                    # Unknown response structure
+                    message = "GA experiment started"
+                    redirect_url = str(request.url_for("ui_dashboard"))
+
+            redirect_url += f"?message={message}"
             return RedirectResponse(url=redirect_url, status_code=303)
 
         except httpx.HTTPStatusError as e:
