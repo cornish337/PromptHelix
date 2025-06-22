@@ -591,3 +591,62 @@ async def run_interactive_test(test_name: str):
         return {"output": output, "returncode": result.returncode}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+# --- User Feedback Routes ---
+@router.post("/api/feedback/", response_model=schemas.UserFeedback, status_code=status.HTTP_201_CREATED, tags=["User Feedback"], summary="Submit user feedback", description="Allows a user to submit feedback on a prompt or GA chromosome.")
+def submit_user_feedback_route(
+    feedback_data: schemas.UserFeedbackCreate,
+    db: DbSession = Depends(get_db),
+    current_user: Optional[UserModel] = Depends(get_current_user) # Make current_user optional if anonymous feedback is allowed
+):
+    # If current_user is None and feedback_data.user_id is also None, it's anonymous or an error.
+    # For now, let's assume feedback must be tied to an authenticated user if user_id is not in payload.
+    # If feedback_data.user_id is provided in payload, it might be used for admin-submitted feedback.
+    # The crud function handles current_user_id priority.
+    user_id_to_log = current_user.id if current_user else feedback_data.user_id
+
+    if user_id_to_log is None and not current_user : # Stricter check: if no user from token, require in payload or deny
+        # This logic can be adjusted based on whether anonymous feedback is truly desired.
+        # For now, let's say if not authenticated, user_id must be in the payload (e.g. for system logging)
+        # or we require authentication. Let's require authentication for simplicity.
+        if not current_user:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User must be authenticated to submit feedback.")
+        user_id_to_log = current_user.id
+
+
+    # Ensure that either chromosome_id_str or prompt_content_snapshot is provided
+    if not feedback_data.chromosome_id_str and not feedback_data.prompt_content_snapshot:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Either chromosome_id_str or prompt_content_snapshot must be provided.")
+
+    try:
+        created_feedback = crud.create_user_feedback(db=db, feedback=feedback_data, current_user_id=user_id_to_log)
+        return created_feedback
+    except IntegrityError: # e.g. foreign key constraint failed
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid data, such as non-existent run_id or user_id.")
+    except Exception as e:
+        # Log the exception
+        print(f"Error creating user feedback: {e}") # Replace with actual logging
+        traceback.print_exc()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An error occurred while saving feedback.")
+
+@router.get("/api/feedback/{feedback_id}", response_model=schemas.UserFeedback, tags=["User Feedback"], summary="Get specific feedback by ID")
+def get_user_feedback_route(feedback_id: int, db: DbSession = Depends(get_db)):
+    db_feedback = crud.get_user_feedback(db, feedback_id=feedback_id)
+    if db_feedback is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Feedback not found")
+    return db_feedback
+
+@router.get("/api/feedback/chromosome/{chromosome_id_str}", response_model=List[schemas.UserFeedback], tags=["User Feedback"], summary="Get feedback for a chromosome")
+def get_feedback_for_chromosome_route(chromosome_id_str: str, skip: int = 0, limit: int = 100, db: DbSession = Depends(get_db)):
+    feedback_list = crud.get_user_feedback_for_chromosome(db, chromosome_id_str=chromosome_id_str, skip=skip, limit=limit)
+    return feedback_list
+
+@router.get("/api/feedback/run/{ga_run_id}", response_model=List[schemas.UserFeedback], tags=["User Feedback"], summary="Get feedback for a GA run")
+def get_feedback_for_run_route(ga_run_id: int, skip: int = 0, limit: int = 100, db: DbSession = Depends(get_db)):
+    feedback_list = crud.get_user_feedback_for_run(db, ga_run_id=ga_run_id, skip=skip, limit=limit)
+    return feedback_list
+
+@router.get("/api/feedback/", response_model=List[schemas.UserFeedback], tags=["User Feedback"], summary="Get all user feedback (paginated)")
+def get_all_user_feedback_route(skip: int = 0, limit: int = 100, db: DbSession = Depends(get_db)):
+    feedback_list = crud.get_all_user_feedback(db, skip=skip, limit=limit)
+    return feedback_list

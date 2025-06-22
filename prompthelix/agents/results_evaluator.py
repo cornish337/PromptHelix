@@ -288,7 +288,7 @@ class ResultsEvaluatorAgent(BaseAgent):
         logger.info(f"Agent '{self.agent_id}': Constraint check result - Metrics={metrics}, Errors#={len(errors)}")
         return {"metrics": metrics, "errors": errors}
 
-    def _analyze_content(self, llm_output: str, task_desc: str, prompt_chromosome: PromptChromosome) -> tuple[dict, list]:
+    def _analyze_content(self, llm_output: str, task_desc: str, prompt_chromosome: PromptChromosome, synthetic_input_context: Optional[str] = None) -> tuple[dict, list]:
         """
         Analyzes LLM output content using another LLM for quality, relevance, coherence, etc.
         Falls back to placeholder values if LLM analysis fails.
@@ -297,12 +297,13 @@ class ResultsEvaluatorAgent(BaseAgent):
             llm_output (str): The output from the LLM to be evaluated.
             task_desc (str): The original task description.
             prompt_chromosome (PromptChromosome): The prompt that generated the output.
+            synthetic_input_context (Optional[str]): Specific input scenario if this output is from a synthetic test.
 
         Returns:
             tuple[dict, list]: A tuple containing a dictionary of LLM-assessed content metrics
                                and a list of error/warning strings from the analysis.
         """
-        logger.info(f"Agent '{self.agent_id}': LLM Analyzing content for task: '{task_desc[:50]}...' using model {self.evaluation_llm_model}")
+        logger.info(f"Agent '{self.agent_id}': LLM Analyzing content for task: '{task_desc[:50]}...' using model {self.evaluation_llm_model}. Synthetic input context: {'Provided' if synthetic_input_context else 'None'}")
 
         # Defined error strings from llm_utils.py
         LLM_API_ERROR_STRINGS = {
@@ -324,7 +325,10 @@ Original Task Description:
 
 Prompt Used:
 {str(prompt_chromosome)}
-
+{f'''
+Input Scenario Context (for this specific output):
+{synthetic_input_context}
+''' if synthetic_input_context else ""}
 Generated Output:
 {llm_output}
 
@@ -467,8 +471,10 @@ Example:
         constraint_feedback = self._check_constraints(llm_output, success_criteria)
         errors.extend(constraint_feedback.get("errors", [])) # Constraint violations are added to 'errors'
         metrics.update(constraint_feedback.get("metrics", {}))
+
+        synthetic_input_context = request_data.get("synthetic_input_context") # Get from request
         
-        content_metrics, content_errors = self._analyze_content(llm_output, task_desc, prompt_chromosome)
+        content_metrics, content_errors = self._analyze_content(llm_output, task_desc, prompt_chromosome, synthetic_input_context) # Pass to analyzer
         metrics.update(content_metrics)
         errors.extend(content_errors) # Errors from the LLM analysis process itself
         

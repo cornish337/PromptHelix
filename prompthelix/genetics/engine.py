@@ -12,9 +12,13 @@ from prompthelix.genetics.mutation_strategies import NoOperationMutationStrategy
 from prompthelix.genetics.chromosome import PromptChromosome # Moved PromptChromosome
 from prompthelix.enums import ExecutionMode # Added for ExecutionMode.TEST comparison
 from prompthelix.agents.base import BaseAgent # Added for type hint
+from prompthelix.utils.llm_utils import call_llm_api # Added for real LLM calls
+from prompthelix.api import crud # Added for user feedback
+from sqlalchemy.orm import Session as DbSession # For type hinting db_session
 
 
 logger = logging.getLogger(__name__) # Added logger for this module
+ga_logger = logging.getLogger("prompthelix.ga_metrics") # Dedicated logger for GA metrics
 
 class GeneticOperators:
     """Minimal genetic operators used by unit tests."""
@@ -53,6 +57,33 @@ class GeneticOperators:
 
         child1.parent_ids = [str(parent1.id), str(parent2.id)]
         child2.parent_ids = [str(parent1.id), str(parent2.id)]
+
+        # Logging for child1
+        ga_logger.info({
+            "run_id": _.get("run_id"), # Assuming run_id is passed in **_ or directly
+            "agent_id": "ga_engine",
+            "generation": _.get("generation"),
+            "chromosome_id": str(child1.id),
+            "prompt_text": child1.to_prompt_string(),
+            "fitness_score": child1.fitness_score, # Will be 0.0 or unevaluated
+            "operation": "crossover",
+            "parent_ids": child1.parent_ids,
+            "mutation_strategy": None,
+            "metadata": {"source_parents": [str(parent1.id), str(parent2.id)]}
+        })
+        # Logging for child2
+        ga_logger.info({
+            "run_id": _.get("run_id"),
+            "agent_id": "ga_engine",
+            "generation": _.get("generation"),
+            "chromosome_id": str(child2.id),
+            "prompt_text": child2.to_prompt_string(),
+            "fitness_score": child2.fitness_score, # Will be 0.0 or unevaluated
+            "operation": "crossover",
+            "parent_ids": child2.parent_ids,
+            "mutation_strategy": None,
+            "metadata": {"source_parents": [str(parent1.id), str(parent2.id)]}
+        })
         return child1, child2
 
     def mutate(
@@ -61,10 +92,14 @@ class GeneticOperators:
         mutation_rate: float = 1.0,
         gene_mutation_prob: float = 1.0, # Retained for compatibility
         target_style: Optional[str] = None,
-        **_
+        run_id: Optional[str] = None, # Added run_id
+        generation: Optional[int] = None, # Added generation
+        **_ # Captures run_id and generation if passed this way too
     ) -> PromptChromosome:
-        mutated_chromosome = chromosome.clone()
+        mutated_chromosome = chromosome.clone() # Clone first to keep original intact for logging if needed
+        original_chromosome_id = str(chromosome.id) # Save original ID for parent_ids field
         mutated_chromosome.fitness_score = 0.0
+
 
         if not self.mutation_strategies:
             logger.warning(f"GeneticOperators: No mutation strategies available. Chromosome {chromosome.id} will not be mutated.")
@@ -117,6 +152,30 @@ class GeneticOperators:
                 "but StyleOptimizerAgent not available. Skipping."
             )
 
+        # Log the mutation event
+        # The `final_chromosome` is the one that resulted from mutation (and possibly style optimization)
+        # Its parent_ids should have been set to the original chromosome's ID during the process.
+        # If style optimization occurred, final_chromosome might be a new object, ensure its parent_ids are correct.
+        # The `mutate` method in PromptChromosome's strategy should set parent_ids.
+        # Let's ensure `final_chromosome.parent_ids` is correctly set before logging.
+        # If `strategy.mutate` returns a new chromosome, it must set `parent_ids`.
+        # If it modifies in-place, `post_strategy_chromosome.parent_ids = [str(chromosome.id)]` handles it.
+        # If style optimizer returns a *new* chromosome, its parentage should trace to `post_strategy_chromosome`.
+        # For simplicity here, we log `final_chromosome` and assume its `parent_ids` correctly reflect its immediate predecessor.
+
+        ga_logger.info({
+            "run_id": run_id if run_id else _.get("run_id"), # Prioritize direct param
+            "agent_id": "ga_engine",
+            "generation": generation if generation else _.get("generation"), # Prioritize direct param
+            "chromosome_id": str(final_chromosome.id),
+            "prompt_text": final_chromosome.to_prompt_string(),
+            "fitness_score": final_chromosome.fitness_score, # Should be 0.0 as it's reset
+            "operation": "mutation",
+            "parent_ids": [original_chromosome_id], # Parent is the chromosome before mutation
+            "mutation_strategy": final_chromosome.mutation_strategy, # This is set by strategy.mutate
+            "metadata": {"applied_strategy": strategy.__class__.__name__, "target_style_attempted": bool(target_style)}
+        })
+
         return final_chromosome
 
     def selection(self, population: List[PromptChromosome], tournament_size: int = 2) -> PromptChromosome:
@@ -149,7 +208,7 @@ class FitnessEvaluator:
         self.llm_settings = llm_settings if llm_settings is not None else {}
 
 
-    async def evaluate(self, chromosome: PromptChromosome, task_description: str, success_criteria: Optional[Dict] = None) -> float: # Changed to async
+    async def evaluate(self, chromosome: PromptChromosome, task_description: str, success_criteria: Optional[Dict] = None, run_id: Optional[str] = None, generation: Optional[int] = None) -> float: # Changed to async
         """
         Evaluates a chromosome's fitness.
         In TEST mode, simulates LLM output. Otherwise, this basic evaluator might not be fully functional
@@ -172,30 +231,36 @@ class FitnessEvaluator:
                 f"Random number: {random_num}"
             )
             logger.debug(f"FitnessEvaluator: ExecutionMode is TEST. Simulated LLM output for chromosome {chromosome.id}: \"{llm_output[:100]}...\"")
-        else:
-            # In REAL mode, this basic FitnessEvaluator would need to call an LLM
-            # to get the llm_output based on prompt_string.
-            # For this "small wrapper", we'll raise an error or return a default.
-            # Or, it assumes llm_output is somehow already populated if not TEST mode.
-            # For now, let's keep it simple and rely on ResultsEvaluatorAgent to handle it,
-            # assuming llm_output must be generated *before* calling this basic evaluate.
-            # This part is tricky: FitnessEvaluator might be expected to *get* the llm_output.
-            # The ResultsEvaluatorAgent *evaluates* a given llm_output.
-            # Let's assume for now that the "llm_output" must be obtained by the GA loop
-            # and passed into a more complex FitnessEvaluator.
-            # This current simple one will just pass an empty string if not TEST mode,
-            # which ResultsEvaluatorAgent will then score poorly.
-            # This is consistent with it being a "small wrapper for tests".
-            # A real FitnessEvaluator would handle the llm_utils.call_llm_api itself.
-            logger.debug(f"FitnessEvaluator: ExecutionMode is not TEST. LLM output is empty for chromosome {chromosome.id}.")
+        else: # REAL mode or any other mode that is not TEST
+            logger.info(f"FitnessEvaluator: ExecutionMode is {self.execution_mode.name}. Attempting real LLM call for chromosome {chromosome.id}.")
+            provider = self.llm_settings.get("provider", "openai") # Default to openai
+            model = self.llm_settings.get("model") # Let call_llm_api handle default model if None
 
-            pass # llm_output remains "" if not TEST mode, to be evaluated by REA
-
-        if self.execution_mode == ExecutionMode.TEST: # Added this line to ensure the log is conditional
-            logger.debug(f"FitnessEvaluator: ExecutionMode is TEST. Simulated LLM output for chromosome {chromosome.id}: \"{llm_output[:100]}...\"")
-
-
-            # llm_output remains "" as initialized
+            # Ensure llm_settings are passed correctly, call_llm_api might need them for specific configurations
+            # However, call_llm_api primarily uses global settings or db for API keys.
+            # For now, we assume provider and model are the main things from self.llm_settings here.
+            # The `db` parameter for `call_llm_api` is not readily available here.
+            # `call_llm_api` can fetch keys from settings if db is None.
+            try:
+                llm_output = await call_llm_api(
+                    prompt=prompt_string,
+                    provider=provider,
+                    model=model,
+                    db=None # No direct DB session here, API keys should be in settings
+                )
+                logger.info(f"FitnessEvaluator: Real LLM call successful for chromosome {chromosome.id}. Output snippet: \"{llm_output[:100]}...\"")
+                if llm_output.startswith("ERROR:") or llm_output in [
+                    "API_KEY_MISSING_ERROR", "RATE_LIMIT_ERROR", "AUTHENTICATION_ERROR",
+                    "API_CONNECTION_ERROR", "INVALID_REQUEST_ERROR", "API_ERROR", "OPENAI_ERROR",
+                    "UNEXPECTED_OPENAI_CALL_ERROR", "ANTHROPIC_ERROR", "UNEXPECTED_ANTHROPIC_CALL_ERROR",
+                    "MALFORMED_CLAUDE_RESPONSE_CONTENT", "EMPTY_CLAUDE_RESPONSE", "BLOCKED_PROMPT_ERROR",
+                    "EMPTY_GOOGLE_RESPONSE", "GOOGLE_SDK_ERROR", "UNEXPECTED_GOOGLE_CALL_ERROR",
+                    "UNSUPPORTED_PROVIDER_ERROR", "UNEXPECTED_CALL_LLM_API_ERROR"
+                ] or (isinstance(llm_output, str) and llm_output.startswith("GENERATION_STOPPED_")):
+                    logger.warning(f"FitnessEvaluator: LLM call for chromosome {chromosome.id} returned an error status: {llm_output}")
+            except Exception as e:
+                logger.error(f"FitnessEvaluator: Exception during real LLM call for chromosome {chromosome.id}: {e}", exc_info=True)
+                llm_output = f"ERROR: Exception during LLM call - {str(e)}"
 
 
         eval_request_data = {
@@ -206,10 +271,92 @@ class FitnessEvaluator:
         }
         logger.debug(f"FitnessEvaluator: Sending request to ResultsEvaluatorAgent for chromosome {chromosome.id}: {eval_request_data}")
 
+        # --- Synthetic Test Generation and Evaluation Logic ---
+        num_synthetic_inputs = self.llm_settings.get("num_synthetic_inputs_for_evaluation", 0) # Default to 0 (disabled)
+
+        if self.execution_mode != ExecutionMode.TEST and num_synthetic_inputs > 0:
+            logger.info(f"FitnessEvaluator: Generating {num_synthetic_inputs} synthetic inputs for chromosome {chromosome.id} based on task: '{task_description}'")
+
+            synthetic_inputs_prompt = (
+                f"Given the task description: '{task_description}', generate {num_synthetic_inputs} diverse and concise input scenarios "
+                f"that a prompt designed for this task should be able_to handle. "
+                f"Each scenario should be on a new line. Do not number them or add extra text."
+            )
+
+            # Use a general-purpose LLM for generating these inputs, can be configured via llm_settings
+            generation_provider = self.llm_settings.get("synthetic_input_generation_provider", "openai")
+            generation_model = self.llm_settings.get("synthetic_input_generation_model") # Default model handled by call_llm_api
+
+            generated_inputs_str = await call_llm_api(
+                prompt=synthetic_inputs_prompt,
+                provider=generation_provider,
+                model=generation_model,
+                db=None
+            )
+
+            synthetic_inputs = []
+            if not generated_inputs_str.startswith("ERROR:") and generated_inputs_str:
+                synthetic_inputs = [line.strip() for line in generated_inputs_str.split('\n') if line.strip()]
+                logger.info(f"FitnessEvaluator: Generated {len(synthetic_inputs)} synthetic inputs: {synthetic_inputs}")
+            else:
+                logger.warning(f"FitnessEvaluator: Failed to generate synthetic inputs or received error: {generated_inputs_str}")
+
+            if synthetic_inputs:
+                fitness_scores = []
+                original_prompt_text = chromosome.to_prompt_string() # Cache original prompt
+
+                for i, synthetic_input in enumerate(synthetic_inputs):
+                    # Combine original prompt with synthetic input
+                    # A simple concatenation might work, or a more structured approach if prompts have placeholders.
+                    # Assuming simple concatenation for now: prompt + "\n\nInput: " + synthetic_input
+                    combined_prompt_text = f"{original_prompt_text}\n\nInput Scenario: {synthetic_input}"
+                    logger.debug(f"FitnessEvaluator: Evaluating synthetic test {i+1}/{len(synthetic_inputs)} for chromosome {chromosome.id} with input: '{synthetic_input}'")
+
+                    # Get LLM output for the combined prompt
+                    current_provider = self.llm_settings.get("provider", "openai")
+                    current_model = self.llm_settings.get("model")
+
+                    synthetic_llm_output = await call_llm_api(
+                        prompt=combined_prompt_text,
+                        provider=current_provider,
+                        model=current_model,
+                        db=None
+                    )
+
+                    if synthetic_llm_output.startswith("ERROR:"):
+                        logger.warning(f"FitnessEvaluator: Error getting LLM output for synthetic test {i+1} (input: '{synthetic_input}'). Error: {synthetic_llm_output}")
+                        fitness_scores.append(0.0) # Penalize errors heavily
+                        continue
+
+                    # Evaluate this specific output using ResultsEvaluatorAgent
+                    # The chromosome object itself is passed, but the llm_output is specific to this synthetic test.
+                    # Task description and success criteria remain the same.
+                    synthetic_eval_result = await self.results_evaluator_agent.process_request({
+                        "prompt_chromosome": chromosome, # Pass the original chromosome for context
+                        "llm_output": synthetic_llm_output,
+                        "task_description": task_description, # Original task
+                        "success_criteria": success_criteria, # Original criteria
+                        "synthetic_input_context": synthetic_input # Provide context to evaluator if it can use it
+                    })
+                    score = synthetic_eval_result.get("fitness_score", 0.0)
+                    fitness_scores.append(score)
+                    logger.debug(f"FitnessEvaluator: Synthetic test {i+1} for C:{chromosome.id} scored: {score:.4f}")
+
+                if fitness_scores:
+                    final_fitness = sum(fitness_scores) / len(fitness_scores)
+                    logger.info(f"FitnessEvaluator: Chromosome {chromosome.id} final fitness (avg over {len(synthetic_inputs)} synthetic tests): {final_fitness:.4f}")
+                else: # Should not happen if synthetic_inputs was non-empty, but as a fallback
+                    logger.warning(f"FitnessEvaluator: No scores from synthetic tests for {chromosome.id}, though inputs were generated. Using 0.0 fitness.")
+                    final_fitness = 0.0
+
+                chromosome.fitness_score = final_fitness
+                return final_fitness # Return the aggregated fitness
+
+        # --- Original Evaluation Logic (if no synthetic tests or in TEST mode) ---
         evaluation_result = await self.results_evaluator_agent.process_request( # Added await
             {
                 "prompt_chromosome": chromosome, # Agent expects the full chromosome
-                "llm_output": llm_output,
+                "llm_output": llm_output, # This is mock output in TEST, or single real output if synthetic tests disabled
                 "task_description": task_description,
                 "success_criteria": success_criteria if success_criteria is not None else {}
             }
@@ -218,7 +365,9 @@ class FitnessEvaluator:
 
         fitness_score = evaluation_result.get("fitness_score", 0.0)
         chromosome.fitness_score = fitness_score
-        logger.info(f"FitnessEvaluator: Chromosome {chromosome.id} evaluated. Fitness: {fitness_score:.4f}")
+
+        logger.info(f"FitnessEvaluator: Chromosome {chromosome.id} evaluated (single pass/mock). Fitness: {fitness_score:.4f}")
+
         return fitness_score
 
 
@@ -234,7 +383,8 @@ class PopulationManager:
         elitism_count: int = 0,
         initial_prompt_str: Optional[str] = None, # Added initial_prompt_str
         parallel_workers: int = 1,
-        message_bus=None
+        message_bus=None,
+        population_path: Optional[str] = None
     ):
         self.genetic_operators = genetic_operators
         self.fitness_evaluator = fitness_evaluator
@@ -269,15 +419,20 @@ class PopulationManager:
         self.population: List[PromptChromosome] = []
         self.generation_number = 0
         self.message_bus = message_bus
+        self.population_path = population_path
         self.status: str = "IDLE" # Possible statuses: IDLE, INITIALIZING, RUNNING, PAUSED, STOPPED, COMPLETED, ERROR
         self.is_paused: bool = False
         self.should_stop: bool = False
+        self.run_id: Optional[str] = None # Added to store the experiment run ID
 
     async def initialize_population(self, initial_task_description: str, initial_keywords: List[str],
                               constraints: Optional[Dict] = None,
-                              success_criteria: Optional[Dict] = None):
+                              success_criteria: Optional[Dict] = None,
+                              run_id: Optional[str] = None): # Added run_id parameter
         self.status = "INITIALIZING"
-        logger.info(f"PopulationManager: Initializing population. Task: '{initial_task_description}', Keywords: {initial_keywords}")
+        if run_id: # Store run_id if provided, useful if initialization is called separately
+            self.run_id = run_id
+        logger.info(f"PopulationManager (Run ID: {self.run_id}): Initializing population. Task: '{initial_task_description}', Keywords: {initial_keywords}")
         await self.broadcast_ga_update(event_type="population_initialization_started")
         self.population = []
         self.generation_number = 0
@@ -315,20 +470,43 @@ class PopulationManager:
 
         if new_chromosomes:
             self.population.extend(new_chromosomes)
-        logger.info(f"PopulationManager: Generated {len(self.population)} initial chromosomes (valid only).")
+        logger.info(f"PopulationManager (Run ID: {self.run_id}): Generated {len(self.population)} initial chromosomes (valid only).")
+
+        # Log "initialization" event for architected chromosomes before evaluation
+        for chromo in self.population: # Assuming self.population contains only newly architected ones or ones from initial_prompt_str
+            # If chromo was from initial_prompt_str, its fitness is 0.0.
+            # If from architect, fitness is also 0.0 before explicit evaluation.
+            ga_logger.info({
+                "run_id": self.run_id,
+                "agent_id": "ga_engine", # Or "prompt_architect_agent" if we want to be specific about source
+                "generation": self.generation_number, # Initial population is generation 0
+                "chromosome_id": str(chromo.id),
+                "prompt_text": chromo.to_prompt_string(),
+                "fitness_score": chromo.fitness_score, # Will be 0.0
+                "operation": "initialization",
+                "parent_ids": chromo.parent_ids, # Likely empty or None for initial
+                "mutation_strategy": None,
+                "metadata": {"source": "architect" if not self.initial_prompt_str or chromo.genes != [self.initial_prompt_str] else "initial_prompt_str"}
+            })
 
         # Evaluate the initial population
-        logger.info("PopulationManager: Evaluating initial population...")
+        logger.info(f"PopulationManager (Run ID: {self.run_id}): Evaluating initial population...")
         evaluation_tasks = []
         for i, chromo in enumerate(self.population):
-            logger.debug(f"PopulationManager: Scheduling evaluation for initial chromosome {i+1}/{len(self.population)}, ID: {chromo.id}")
-            evaluation_tasks.append(self.fitness_evaluator.evaluate(chromo, initial_task_description, success_criteria))
+            logger.debug(f"PopulationManager (Run ID: {self.run_id}): Scheduling evaluation for initial chromosome {i+1}/{len(self.population)}, ID: {chromo.id}")
+            evaluation_tasks.append(self.fitness_evaluator.evaluate(
+                chromosome=chromo,
+                task_description=initial_task_description,
+                success_criteria=success_criteria,
+                run_id=self.run_id, # Pass run_id
+                generation=self.generation_number # generation is 0 for initial population
+            ))
 
         await asyncio.gather(*evaluation_tasks) # Evaluate concurrently
             # FitnessEvaluator now logs the score, so no need to duplicate here unless for summary
 
         self.population.sort(key=lambda c: c.fitness_score, reverse=True)
-        logger.info("PopulationManager: Initial population evaluation complete and sorted.")
+        logger.info(f"PopulationManager (Run ID: {self.run_id}): Initial population evaluation complete and sorted.")
         if self.population:
             for i in range(min(3, len(self.population))): # Log top 3
                 chromo = self.population[i]
@@ -370,7 +548,10 @@ class PopulationManager:
             "fittest_individual_score": self.get_fittest_individual().fitness_score if self.population else None,
         }
 
-    def save_population(self, file_path: str) -> None:
+    def save_population(self, file_path: Optional[str] = None) -> None:
+        file_path = file_path or self.population_path
+        if not file_path:
+            raise ValueError("population_path must be provided to save_population")
         data = {
             "generation_number": self.generation_number,
             "population": [
@@ -390,64 +571,37 @@ class PopulationManager:
         except (IOError, OSError) as e:
             logger.error(f"Error saving population to {file_path}: {e}", exc_info=True)
 
-    def load_population(self, file_path: str) -> None:
-        if not os.path.exists(file_path):
-            logger.info(f"PopulationManager: No population file at {file_path}; starting fresh.")
-            self.population = []
-            self.generation_number = 0
-            return
+def load_population(self, file_path: Optional[str] = None) -> None:
+    file_path = file_path or self.population_path
+    if not file_path or not os.path.exists(file_path):
+        logger.info(f"PopulationManager: No population file at {file_path}; starting fresh.")
+        self.population = []
+        self.generation_number = 0
+        return
 
-        try:
-            with open(file_path, "r", encoding="utf-8") as fh:
-                content = fh.read()
-                if not content.strip(): # Check for empty or whitespace-only content
-                    logger.error(f"Error loading population from {file_path}: File is empty.")
-                    self.population = []
-                    self.generation_number = 0
-                    return
-
-                data = json.loads(content) # Use json.loads after reading
-
-            if not isinstance(data, dict):
-                logger.error(f"Error loading population from {file_path}: File content is not a JSON object (dictionary). Loaded type: {type(data)}")
+    try:
+        with open(file_path, "r", encoding="utf-8") as fh:
+            content = fh.read()
+            if not content.strip():  # Check for empty or whitespace-only content
+                logger.error(f"Error loading population from {file_path}: File is empty.")
                 self.population = []
                 self.generation_number = 0
                 return
 
-            self.generation_number = data.get("generation_number", 0)
-            loaded_population_data = data.get("population", [])
+            data = json.loads(content)
 
-            if not isinstance(loaded_population_data, list):
-                logger.error(f"Error loading population from {file_path}: 'population' key is not a list. Found type: {type(loaded_population_data)}")
-                self.population = []
-            else:
-                self.population = [
-                    PromptChromosome(
-                        genes=item.get("genes", []),
-                        fitness_score=item.get("fitness_score", 0.0),
-                        parent_ids=item.get("parents", []),
-                        mutation_strategy=item.get("mutation_strategy"),
-                    )
-                    for item in loaded_population_data if isinstance(item, dict)
-                ]
-
-            if self.population:
-                self.population_size = len(self.population)
-
-        except json.JSONDecodeError as e:
-            logger.error(f"Error loading population from {file_path} due to JSON decoding error: {e}")
+        if not isinstance(data, dict):
+            logger.error(
+                f"Error loading population from {file_path}: File content is not a JSON object (dictionary). "
+                f"Loaded type: {type(data)}"
+            )
             self.population = []
             self.generation_number = 0
-        except Exception as e:
-            logger.error(f"Unexpected error loading population from {file_path}: {e}", exc_info=True)
-            self.population = []
-            self.generation_number = 0
+            return
 
-    def get_fittest_individual(self) -> Optional[PromptChromosome]:
-        """Return the chromosome with the highest fitness or None."""
-        if not self.population:
-            return None
-        return max(self.population, key=lambda c: c.fitness_score)
+        self.generation_number = data.get("generation_number", 0)
+        loaded_population_data = data.get("population", [])
+
 
     async def broadcast_ga_update(
         self,
@@ -543,6 +697,7 @@ class PopulationManager:
             await self.broadcast_ga_update(event_type="ga_generation_started", include_population_sample=True)
 
 
+
         if not self.population:
             logger.warning("PopulationManager: evolve_population called with an empty population.")
             return
@@ -556,7 +711,13 @@ class PopulationManager:
         for i, chromosome in enumerate(self.population):
             logger.debug(f"PopulationManager: Scheduling evaluation for chromosome {i+1}/{len(self.population)}, ID: {chromosome.id} for generation {self.generation_number + 1}")
             evaluation_tasks.append(
-                self.fitness_evaluator.evaluate(chromosome, task_description, success_criteria)
+                self.fitness_evaluator.evaluate(
+                    chromosome=chromosome,
+                    task_description=task_description,
+                    success_criteria=success_criteria,
+                    run_id=self.run_id, # Pass run_id
+                    generation=self.generation_number + 1 # Pass current generation number
+                )
             )
 
         # Use return_exceptions=True to handle individual task failures
@@ -572,10 +733,61 @@ class PopulationManager:
                 # No need to re-assign it here from result_or_exc unless evaluate returned something else
                 pass
 
+        # Apply user feedback if db_session is available
+        if db_session:
+            logger.info(f"PopulationManager: Applying user feedback for generation {self.generation_number + 1}.")
+            current_run_id = experiment_run.id if experiment_run else None
+            for chromosome in self.population:
+                all_feedback_for_chromosome = []
+                # Get feedback by chromosome ID (most specific)
+                feedback_by_id = crud.get_user_feedback_for_chromosome(db_session, chromosome_id_str=str(chromosome.id))
+                all_feedback_for_chromosome.extend(feedback_by_id)
 
-        # Sort population by fitness score in descending order
+                # Optional: Get feedback by prompt content snapshot (less specific, but can catch identical prompts)
+                # This might be slow if there's a lot of feedback data and no indexing on prompt_content_snapshot.
+                # feedback_by_content = crud.get_user_feedback_for_prompt_content(db_session, prompt_content_snapshot=chromosome.to_prompt_string())
+                # all_feedback_for_chromosome.extend(feedback_by_content) # Be careful about duplicates if combining
+
+                if all_feedback_for_chromosome:
+                    # Deduplicate feedback if collected from multiple sources, e.g., by feedback ID
+                    unique_feedback = {f.id: f for f in all_feedback_for_chromosome}.values()
+
+                    # Prioritize feedback for the current run if available
+                    run_specific_feedback = [f for f in unique_feedback if f.ga_run_id == current_run_id]
+
+                    feedback_to_consider = run_specific_feedback if run_specific_feedback else unique_feedback
+
+                    if feedback_to_consider:
+                        # Simple strategy: use the average rating of the most recent N feedback items, or just latest.
+                        # For now, let's use the average rating from all relevant feedback.
+                        avg_rating = sum(f.rating for f in feedback_to_consider) / len(feedback_to_consider)
+                        original_fitness = chromosome.fitness_score
+
+                        # Define fitness adjustment scale
+                        # Example: Max adjustment of +/- 0.2 to fitness score (assuming fitness is 0-1)
+                        # Rating 5: +0.2; Rating 4: +0.1; Rating 3: 0; Rating 2: -0.1; Rating 1: -0.2
+                        adjustment = 0.0
+                        if avg_rating >= 4.5: # Effectively 5 stars
+                            adjustment = 0.2
+                        elif avg_rating >= 3.5: # 4 stars
+                            adjustment = 0.1
+                        elif avg_rating <= 1.5: # 1 star
+                            adjustment = -0.2
+                        elif avg_rating <= 2.5: # 2 stars
+                            adjustment = -0.1
+
+                        chromosome.fitness_score += adjustment
+                        # Clamp fitness score to a valid range, e.g., [0, 1] or whatever your system uses.
+                        # Assuming fitness_score is typically within [0,1]. Adjust if max can be higher.
+                        chromosome.fitness_score = max(0.0, min(chromosome.fitness_score, 1.0))
+
+                        if adjustment != 0:
+                            logger.info(f"PopulationManager: Chromosome {chromosome.id} fitness adjusted by {adjustment:.2f} (avg rating: {avg_rating:.2f}). Original: {original_fitness:.4f}, New: {chromosome.fitness_score:.4f}.")
+                        # Optionally, log suggested_improvement_text if present and consider for future mutation strategies.
+
+        # Sort population by fitness score in descending order (now includes feedback adjustments)
         self.population.sort(key=lambda c: c.fitness_score, reverse=True)
-        logger.info(f"PopulationManager: Population sorted for generation {self.generation_number + 1}.")
+        logger.info(f"PopulationManager: Population sorted for generation {self.generation_number + 1} (feedback considered if available).")
 
         if not self.population: # Should not happen if we checked above, but defensive
             logger.error("PopulationManager: Population became empty after evaluation and sorting in evolve_population. This should not happen.")

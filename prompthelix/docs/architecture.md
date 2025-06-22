@@ -254,7 +254,7 @@ This section explains how the application is configured.
 ### 5.5. Logging Configuration
 *   **Module**: `prompthelix/logging_config.py` (and settings in `prompthelix/config.py`).
 *   **Settings**: Log level, log file path, log format are configurable via `config.py` and environment variables (e.g., `PROMPTHELIX_LOG_LEVEL`, `PROMPTHELIX_LOG_FILE`).
-*   **Setup**: `setup_logging()` (or `configure_logging()`) is called early in application startup (`main.py`, `cli.py`) to apply these settings.
+*   **Setup**: `setup_logging()` is called early in application startup (`main.py`, `cli.py`) to apply these settings.
 
 ## 6. Potential Areas for Improvement & Redundancies
 
@@ -262,7 +262,7 @@ This section lists observations about parts of the codebase that might be redund
 
 ### 6.1. Code Redundancies & Obsolete Code
 1.  **Logging Setup in `prompthelix/main.py`**:
-    *   Multiple `setup_logging()` calls from different locations (`prompthelix.logging_config` and `prompthelix.utils.logging_utils` which might be the same) and `configure_logging()`. This should be consolidated into a single, clear logging initialization sequence, likely driven by `prompthelix.logging_config.py`.
+    *   Multiple `setup_logging()` calls from different locations (`prompthelix.logging_config` and `prompthelix.utils.logging_utils` which might be the same). This should be consolidated into a single, clear logging initialization sequence, likely driven by `prompthelix.logging_config.py`.
 2.  **Duplicate `/metrics` Endpoint in `prompthelix/main.py`**:
     *   Two `@app.get("/metrics")` route handlers are defined. The second one, using `prometheus_client.generate_latest`, is standard and should be kept; the other should be removed.
 3.  **Commented-Out Code**:
@@ -293,8 +293,8 @@ This section lists observations about parts of the codebase that might be redund
 
 ### 6.5. Code Clarity and Maintainability
 1.  **`if __name__ == "__main__":` in `prompthelix.orchestrator.py`**:
-    *   This block contains extensive demonstration and test code for various components. While useful for development, it makes the file very long.
-    *   **Suggestion**: Move this demonstration/test code into separate scripts in a `examples/` or `scripts/` directory, or into integration tests. This would keep `orchestrator.py` focused on its core logic.
+    *   Earlier versions embedded extensive demonstration and test code directly in `orchestrator.py`.
+    *   That example code now lives in `examples/orchestrator_demo.py`, keeping `orchestrator.py` focused on production logic.
 2.  **Error Handling in `FitnessEvaluator` (Default)**:
     *   The default `FitnessEvaluator` in `prompthelix.genetics.engine.py` might pass an empty `llm_output` to `ResultsEvaluatorAgent` if not in `TEST` mode. This relies on the agent to handle it gracefully.
     *   **Suggestion**: Clarify if the `FitnessEvaluator`'s role includes invoking the LLM or if it strictly evaluates a provided `llm_output`. If the former, it should handle LLM calls in `REAL` mode.

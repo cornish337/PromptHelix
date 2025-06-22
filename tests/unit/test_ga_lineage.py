@@ -50,6 +50,7 @@ class TestGALineageAndMetrics(unittest.TestCase):
         run = create_experiment_run(db_session)
         self.manager.evolve_population(
             task_description='t',
+            target_style=None,
             db_session=db_session,
             experiment_run=run,
         )

@@ -21,6 +21,8 @@ from prompthelix.enums import ExecutionMode  # Added import
 from prompthelix.agents.base import BaseAgent
 from prompthelix.models.user_models import User as UserModel
 from prompthelix.services import user_service
+from prompthelix.config import LOG_DIR # For accessing LOG_DIR
+import json # For parsing JSON log lines
 
 
 router = APIRouter()
@@ -729,6 +731,83 @@ async def get_dashboard_ui(request: Request):
 @router.get("/dashboard.html", include_in_schema=False)
 async def get_dashboard_ui_alias(request: Request):
     return RedirectResponse(url=str(request.url_for("ui_dashboard")))
+
+
+@router.get("/experiments/{experiment_id}/logs", response_class=HTMLResponse, name="ui_view_ga_experiment_logs")
+async def ui_view_ga_experiment_logs(
+    request: Request,
+    experiment_id: str, # Changed from int to str, as run_id can be UUID
+    sort_by: Optional[str] = Query(None), # For sorting
+    order: Optional[str] = Query("asc") # For sort order
+):
+    """Serves the UI page for viewing detailed GA logs for a specific experiment."""
+    log_file_path = os.path.join(LOG_DIR, "ga_metrics.jsonl")
+    experiment_logs = []
+    error_message = None
+
+    try:
+        if os.path.exists(log_file_path):
+            with open(log_file_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    try:
+                        log_entry = json.loads(line.strip())
+                        # Ensure experiment_id is treated as string for comparison, as run_id can be UUID
+                        if str(log_entry.get("run_id")) == str(experiment_id):
+                            experiment_logs.append(log_entry)
+                    except json.JSONDecodeError:
+                        # Log this error or handle it, e.g., by showing a warning in UI
+                        print(f"Warning: Could not parse log line: {line.strip()}")
+                        pass # Skip malformed lines
+        else:
+            error_message = f"Log file not found: {log_file_path}"
+
+    except Exception as e:
+        print(f"Error reading GA metrics log file: {e}") # Log to server console
+        error_message = f"An error occurred while trying to read the GA logs: {str(e)}"
+        # Ensure experiment_logs is empty if there was a major error
+        experiment_logs = []
+
+
+    # Sorting logic
+    if sort_by and experiment_logs:
+        reverse_order = (order == "desc")
+        # Handle potential missing keys or different types during sort
+        def sort_key_func(log_item):
+            val = log_item.get(sort_by)
+            if val is None: # Place items with missing key at the end (or beginning)
+                return float('-inf') if reverse_order else float('inf')
+            if isinstance(val, (int, float)):
+                return val
+            if isinstance(val, str): # Case-insensitive sort for strings
+                return val.lower()
+            return str(val) # Fallback for other types
+
+        try:
+            experiment_logs.sort(key=sort_key_func, reverse=reverse_order)
+        except TypeError as te:
+            print(f"TypeError during sorting logs by '{sort_by}': {te}")
+            # Potentially add a message to UI about sort failure for this column
+            error_message = error_message + f" (Note: Sorting by '{sort_by}' failed due to mixed data types)" if error_message else f"Sorting by '{sort_by}' failed due to mixed data types."
+
+
+    # Jinja2 filter for datetime formatting (alternative to JS formatting if preferred)
+    # This requires the filter to be registered with the Jinja2 environment.
+    # For simplicity, client-side JS formatting is used in the template.
+    # If server-side was desired:
+    # from prompthelix.templating import format_datetime_local_filter (hypothetical)
+    # templates.env.filters['format_datetime_local'] = format_datetime_local_filter
+
+    return templates.TemplateResponse(
+        "ga_experiment_logs.html",
+        {
+            "request": request,
+            "experiment_id": experiment_id,
+            "logs": experiment_logs,
+            "error_message": error_message,
+            "sort_by": sort_by,
+            "order": order
+        }
+    )
 
 
 @router.get("/tests", response_class=HTMLResponse, name="ui_list_tests")
