@@ -93,32 +93,125 @@ def list_available_agents() -> List[dict[str, str]]: # Updated type hint
 
 
 def list_interactive_tests() -> List[str]:
-    """Discover interactive tests inside the tests/interactive directory."""
+    """Discover interactive tests from multiple specified directories."""
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
-    tests_dir = os.path.join(project_root, "tests", "interactive")
-    if not os.path.isdir(tests_dir):
+
+    # Define paths to the interactive test directories
+    # Path 1: PROJECT_ROOT/tests/interactive
+    # Path 2: PROJECT_ROOT/prompthelix/tests/interactive
+    interactive_test_dirs = [
+        os.path.join(project_root, "tests", "interactive"),
+        os.path.join(project_root, "prompthelix", "tests", "interactive")
+    ]
+
+    all_test_names: List[str] = []
+    loader = unittest.TestLoader()
+
+    def _collect_tests_from_suite(suite: unittest.TestSuite, L: List[str]):
+        for test in suite:
+            if isinstance(test, unittest.TestSuite):
+                _collect_tests_from_suite(test, L)
+            else:
+                L.append(test.id())
+
+    for tests_dir in interactive_test_dirs:
+        if os.path.isdir(tests_dir):
+            # Discover tests in the current directory
+            # Use a pattern that matches typical test files, e.g., test_*.py
+            suite = loader.discover(start_dir=tests_dir, pattern="test_*.py")
+            current_dir_test_names: List[str] = []
+            _collect_tests_from_suite(suite, current_dir_test_names)
+            all_test_names.extend(current_dir_test_names)
+        else:
+            # Optionally log that a configured test directory was not found
+            print(f"Warning: Interactive test directory not found: {tests_dir}")
+
+    # Return sorted unique test names
+    # Return sorted unique test names
+    return sorted(list(set(all_test_names)))
+
+
+# Configuration for different test suites
+TEST_SUITES_CONFIG = [
+    {
+        "id": "interactive_all",
+        "name": "All Interactive Tests",
+        "paths": ["tests/interactive", "prompthelix/tests/interactive"], # Relative to project root
+        "pattern": "test_*.py",
+        "default": True,
+    },
+    {
+        "id": "interactive_general",
+        "name": "General Interactive Tests",
+        "paths": ["tests/interactive"],
+        "pattern": "test_*.py",
+    },
+    {
+        "id": "interactive_prompthelix",
+        "name": "PromptHelix Interactive Tests",
+        "paths": ["prompthelix/tests/interactive"],
+        "pattern": "test_*.py",
+    },
+    {
+        "id": "unit_prompthelix",
+        "name": "PromptHelix Unit Tests",
+        "paths": ["prompthelix/tests/unit"],
+        "pattern": "test_*.py",
+    },
+    {
+        "id": "integration_prompthelix",
+        "name": "PromptHelix Integration Tests",
+        "paths": ["prompthelix/tests/integration"],
+        "pattern": "test_*.py",
+    },
+]
+
+def get_test_suite_config_by_id(suite_id: str) -> Optional[dict]:
+    """Retrieve a test suite's configuration by its ID."""
+    for suite_config in TEST_SUITES_CONFIG:
+        if suite_config["id"] == suite_id:
+            return suite_config
+    return None
+
+def list_tests_for_suite(suite_id: str) -> List[str]:
+    """Discover tests for a given suite ID based on its configuration."""
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+    suite_config = get_test_suite_config_by_id(suite_id)
+
+    if not suite_config:
+        print(f"Warning: Test suite configuration not found for ID: {suite_id}")
         return []
 
+    all_test_names: List[str] = []
     loader = unittest.TestLoader()
-    suite = loader.discover(start_dir=tests_dir)
 
-    test_names: List[str] = []
-
-    def _collect(s: unittest.TestSuite):
-        for t in s:
-            if isinstance(t, unittest.TestSuite):
-                _collect(t)
+    # Helper to recursively collect test names from a suite
+    def _collect_from_suite(current_suite: unittest.TestSuite, L: List[str]):
+        for test_item in current_suite:
+            if isinstance(test_item, unittest.TestSuite):
+                _collect_from_suite(test_item, L)
             else:
-                test_names.append(t.id())
+                L.append(test_item.id())
 
-    _collect(suite)
-    return sorted(set(test_names))
+    for relative_path in suite_config.get("paths", []):
+        tests_dir = os.path.join(project_root, relative_path)
+        if os.path.isdir(tests_dir):
+            discovered_suite = loader.discover(
+                start_dir=tests_dir,
+                pattern=suite_config.get("pattern", "test_*.py") # Use configured pattern
+            )
+            _collect_from_suite(discovered_suite, all_test_names)
+        else:
+            print(f"Warning: Test directory not found for suite '{suite_id}': {tests_dir}")
+
+    return sorted(list(set(all_test_names)))
 
 
 def run_unittest(test_name: str) -> tuple[str, bool]:
     """Run a single unittest and return output and success status."""
     stream = io.StringIO()
     loader = unittest.TestLoader()
+    # loadTestsFromName can load individual tests or entire modules/classes
     suite = loader.loadTestsFromName(test_name)
     runner = unittest.TextTestRunner(stream=stream, verbosity=2)
     result = runner.run(suite)
@@ -224,7 +317,7 @@ async def run_experiment_ui_submit(
 
     api_experiment_url = request.url_for('api_run_ga_experiment') # Needs name in API route
 
-    async with httpx.AsyncClient(app=request.app, base_url=str(request.base_url)) as client:
+    async with httpx.AsyncClient(app=request.app, base_url=str(request.base_url))as client:
         try:
             access_token = request.cookies.get("prompthelix_access_token")
             headers = {}
@@ -638,29 +731,105 @@ async def get_dashboard_ui_alias(request: Request):
 
 
 @router.get("/tests", response_class=HTMLResponse, name="ui_list_tests")
-async def ui_list_tests(request: Request):
-    tests = list_interactive_tests()
-    return templates.TemplateResponse(
-        "interactive_tests.html",
-        {"request": request, "tests": tests, "selected_test": None, "test_output": None},
-    )
+async def ui_list_tests(
+    request: Request,
+    suite_id: Optional[str] = Query(None),
+    selected_tests: List[str] = Query(None) # To retain selection if page reloads with query params
+):
+    if suite_id is None:
+        # Find the default suite or fallback to the first one
+        default_suite_config = next((s for s in TEST_SUITES_CONFIG if s.get("default")), None)
+        if not default_suite_config and TEST_SUITES_CONFIG:
+            default_suite_config = TEST_SUITES_CONFIG[0]
+        suite_id = default_suite_config["id"] if default_suite_config else None
 
-@router.get("/tests.html", include_in_schema=False)
-async def ui_list_tests_alias(request: Request):
-    return RedirectResponse(url=str(request.url_for("ui_list_tests")))
+    current_tests_list = list_tests_for_suite(suite_id) if suite_id else []
 
+    # Ensure selected_tests is a list, even if None or empty from query
+    active_selection = selected_tests if selected_tests is not None else []
 
-@router.post("/tests/run", response_class=HTMLResponse, name="ui_run_test")
-async def ui_run_test(request: Request, test_name: str = Form(...)):
-    output, success = await asyncio.to_thread(run_unittest, test_name)
-    tests = list_interactive_tests()
     return templates.TemplateResponse(
         "interactive_tests.html",
         {
             "request": request,
-            "tests": tests,
-            "selected_test": test_name,
-            "test_output": output,
-            "success": success,
+            "test_suites": TEST_SUITES_CONFIG,
+            "current_suite_id": suite_id,
+            "tests": current_tests_list,
+            "selected_tests": active_selection,
+            "test_results": [],
+            "overall_message": None,
+            "error_occurred": False,
+        },
+    )
+
+@router.get("/tests.html", include_in_schema=False)
+async def ui_list_tests_alias(request: Request):
+    # This simple alias might not correctly carry over query parameters like suite_id
+    # For a better UX, ensure any navigation to /tests.html preserves parameters or redirects to the base /tests
+    return RedirectResponse(url=str(request.url_for("ui_list_tests")))
+
+
+@router.post("/tests/run", response_class=HTMLResponse, name="ui_run_test")
+async def ui_run_test(
+    request: Request,
+    test_names: List[str] = Form(...),
+    suite_id: str = Form(...) # Make sure suite_id is submitted by the form
+):
+    test_results = []
+    all_tests_passed = True
+    error_occurred_during_run = False
+
+    if not test_names:
+        current_tests_list = list_tests_for_suite(suite_id) if suite_id else []
+        return templates.TemplateResponse(
+            "interactive_tests.html",
+            {
+                "request": request,
+                "test_suites": TEST_SUITES_CONFIG,
+                "current_suite_id": suite_id,
+                "tests": current_tests_list,
+                "selected_tests": [],
+                "test_results": [],
+                "overall_message": "No tests were selected to run.",
+                "error_occurred": True,
+            },
+            status_code=400
+        )
+
+    for test_name in test_names:
+        try:
+            output, success = await asyncio.to_thread(run_unittest, test_name)
+            test_results.append({"name": test_name, "output": output, "success": success})
+            if not success:
+                all_tests_passed = False
+        except Exception as e:
+            test_results.append({
+                "name": test_name,
+                "output": f"Failed to run test '{test_name}': {str(e)}",
+                "success": False
+            })
+            all_tests_passed = False
+            error_occurred_during_run = True
+
+    current_tests_list = list_tests_for_suite(suite_id) if suite_id else []
+    num_total = len(test_names)
+    num_passed = sum(1 for r in test_results if r["success"])
+    num_failed = num_total - num_passed
+
+    overall_message = f"Executed {num_total} test(s) from suite '{get_test_suite_config_by_id(suite_id)['name'] if get_test_suite_config_by_id(suite_id) else suite_id}': {num_passed} passed, {num_failed} failed."
+    if error_occurred_during_run:
+        overall_message += " Some tests encountered errors during execution."
+
+    return templates.TemplateResponse(
+        "interactive_tests.html",
+        {
+            "request": request,
+            "test_suites": TEST_SUITES_CONFIG,
+            "current_suite_id": suite_id,
+            "tests": current_tests_list,
+            "selected_tests": test_names,  # Keep selected tests checked
+            "test_results": test_results,
+            "overall_message": overall_message,
+            "error_occurred": not all_tests_passed or error_occurred_during_run,
         },
     )
