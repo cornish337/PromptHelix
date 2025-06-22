@@ -5,26 +5,26 @@ Initializes the FastAPI application and includes the root endpoint.
 
 import traceback
 from pathlib import Path
-from fastapi import Request
+
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, Response
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 # from fastapi.templating import Jinja2Templates # Moved to templating.py
 from fastapi.staticfiles import StaticFiles
 
-# Logging configuration must be initialized early
-from prompthelix.config import settings
-from prompthelix.logging_config import configure_logging
-from prompthelix.templating import templates # Import templates object
-
-from prompthelix.api import routes as api_routes
-from prompthelix.ui_routes import router as ui_router  # Import the UI router
 from prompthelix import metrics as ph_metrics
+from prompthelix.api import routes as api_routes
+from prompthelix.database import init_db
 
 # from prompthelix.websocket_manager import ConnectionManager # No longer imported directly for instantiation
 from prompthelix.globals import websocket_manager  # Import the global instance
-from prompthelix.database import init_db
-from prompthelix.logging_config import setup_logging # Import the logging setup function
+from prompthelix.logging_config import (
+    setup_logging,
+)  # Import the logging setup function
+
+# Logging configuration must be initialized early
+from prompthelix.templating import templates  # Import templates object
+from prompthelix.ui_routes import router as ui_router  # Import the UI router
 
 # --- Setup Logging ---
 # Call this early, before other initializations if they might log.
@@ -32,19 +32,11 @@ setup_logging()
 # --- End Setup Logging ---
 
 
-from prompthelix.utils import setup_logging
-
-setup_logging()
-
-from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
-
-# Configure logging as soon as possible
-configure_logging(settings.DEBUG)
-
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 # Call init_db to create database tables on startup
 # For production, you'd likely use Alembic migrations separately.
-init_db() # Initialize database and tables on startup
+init_db()  # Initialize database and tables on startup
 # For running the app directly (e.g. `python -m prompthelix.main`),
 # it might be called below if __name__ == "__main__".
 
@@ -115,7 +107,10 @@ async def websocket_dashboard_endpoint(websocket: WebSocket):
     await websocket_manager.connect(websocket)
     try:
         from prompthelix import globals as ph_globals
-        await websocket_manager.send_personal_json({"type": "ga_history", "data": ph_globals.ga_history}, websocket)
+
+        await websocket_manager.send_personal_json(
+            {"type": "ga_history", "data": ph_globals.ga_history}, websocket
+        )
     except Exception as e:  # pragma: no cover - simple log
         print(f"Failed to send GA history: {e}")
     await websocket_manager.broadcast_json({"message": "A new client has connected!"})
@@ -159,8 +154,10 @@ async def root():
     """
     return {"message": "Welcome to PromptHelix API"}
 
-from prometheus_client import generate_latest, REGISTRY, CONTENT_TYPE_LATEST
-from fastapi.responses import Response # Ensure Response is imported
+
+from fastapi.responses import Response  # Ensure Response is imported
+from prometheus_client import CONTENT_TYPE_LATEST, REGISTRY, generate_latest
+
 
 @app.get("/metrics", name="prometheus_metrics")
 async def metrics():
