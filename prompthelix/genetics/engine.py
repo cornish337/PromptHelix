@@ -226,7 +226,8 @@ class PopulationManager:
         elitism_count: int = 0,
         initial_prompt_str: Optional[str] = None, # Added initial_prompt_str
         parallel_workers: int = 1,
-        message_bus=None
+        message_bus=None,
+        population_path: Optional[str] = None
     ):
         self.genetic_operators = genetic_operators
         self.fitness_evaluator = fitness_evaluator
@@ -238,6 +239,7 @@ class PopulationManager:
         self.population: List[PromptChromosome] = []
         self.generation_number = 0
         self.message_bus = message_bus
+        self.population_path = population_path
         self.status: str = "IDLE" # Possible statuses: IDLE, INITIALIZING, RUNNING, PAUSED, STOPPED, COMPLETED, ERROR
         self.is_paused: bool = False
         self.should_stop: bool = False
@@ -328,7 +330,10 @@ class PopulationManager:
             "fittest_individual_score": self.get_fittest_individual().fitness_score if self.population else None,
         }
 
-    def save_population(self, file_path: str) -> None:
+    def save_population(self, file_path: Optional[str] = None) -> None:
+        file_path = file_path or self.population_path
+        if not file_path:
+            raise ValueError("population_path must be provided to save_population")
         data = {
             "generation_number": self.generation_number,
             "population": [
@@ -344,8 +349,9 @@ class PopulationManager:
         with open(file_path, "w", encoding="utf-8") as fh:
             json.dump(data, fh)
 
-    def load_population(self, file_path: str) -> None:
-        if not os.path.exists(file_path):
+    def load_population(self, file_path: Optional[str] = None) -> None:
+        file_path = file_path or self.population_path
+        if not file_path or not os.path.exists(file_path):
             self.population = []
             self.generation_number = 0
             return

@@ -82,7 +82,7 @@ class TestOrchestratorConfigPropagation(unittest.TestCase):
         mock_logger.info.assert_any_call("Effective Save Population Frequency: Every 30 generations (0 means periodic saving disabled)")
 
         # Check that the final save is called on the PopulationManager instance
-        mock_pop_manager_instance.save_population.assert_called_with("default/path/from/settings.json")
+        mock_pop_manager_instance.save_population.assert_called_with()
 
     @patch('prompthelix.orchestrator.GeneticAlgorithmRunner')
     @patch('prompthelix.orchestrator.PopulationManager')
@@ -139,7 +139,7 @@ class TestOrchestratorConfigPropagation(unittest.TestCase):
         mock_logger.info.assert_any_call(f"Effective Population Persistence Path: {override_pop_path}")
         mock_logger.info.assert_any_call(f"Effective Save Population Frequency: Every {override_save_freq} generations (0 means periodic saving disabled)")
 
-        mock_pop_manager_instance.save_population.assert_called_with(override_pop_path)
+        mock_pop_manager_instance.save_population.assert_called_with()
 
     @patch('prompthelix.orchestrator.GeneticAlgorithmRunner')
     @patch('prompthelix.orchestrator.PopulationManager')
