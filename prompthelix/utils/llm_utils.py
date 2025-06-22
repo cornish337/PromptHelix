@@ -17,19 +17,24 @@ from openai import (
     RateLimitError as OpenAIRateLimitError,
     AuthenticationError as OpenAIAuthenticationError,
     APIConnectionError as OpenAIAPIConnectionError,
+    AsyncOpenAI,  # Added AsyncOpenAI
 )
+
 try:  # pragma: no cover – support both old and new OpenAI SDKs
     from openai import InvalidRequestError as OpenAIInvalidRequestError
 except ImportError:  # pragma: no cover
     from openai import BadRequestError as OpenAIInvalidRequestError
 
-
 import anthropic
 # Renamed Anthropic client import to avoid conflict with the error type
-from anthropic import AnthropicError, APIError as AnthropicAPIError, RateLimitError as AnthropicRateLimitError, AuthenticationError as AnthropicAuthenticationError, APIStatusError as AnthropicAPIStatusError, APIConnectionError as AnthropicAPIConnectionError
+from anthropic import AnthropicError, APIError as AnthropicAPIError, RateLimitError as AnthropicRateLimitError, \
+    AuthenticationError as AnthropicAuthenticationError, APIStatusError as AnthropicAPIStatusError, \
+    APIConnectionError as AnthropicAPIConnectionError
+from anthropic import AsyncAnthropic as AsyncAnthropicClient  # Added AsyncAnthropicClient
 
 import google.generativeai as genai
 from google.api_core import exceptions as google_exceptions
+
 # from google.generativeai.types import BlockedPromptException # Not directly caught for now
 
 logger = logging.getLogger(__name__)
@@ -53,24 +58,45 @@ def list_available_llms(db: Session | None = None) -> list[str]:
             services.append("GOOGLE")
     return services
 
-def call_openai_api(prompt: str, model: str = "gpt-3.5-turbo", db: Session = None) -> str:
+
+async def call_openai_api(prompt: str, model: str = "gpt-3.5-turbo", db: Session = None) -> str:  # Changed to async def
     api_key = get_openai_api_key(db)
 
     if not api_key:
         logger.warning("OpenAI API key not configured.")
         return "API_KEY_MISSING_ERROR"
 
-    client = openai.OpenAI(api_key=api_key)
-    logger.info(f"Calling OpenAI API with model {model}. Prompt snippet: {prompt[:100]}...")
+    client = AsyncOpenAI(api_key=api_key)  # Changed to AsyncOpenAI
+    logger.info(f"Calling AsyncOpenAI API with model {model}. Prompt snippet: {prompt[:100]}...")
+
+    processed_prompt = prompt
     try:
-        response = client.chat.completions.create(
+        # Attempt to parse the prompt if it looks like a JSON list of strings
+        if prompt.strip().startswith('[') and prompt.strip().endswith(']'):
+            import json
+            try:
+                prompt_parts = json.loads(prompt)
+                if isinstance(prompt_parts, list) and all(isinstance(part, str) for part in prompt_parts):
+                    processed_prompt = "\n".join(prompt_parts)
+                    logger.info(
+                        f"Successfully parsed and joined JSON string array prompt. New prompt snippet: {processed_prompt[:100]}...")
+                else:
+                    logger.warning(
+                        "Prompt looked like JSON array but failed to parse into list of strings. Using original prompt.")
+            except json.JSONDecodeError:
+                logger.warning("Prompt looked like JSON array but failed to decode. Using original prompt.")
+    except Exception as e:
+        logger.error(f"Error during prompt processing: {e}. Using original prompt.", exc_info=True)
+
+    try:
+        response = await client.chat.completions.acreate(  # Changed to acreate and added await
             model=model,
-            messages=[{"role": "user", "content": prompt}],
+            messages=[{"role": "user", "content": processed_prompt}],
         )
         content = response.choices[0].message.content.strip()
         return content
     except OpenAIRateLimitError as e:
-        logger.error(f"OpenAI API RateLimitError: {e}")
+        logger.error(f"AsyncOpenAI API RateLimitError: {e}")
         return "RATE_LIMIT_ERROR"
     except OpenAIAuthenticationError as e:
         logger.error(f"OpenAI API AuthenticationError: {e}")
@@ -88,32 +114,35 @@ def call_openai_api(prompt: str, model: str = "gpt-3.5-turbo", db: Session = Non
         logger.error(f"OpenAI API generic OpenAIError: {e}")
         return "OPENAI_ERROR"
     except Exception as e:
-        logger.error(f"An unexpected error occurred during OpenAI API call: {e}", exc_info=True)
+        logger.error(f"An unexpected error occurred during OpenAI API call: {type(e).__name__} - {e}", exc_info=True)
         return "UNEXPECTED_OPENAI_CALL_ERROR"
 
-def call_claude_api(prompt: str, model: str = "claude-2", db: Session = None) -> str:
+
+async def call_claude_api(prompt: str, model: str = "claude-2", db: Session = None) -> str:  # Changed to async def
     api_key = get_anthropic_api_key(db)
 
     if not api_key:
         logger.warning("Anthropic API key not configured.")
         return "API_KEY_MISSING_ERROR"
 
-    client = anthropic.Anthropic(api_key=api_key)
-    logger.info(f"Calling Anthropic Claude API with model {model}. Prompt snippet: {prompt[:100]}...")
+    client = AsyncAnthropicClient(api_key=api_key)  # Changed to AsyncAnthropicClient
+    logger.info(f"Calling AsyncAnthropic Claude API with model {model}. Prompt snippet: {prompt[:100]}...")
     try:
-        response = client.messages.create(
+        response = await client.messages.acreate(  # Changed to acreate and added await
             model=model,
-            max_tokens=1024,
+            max_tokens=1024,  # Assuming acreate supports max_tokens directly, or it's part of model config
             messages=[{"role": "user", "content": prompt}],
         )
         if response.content and isinstance(response.content, list) and len(response.content) > 0:
             first_block = response.content[0]
-            if hasattr(first_block, 'text'): # Check if it's a TextBlock
+            if hasattr(first_block, 'text'):  # Check if it's a TextBlock
                 return first_block.text.strip()
             else:
-                logger.warning(f"Anthropic API: First content block is not text. Type: {type(first_block)}. Block: {first_block}")
+                logger.warning(
+                    f"Anthropic API: First content block is not text. Type: {type(first_block)}. Block: {first_block}")
                 return "MALFORMED_CLAUDE_RESPONSE_CONTENT"
-        logger.warning(f"Anthropic API: Response content is empty or not in expected format. Content: {response.content}")
+        logger.warning(
+            f"Anthropic API: Response content is empty or not in expected format. Content: {response.content}")
         return "EMPTY_CLAUDE_RESPONSE"
     except AnthropicRateLimitError as e:
         logger.error(f"Anthropic API RateLimitError: {e}")
@@ -122,7 +151,8 @@ def call_claude_api(prompt: str, model: str = "claude-2", db: Session = None) ->
         logger.error(f"Anthropic API AuthenticationError: {e}")
         return "AUTHENTICATION_ERROR"
     except AnthropicAPIStatusError as e:
-        logger.error(f"Anthropic API StatusError: {e} (Status Code: {e.status_code if hasattr(e, 'status_code') else 'N/A'})")
+        logger.error(
+            f"Anthropic API StatusError: {e} (Status Code: {e.status_code if hasattr(e, 'status_code') else 'N/A'})")
         return "API_STATUS_ERROR"
     except AnthropicAPIConnectionError as e:
         logger.error(f"Anthropic API ConnectionError: {e}")
@@ -137,44 +167,48 @@ def call_claude_api(prompt: str, model: str = "claude-2", db: Session = None) ->
         logger.error(f"An unexpected error occurred during Anthropic API call: {e}", exc_info=True)
         return "UNEXPECTED_ANTHROPIC_CALL_ERROR"
 
-def call_google_api(prompt: str, model: str = "gemini-pro", db: Session = None) -> str:
+
+async def call_google_api(prompt: str, model: str = "gemini-pro", db: Session = None) -> str:  # Changed to async def
     api_key = get_google_api_key(db)
 
     if not api_key:
         logger.warning("Google API key not configured.")
         return "API_KEY_MISSING_ERROR"
 
-    genai.configure(api_key=api_key) # This is synchronous, should be fine to call once.
+    genai.configure(api_key=api_key)  # This is synchronous, should be fine to call once.
     model_client = genai.GenerativeModel(model)
-    logger.info(f"Calling Google Generative AI with model {model}. Prompt snippet: {prompt[:100]}...")
+    logger.info(f"Calling Async Google Generative AI with model {model}. Prompt snippet: {prompt[:100]}...")
     try:
-        response = model_client.generate_content(prompt)
+        response = await model_client.generate_content_async(prompt)  # Changed to generate_content_async
         # Check response content and prompt feedback carefully
-        if not response.parts: # No parts usually means blocked or empty
+        if not response.parts:  # No parts usually means blocked or empty
             if hasattr(response, 'prompt_feedback') and response.prompt_feedback.block_reason:
                 logger.warning(f"Google API prompt blocked. Reason: {response.prompt_feedback.block_reason}")
                 return "BLOCKED_PROMPT_ERROR"
             # Check finish reason if parts are empty and not blocked above
-            if hasattr(response, 'candidates') and response.candidates and hasattr(response.candidates[0], 'finish_reason'):
+            if hasattr(response, 'candidates') and response.candidates and hasattr(response.candidates[0],
+                                                                                   'finish_reason'):
                 finish_reason_name = response.candidates[0].finish_reason.name
                 # Consider UNSPECIFIED and FINISH_REASON_UNSPECIFIED as non-error/ignorable stop reasons if parts are empty.
                 # Only return specific error if it's a more active stop reason like SAFETY, RECITATION etc.
                 if finish_reason_name not in ["STOP", "MAX_TOKENS", "UNSPECIFIED", "FINISH_REASON_UNSPECIFIED"]:
                     logger.warning(f"Google API generation finished due to: {finish_reason_name}")
                     return f"GENERATION_STOPPED_{finish_reason_name}"
-            logger.warning(f"Google API returned empty response parts and no clear block/stop reason. Response: {response}")
+            logger.warning(
+                f"Google API returned empty response parts and no clear block/stop reason. Response: {response}")
             return "EMPTY_GOOGLE_RESPONSE"
 
         # If parts exist, try to get text
         # response.text might raise an exception if the prompt itself was blocked,
         # even if parts seems non-empty initially, or if all candidates are blocked.
         try:
-          return response.text.strip()
-        except ValueError as ve: # Often raised if all candidates are blocked / no valid content
-            logger.warning(f"Google API: ValueError accessing response.text (often due to blocked content not caught by prompt_feedback): {ve}. Response: {response}")
+            return response.text.strip()
+        except ValueError as ve:  # Often raised if all candidates are blocked / no valid content
+            logger.warning(
+                f"Google API: ValueError accessing response.text (often due to blocked content not caught by prompt_feedback): {ve}. Response: {response}")
             if hasattr(response, 'prompt_feedback') and response.prompt_feedback.block_reason:
                 return "BLOCKED_PROMPT_ERROR"
-            return "EMPTY_GOOGLE_RESPONSE" # Or BLOCKED_CONTENT_ERROR
+            return "EMPTY_GOOGLE_RESPONSE"  # Or BLOCKED_CONTENT_ERROR
 
     except google_exceptions.ResourceExhausted as e:
         logger.error(f"Google Generative AI ResourceExhausted error (likely rate limit/quota): {e}")
@@ -201,8 +235,10 @@ def call_google_api(prompt: str, model: str = "gemini-pro", db: Session = None) 
             return "GOOGLE_SDK_ERROR"
         return "UNEXPECTED_GOOGLE_CALL_ERROR"
 
-def call_llm_api(prompt: str, provider: str, model: Optional[str] = None, db: Session = None) -> str:
-    logger.info(f"call_llm_api invoked with provider: {provider}, model: {model}")
+
+async def call_llm_api(prompt: str, provider: str, model: Optional[str] = None,
+                       db: Session = None) -> str:  # Changed to async def
+    logger.info(f"Async call_llm_api invoked with provider: {provider}, model: {model}")
     provider_lower = provider.lower()
     timestamp = datetime.datetime.now().isoformat()
 
@@ -226,26 +262,30 @@ def call_llm_api(prompt: str, provider: str, model: Optional[str] = None, db: Se
     log_entry_start = f"Timestamp: {timestamp}\nAPI Path: {api_path}\nPrompt: {prompt}\n"
 
     result = ""
-    error_message_for_log = None # Use a different variable name to avoid confusion with API result
+    error_message_for_log = None  # Use a different variable name to avoid confusion with API result
 
     try:
         if provider_lower == "openai":
-            result = call_openai_api(prompt, model=determined_model, db=db)
-            if result in ["API_KEY_MISSING_ERROR", "RATE_LIMIT_ERROR", "AUTHENTICATION_ERROR", "API_CONNECTION_ERROR", "INVALID_REQUEST_ERROR", "API_ERROR", "OPENAI_ERROR", "UNEXPECTED_OPENAI_CALL_ERROR"]:
+            result = await call_openai_api(prompt, model=determined_model, db=db)  # Added await
+            if result in ["API_KEY_MISSING_ERROR", "RATE_LIMIT_ERROR", "AUTHENTICATION_ERROR", "API_CONNECTION_ERROR",
+                          "INVALID_REQUEST_ERROR", "API_ERROR", "OPENAI_ERROR", "UNEXPECTED_OPENAI_CALL_ERROR"]:
                 error_message_for_log = result
         elif provider_lower == "anthropic":
-            result = call_claude_api(prompt, model=determined_model, db=db)
-            if result in ["API_KEY_MISSING_ERROR", "RATE_LIMIT_ERROR", "AUTHENTICATION_ERROR", "API_STATUS_ERROR", "API_CONNECTION_ERROR", "API_ERROR", "ANTHROPIC_ERROR", "UNEXPECTED_ANTHROPIC_CALL_ERROR", "MALFORMED_CLAUDE_RESPONSE_CONTENT", "EMPTY_CLAUDE_RESPONSE"]:
+            result = await call_claude_api(prompt, model=determined_model, db=db)  # Added await
+            if result in ["API_KEY_MISSING_ERROR", "RATE_LIMIT_ERROR", "AUTHENTICATION_ERROR", "API_STATUS_ERROR",
+                          "API_CONNECTION_ERROR", "API_ERROR", "ANTHROPIC_ERROR", "UNEXPECTED_ANTHROPIC_CALL_ERROR",
+                          "MALFORMED_CLAUDE_RESPONSE_CONTENT", "EMPTY_CLAUDE_RESPONSE"]:
                 error_message_for_log = result
         elif provider_lower == "google":
-            result = call_google_api(prompt, model=determined_model, db=db)
+            result = await call_google_api(prompt, model=determined_model, db=db)  # Added await
             google_error_conditions = [
                 "API_KEY_MISSING_ERROR", "RATE_LIMIT_ERROR", "AUTHENTICATION_ERROR",
                 "INVALID_ARGUMENT_ERROR", "API_SERVER_ERROR", "API_ERROR",
                 "BLOCKED_PROMPT_ERROR", "EMPTY_GOOGLE_RESPONSE", "GOOGLE_SDK_ERROR",
                 "UNEXPECTED_GOOGLE_CALL_ERROR"
             ]
-            if result in google_error_conditions or (isinstance(result, str) and result.startswith("GENERATION_STOPPED_")):
+            if result in google_error_conditions or (
+                    isinstance(result, str) and result.startswith("GENERATION_STOPPED_")):
                 error_message_for_log = result
         else:
             logger.error(f"Unsupported LLM provider: {provider}")
@@ -260,20 +300,19 @@ def call_llm_api(prompt: str, provider: str, model: Optional[str] = None, db: Se
         error_str = str(e)
         # Check for common error types that might not be caught by string checks
         if isinstance(e, (OpenAIError, AnthropicError, google_exceptions.GoogleAPIError)):
-             # This provides a more specific error if the sub-functions unexpectedly raised.
+            # This provides a more specific error if the sub-functions unexpectedly raised.
             error_str = f"{type(e).__name__}: {str(e)}"
 
-        result = f"UNEXPECTED_CALL_LLM_API_ERROR" # Generic result for the caller
+        result = f"UNEXPECTED_CALL_LLM_API_ERROR"  # Generic result for the caller
         error_message_for_log = f"UNEXPECTED_CALL_LLM_API_ERROR: {error_str}"
-
 
     # Perform logging
     try:
         with open(LOG_FILE_PATH, "a") as f:
-            f.write(log_entry_start) # This includes the prompt
+            f.write(log_entry_start)  # This includes the prompt
             if error_message_for_log:
                 f.write(f"Error: {error_message_for_log}\n")
-            f.write("---\n") # Separator for entries
+            f.write("---\n")  # Separator for entries
     except Exception as e:
         logger.error(f"Failed to write to LLM API call log: {e}", exc_info=True)
         # Do not propagate logging errors to the caller of call_llm_api
@@ -282,5 +321,6 @@ def call_llm_api(prompt: str, provider: str, model: Optional[str] = None, db: Se
 
 
 # Backwards compatibility for older tests
-def call_llm_api_directly(prompt: str, provider: str, model: Optional[str] = None, db: Session = None) -> str:
-    return call_llm_api(prompt, provider, model, db)
+async def call_llm_api_directly(prompt: str, provider: str, model: Optional[str] = None,
+                                db: Session = None) -> str:  # Changed to async def
+    return await call_llm_api(prompt, provider, model, db)  # Added await
