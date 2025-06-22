@@ -19,7 +19,7 @@ textstat>=0.7.7
 setuptools>=80
 bcrypt
 prometheus-client==0.20.0 # Added for Prometheus metrics
-wandb==0.16.0 # Added for Weights & Biases integration
+wandb>=0.17.2 # ==0.16.0 # Added for Weights & Biases integration
 prometheus_client
 mlflow
 pytest-asyncio
