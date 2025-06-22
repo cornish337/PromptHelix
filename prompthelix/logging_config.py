@@ -6,12 +6,8 @@ import sys
 from datetime import datetime  # For custom JSON formatter
 
 from prompthelix.config import (
-    LOG_DIR,
-    LOG_FILE_NAME,
-    LOG_FORMAT,
-    LOG_LEVEL,
-    LOGGING_CONFIG,
-    ensure_directories_exist,
+    LOG_LEVEL, LOG_FORMAT, LOG_FILE_NAME, LOG_DIR,
+    LOGGING_CONFIG, ensure_directories_exist, settings # Added settings import
 )
 
 # Get a logger for this module itself
@@ -127,14 +123,19 @@ def setup_logging():
             "encoding": "utf-8",
         }
         # Configure the 'prompthelix.ga_metrics' logger
-        config_to_use["loggers"]["prompthelix.ga_metrics"] = {
-            "handlers": ["ga_metrics_file"],
-            "level": "INFO",
-            "propagate": False,  # Do not pass metrics logs to the root logger's handlers
+
+        ga_metrics_logger_level = 'INFO' if settings.DEBUG else 'WARNING'
+        config_to_use['loggers']['prompthelix.ga_metrics'] = {
+            'handlers': ['ga_metrics_file'],
+            'level': ga_metrics_logger_level, # Set level based on settings.DEBUG
+            'propagate': False, # Do not pass metrics logs to the root logger's handlers
         }
-        print(
-            f"Logging Config: GA Metrics JSONL logging enabled. Path: {ga_metrics_log_file_path}"
-        )
+        if settings.DEBUG:
+            print(f"Logging Config: GA Metrics JSONL logging enabled (DEBUG mode). Path: {ga_metrics_log_file_path}, Level: {ga_metrics_logger_level}")
+        else:
+            # Still print path even if disabled by DEBUG, but clarify it's not active for INFO logs
+            print(f"Logging Config: GA Metrics JSONL logging configured (Non-DEBUG mode - INFO logs suppressed). Path: {ga_metrics_log_file_path}, Logger Level: {ga_metrics_logger_level}")
+
     else:
         print("Logging Config: GA Metrics JSONL logging disabled (LOG_DIR not set).")
 
