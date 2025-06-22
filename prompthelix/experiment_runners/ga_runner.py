@@ -71,7 +71,7 @@ class GeneticAlgorithmRunner(BaseExperimentRunner):
         ph_globals.active_ga_runner = self
         logger.info(f"GeneticAlgorithmRunner instance {id(self)} registered as active_ga_runner.")
 
-    async def run(self, **kwargs) -> Optional[PromptChromosome]:
+    def run(self, **kwargs) -> Optional[PromptChromosome]:
         """
         Executes the genetic algorithm for the specified number of generations.
 
@@ -133,7 +133,7 @@ class GeneticAlgorithmRunner(BaseExperimentRunner):
                     break
 
                 # evolve_population itself checks for pause/stop and updates status
-                await self.population_manager.evolve_population( # Added await
+                self.population_manager.evolve_population(
                     task_description=task_description,
                     success_criteria=success_criteria,
                     # target_style=target_style, # target_style is not used by current evolve_population

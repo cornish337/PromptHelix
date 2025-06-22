@@ -55,6 +55,7 @@ def add_generation_metrics(
         generation_number=metrics.get("generation_number"),
         best_fitness=metrics.get("best_fitness"),
         avg_fitness=metrics.get("avg_fitness"),
+        population_diversity=metrics.get("population_diversity", 0.0),
         population_size=metrics.get("population_size"),
         diversity=metrics.get("diversity"),
 
