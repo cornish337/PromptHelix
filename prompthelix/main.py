@@ -24,17 +24,12 @@ from prompthelix import metrics as ph_metrics
 # from prompthelix.websocket_manager import ConnectionManager # No longer imported directly for instantiation
 from prompthelix.globals import websocket_manager  # Import the global instance
 from prompthelix.database import init_db
-from prompthelix.logging_config import setup_logging # Import the logging setup function
+from prompthelix.logging_config import setup_logging  # Import the logging setup function
 
 # --- Setup Logging ---
 # Call this early, before other initializations if they might log.
 setup_logging()
 # --- End Setup Logging ---
-
-
-from prompthelix.utils import setup_logging
-
-setup_logging()
 
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
