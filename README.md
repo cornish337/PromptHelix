@@ -339,8 +339,8 @@ PromptHelix also provides an API endpoint to trigger the genetic algorithm.
     ```
 
 
-3.  **Try the Prompt Manager UI**:
-    The Prompt Manager UI, for adding and viewing prompts, can be accessed as described in the "Setup and Run the Web UI" section.
+3.  **Try the Prompt UI**:
+    The UI for adding and viewing prompts is backed by `PromptService` and can be accessed as described in the "Setup and Run the Web UI" section.
 
 4.  **Expected Response**:
     The endpoint now launches the experiment asynchronously. It immediately
