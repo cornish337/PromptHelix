@@ -412,17 +412,3 @@ You can also launch the interactive runner from the command line:
 ```bash
 python -m prompthelix.cli test --interactive
 ```
-
-
-
-## Metrics Exporter
-
-PromptHelix can expose basic Prometheus metrics to monitor GA progress. Set
-`PROMETHEUS_METRICS_ENABLED=true` in your environment to enable the exporter.
-By default metrics are served on port defined by `PROMETHEUS_METRICS_PORT`
-(default `8001`).
-
-Once enabled, start a GA run normally and scrape `http://localhost:8001/metrics`.
-You can add this scrape target in Prometheus and visualize values like
-`prompthelix_current_generation` and `prompthelix_best_fitness` in Grafana or
-forward them to an experiment tracker such as W&B.
