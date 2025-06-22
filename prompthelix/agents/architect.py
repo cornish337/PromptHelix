@@ -152,7 +152,7 @@ class PromptArchitectAgent(BaseAgent):
         Returns:
             dict: A dictionary of parsed requirements.
         """
-        print(f"{self.agent_id} - Parsing requirements using LLM: Task='{task_desc}', Keywords='{keywords}', Constraints='{constraints}'")
+        logger.debug(f"Agent '{self.agent_id}': Entering _parse_requirements with task_desc: '{task_desc}', keywords: {keywords}, constraints: {constraints}")
 
         prompt = f"""
         Parse the following task requirements into JSON with keys 'task_description', 'keywords', and 'constraints'.
@@ -169,19 +169,23 @@ class PromptArchitectAgent(BaseAgent):
             if not isinstance(data, dict):
                 raise ValueError("LLM response for requirements is not a JSON object")
 
-            return {
+            result = {
                 "task_description": data.get("task_description", task_desc if task_desc else "Default task description"),
                 "keywords": data.get("keywords", keywords),
                 "constraints": data.get("constraints", constraints),
             }
+            logger.debug(f"Agent '{self.agent_id}': Exiting _parse_requirements with result: {result}")
+            return result
         except Exception as e:
             logger.error(f"Agent '{self.agent_id}': Error calling LLM for parsing requirements: {e}", exc_info=True)
-            return {
+            result = {
                 "task_description": task_desc if task_desc else "Default task description",
                 "keywords": keywords,
                 "constraints": constraints,
                 "error": str(e)
             }
+            logger.debug(f"Agent '{self.agent_id}': Exiting _parse_requirements with error result: {result}")
+            return result
 
     def _select_template(self, parsed_requirements: dict) -> str:
         """
@@ -193,6 +197,7 @@ class PromptArchitectAgent(BaseAgent):
         Returns:
             str: The name of the selected template.
         """
+        logger.debug(f"Agent '{self.agent_id}': Entering _select_template with parsed_requirements: {parsed_requirements}")
         task_desc = parsed_requirements.get("task_description", "")
         available_templates = list(self.templates.keys())
 
@@ -211,13 +216,18 @@ class PromptArchitectAgent(BaseAgent):
             selected_template_name = data.get("template") or data.get("template_name")
             if selected_template_name in self.templates:
                 logger.info(f"Agent '{self.agent_id}' - LLM selected template: {selected_template_name}")
+                logger.debug(f"Agent '{self.agent_id}': Exiting _select_template with selected_template_name: {selected_template_name}")
                 return selected_template_name
             else:
                 logger.warning(f"Agent '{self.agent_id}' - LLM returned invalid template '{selected_template_name}'. Falling back.")
-                return self._fallback_select_template(parsed_requirements)
+                fallback_result = self._fallback_select_template(parsed_requirements)
+                logger.debug(f"Agent '{self.agent_id}': Exiting _select_template with fallback_result: {fallback_result} after invalid LLM response")
+                return fallback_result
         except Exception as e:
             logger.error(f"Agent '{self.agent_id}': Error calling LLM for template selection: {e}", exc_info=True)
-            return self._fallback_select_template(parsed_requirements)
+            fallback_result = self._fallback_select_template(parsed_requirements)
+            logger.debug(f"Agent '{self.agent_id}': Exiting _select_template with fallback_result: {fallback_result} after exception")
+            return fallback_result
 
     def _fallback_select_template(self, parsed_requirements: dict) -> str:
         """ Fallback template selection logic if LLM fails. """
@@ -244,6 +254,7 @@ class PromptArchitectAgent(BaseAgent):
         Returns:
             list: A list of gene strings for the PromptChromosome.
         """
+        logger.debug(f"Agent '{self.agent_id}': Entering _populate_genes with template: {template}, parsed_requirements: {parsed_requirements}")
         task_desc = parsed_requirements.get("task_description", "N/A")
         keywords = parsed_requirements.get("keywords", [])
         constraints = parsed_requirements.get("constraints", {})
@@ -284,10 +295,13 @@ class PromptArchitectAgent(BaseAgent):
                 raise ValueError("LLM returned invalid gene list")
 
             logger.info(f"Agent '{self.agent_id}' - LLM populated genes: {genes}")
+            logger.debug(f"Agent '{self.agent_id}': Exiting _populate_genes with LLM populated genes: {genes}")
             return genes
         except Exception as e:
             logger.error(f"Agent '{self.agent_id}': Error calling LLM for gene population: {e}. Falling back to basic population.", exc_info=True)
-            return self._fallback_populate_genes(template, parsed_requirements)
+            fallback_genes = self._fallback_populate_genes(template, parsed_requirements)
+            logger.debug(f"Agent '{self.agent_id}': Exiting _populate_genes with fallback_genes: {fallback_genes} after exception")
+            return fallback_genes
 
     def _fallback_populate_genes(self, template: dict, parsed_requirements: dict) -> list:
         """ Fallback gene population logic if LLM fails. """
@@ -324,6 +338,7 @@ class PromptArchitectAgent(BaseAgent):
         genes.append(f"Output Format: {template['output_format']}")
         
         logger.info(f"Agent '{self.agent_id}' - Fallback populated genes: {genes}")
+        # No specific exit log for _fallback_populate_genes as it's simple and the info log covers its output.
         return genes
 
     def process_request(self, request_data: dict) -> PromptChromosome:
@@ -346,7 +361,8 @@ class PromptArchitectAgent(BaseAgent):
         Returns:
             PromptChromosome: An initial prompt chromosome.
         """
-        logger.info(f"Agent '{self.agent_id}' processing request: {request_data}")
+        logger.debug(f"Agent '{self.agent_id}': Entering process_request with request_data: {request_data}")
+        logger.info(f"Agent '{self.agent_id}' processing request for task: '{request_data.get('task_description', 'N/A')}'")
 
         
         task_desc = request_data.get("task_description", "Default task description")
@@ -372,7 +388,8 @@ class PromptArchitectAgent(BaseAgent):
         genes = self._populate_genes(selected_template, parsed_reqs)
         
         # Fitness score is typically not set by architect, but by evaluator later
-        prompt_chromosome = PromptChromosome(genes=genes, fitness_score=0.0) 
+        prompt_chromosome = PromptChromosome(genes=genes, fitness_score=0.0)
         
-        logger.info(f"Agent '{self.agent_id}' - Created PromptChromosome: {str(prompt_chromosome)}")
+        logger.info(f"Agent '{self.agent_id}' - Created PromptChromosome with ID: {prompt_chromosome.id} and genes: {prompt_chromosome.genes}")
+        logger.debug(f"Agent '{self.agent_id}': Exiting process_request with prompt_chromosome: {str(prompt_chromosome)}")
         return prompt_chromosome
