@@ -176,7 +176,6 @@ async def main_ga_loop( # Changed to async def
         logger.info("LLM settings have been updated with overrides for this session.")
 
 
-    # 1. Instantiate Agents from AGENT_PIPELINE_CONFIG
     logger.info("Initializing agents from AGENT_PIPELINE_CONFIG...")
     loaded_agents: Dict[str, BaseAgent] = {}
     agent_names: List[str] = []
@@ -191,29 +190,6 @@ async def main_ga_loop( # Changed to async def
             continue
 
         logger.info(f"Loading agent '{agent_id}' from class path '{class_path}' using settings key '{settings_key}'.")
-
-#
-
-    # 1. Instantiate Agents from AGENT_PIPELINE_CONFIG
-    logger.info("Initializing agents from AGENT_PIPELINE_CONFIG...")
-    loaded_agents: Dict[str, BaseAgent] = {}
-    agent_names: List[str] = []
-
-    # This loop appears to be a duplicate of the one starting around line 184.
-    # It should also use the directly imported AGENT_PIPELINE_CONFIG.
-    # TODO: Investigate if this entire block is redundant.
-    for agent_conf in AGENT_PIPELINE_CONFIG: # Use the directly imported AGENT_PIPELINE_CONFIG
-        class_path = agent_conf.get("class_path")
-        agent_id = agent_conf.get("id")
-        settings_key = agent_conf.get("settings_key")
-
-        if not all([class_path, agent_id, settings_key]):
-            logger.error(f"Invalid agent configuration: {agent_conf}. Skipping.")
-            continue
-
-        logger.info(f"Loading agent '{agent_id}' from class path '{class_path}' using settings key '{settings_key}'.")
-
-#
         try:
             module_path_str, class_name_str = class_path.rsplit('.', 1)
             module = importlib.import_module(module_path_str)
