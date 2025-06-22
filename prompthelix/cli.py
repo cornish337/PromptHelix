@@ -113,23 +113,12 @@ def main_cli():
         type=str,
         help="Write generation metrics as JSON lines to this file when DB is unavailable.",
     )
-    run_parser.add_argument(
-        "--agent-settings",
-        type=str,
-        help="JSON string or file path to override agent configurations.",
-    )
-    run_parser.add_argument(
-        "--llm-settings",
-        type=str,
-        help="JSON string or file path to override LLM utility settings.",
-    )
-    run_parser.add_argument(
-        "--execution-mode",
-        type=str,
-        choices=["TEST", "REAL"],
-        default="TEST",
-        help="Set the execution mode for the GA (TEST or REAL).",
-    )
+
+    run_parser.add_argument("--agent-settings", type=str, help="JSON string or file path to override agent configurations.")
+    run_parser.add_argument("--llm-settings", type=str, help="JSON string or file path to override LLM utility settings.")
+    run_parser.add_argument("--execution-mode", type=str, choices=['TEST', 'REAL'], default='TEST', help="Set the execution mode for the GA (TEST or REAL).")
+    run_parser.add_argument("--num-synthetic-inputs", type=int, default=0, help="Number of synthetic inputs for evaluating each prompt (default: 0).")
+
 
     # "check-llm" command for quick connectivity testing
     check_parser = subparsers.add_parser(
@@ -349,16 +338,24 @@ def main_cli():
                         llm_settings_override = json.loads(args.llm_settings)
                         logger.info("Loaded LLM settings override from JSON string.")
                 except json.JSONDecodeError as e:
-                    logger.error(
-                        f"Invalid JSON for llm_settings: {e}. Using default LLM settings."
-                    )
-                except Exception as e:
-                    logger.error(
-                        f"Error processing llm_settings: {e}. Using default LLM settings."
-                    )
 
-            # TODO: Pass agent_settings_override and llm_settings_override to main_ga_loop or a config manager
-            # For now, they are just logged. The subtask specifies loading here.
+                    logger.error(f"Invalid JSON for llm_settings: {e}. Using default LLM settings.")
+                    llm_settings_override = {} # Ensure it's a dict
+                except Exception as e:
+                    logger.error(f"Error processing llm_settings: {e}. Using default LLM settings.")
+                    llm_settings_override = {} # Ensure it's a dict
+            else:
+                llm_settings_override = {} # Initialize if not provided via args.llm_settings
+
+            # Add/override num_synthetic_inputs in llm_settings_override
+            # The value from --num-synthetic-inputs CLI arg takes precedence
+            if args.num_synthetic_inputs > 0 : # Only add if explicitly set to > 0 to avoid overriding a potential file-based 0
+                llm_settings_override["num_synthetic_inputs_for_evaluation"] = args.num_synthetic_inputs
+                logger.info(f"Set num_synthetic_inputs_for_evaluation to {args.num_synthetic_inputs} from CLI argument.")
+            elif "num_synthetic_inputs_for_evaluation" not in llm_settings_override:
+                # If not set by CLI and not in file, ensure it defaults to 0 for FitnessEvaluator
+                 llm_settings_override["num_synthetic_inputs_for_evaluation"] = 0
+
 
             print("CLI: Running Genetic Algorithm with specified parameters...")
             try:
