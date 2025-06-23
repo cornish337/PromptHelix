@@ -2,7 +2,7 @@ import datetime
 from prompthelix.config import settings  # Import the settings object
 import logging
 from sqlalchemy.orm import Session  # Used for DB API key lookup if available
-from prompthelix.api import crud  # For potential DB access to API keys
+# REMOVED: from prompthelix.api import crud  # For potential DB access to API keys
 from prompthelix.config import (
     get_openai_api_key,
     get_anthropic_api_key,
@@ -51,18 +51,13 @@ LOG_FILE_PATH = "llm_api_calls.log"
 def list_available_llms(db: Session | None = None) -> list[str]:
     """Return the list of LLM service names with configured API keys."""
     services = []
-    # Try loading from DB if CRUD helper available
-    if hasattr(crud, "get_api_key"):
-        for name in ["OPENAI", "ANTHROPIC", "GOOGLE"]:
-            if crud.get_api_key(db, service_name=name):
-                services.append(name)
-    else:
-        if get_openai_api_key(db):
-            services.append("OPENAI")
-        if get_anthropic_api_key(db):
-            services.append("ANTHROPIC")
-        if get_google_api_key(db):
-            services.append("GOOGLE")
+    # This function now relies solely on config functions
+    if get_openai_api_key(db): # Assuming these config functions can handle db=None
+        services.append("OPENAI")
+    if get_anthropic_api_key(db):
+        services.append("ANTHROPIC")
+    if get_google_api_key(db):
+        services.append("GOOGLE")
     return services
 
 

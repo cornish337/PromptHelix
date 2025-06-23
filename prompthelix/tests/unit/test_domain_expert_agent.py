@@ -1,4 +1,5 @@
 import unittest
+import asyncio # Added import
 from prompthelix.agents.domain_expert import DomainExpertAgent
 
 class TestDomainExpertAgent(unittest.TestCase):
@@ -36,7 +37,7 @@ class TestDomainExpertAgent(unittest.TestCase):
     def test_process_request_medical_keywords(self):
         """Test process_request for specific info (medical keywords)."""
         request_data = {"domain": "medical", "query_type": "keywords"}
-        result = self.expert.process_request(request_data)
+        result = asyncio.run(self.expert.process_request(request_data))
 
         self.assertIsInstance(result, dict)
         self.assertEqual(result.get("domain"), "medical")
@@ -49,7 +50,7 @@ class TestDomainExpertAgent(unittest.TestCase):
     def test_process_request_all_info_coding(self):
         """Test process_request for 'all_info' for a specific domain (coding_python)."""
         request_data = {"domain": "coding_python", "query_type": "all_info"}
-        result = self.expert.process_request(request_data)
+        result = asyncio.run(self.expert.process_request(request_data))
 
         self.assertIsInstance(result, dict)
         self.assertEqual(result.get("domain"), "coding_python")
@@ -71,7 +72,7 @@ class TestDomainExpertAgent(unittest.TestCase):
         # the fallback more specific.
         # Let's test a specific unknown domain that is NOT "general_knowledge" itself.
         request_data = {"domain": "underwater_basket_weaving", "query_type": "keywords"}
-        result = self.expert.process_request(request_data)
+        result = asyncio.run(self.expert.process_request(request_data))
         
         # Current implementation falls back to 'general_knowledge' if domain is not one of the main specific ones.
         # So we check if it correctly falls back to general_knowledge
@@ -86,7 +87,7 @@ class TestDomainExpertAgent(unittest.TestCase):
     def test_process_request_unknown_query_type(self):
         """Test process_request for an unknown query_type for a known domain."""
         request_data = {"domain": "medical", "query_type": "non_existent_query_type"}
-        result = self.expert.process_request(request_data)
+        result = asyncio.run(self.expert.process_request(request_data))
 
         self.assertIsInstance(result, dict)
         self.assertIn("error", result)
@@ -97,19 +98,19 @@ class TestDomainExpertAgent(unittest.TestCase):
         """Test process_request with missing essential keys in request_data."""
         # Missing 'query_type'
         request_missing_query = {"domain": "medical"}
-        result_missing_query = self.expert.process_request(request_missing_query)
+        result_missing_query = asyncio.run(self.expert.process_request(request_missing_query))
         self.assertIn("error", result_missing_query)
         self.assertIn("Missing 'domain' or 'query_type'", result_missing_query["error"])
 
         # Missing 'domain'
         request_missing_domain = {"query_type": "keywords"}
-        result_missing_domain = self.expert.process_request(request_missing_domain)
+        result_missing_domain = asyncio.run(self.expert.process_request(request_missing_domain))
         self.assertIn("error", result_missing_domain)
         self.assertIn("Missing 'domain' or 'query_type'", result_missing_domain["error"])
 
         # Empty request
         request_empty = {}
-        result_empty = self.expert.process_request(request_empty)
+        result_empty = asyncio.run(self.expert.process_request(request_empty))
         self.assertIn("error", result_empty)
         self.assertIn("Missing 'domain' or 'query_type'", result_empty["error"])
 

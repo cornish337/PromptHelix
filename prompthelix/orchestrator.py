@@ -402,7 +402,7 @@ async def main_ga_loop( # Changed to async def
 
     logger.info(f"Handing over to GeneticAlgorithmRunner (ID: {id(runner)}) to run for {num_generations} generations.")
     # The runner's run() method will now manage the evolution loop and pause/stop/complete states.
-    fittest_individual = runner.run(**run_kwargs) # This will be the overall best from the run.
+    fittest_individual = await runner.run(**run_kwargs) # Added await
 
     logger.info(f"GeneticAlgorithmRunner has completed. Orchestrator check on PopulationManager status: {pop_manager.status}")
 

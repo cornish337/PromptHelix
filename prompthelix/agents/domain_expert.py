@@ -182,7 +182,7 @@ class DomainExpertAgent(BaseAgent):
         except Exception as e:
             logger.error(f"Agent '{self.agent_id}': Failed to save knowledge to '{self.knowledge_file_path}': {e}", exc_info=True)
 
-    def process_request(self, request_data: dict) -> dict:
+    async def process_request(self, request_data: dict) -> dict: # Changed to async
         """
         Provides domain-specific information based on a query.
 
@@ -211,11 +211,11 @@ class DomainExpertAgent(BaseAgent):
         llm_prompt = self._construct_llm_prompt(domain, query_type)
 
         try:
-            llm_response_str = call_llm_api(llm_prompt, provider=self.llm_provider, model=self.llm_model)
+            llm_response_str = await call_llm_api(llm_prompt, provider=self.llm_provider, model=self.llm_model)
             logger.info(f"Agent '{self.agent_id}': LLM response for domain '{domain}', type '{query_type}': {llm_response_str}")
             if isinstance(llm_response_str, str) and (
                 llm_response_str in LLM_API_ERROR_STRINGS or llm_response_str.startswith("GENERATION_STOPPED_")
-            ):
+            ): # Check instance for startswith after ensuring it's a string
                 logger.warning(
                     f"Agent '{self.agent_id}': LLM returned error code '{llm_response_str}'. Skipping parse and falling back."
                 )

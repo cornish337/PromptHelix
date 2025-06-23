@@ -32,17 +32,6 @@ start_exporter_if_enabled() # Start Prometheus client HTTP server if enabled
 # --- End Prometheus Metrics Exporter ---
 
 
-from prompthelix.utils import setup_logging # This is a duplicate import, setup_logging() was already called
-
-# setup_logging() # Duplicate call
-
-from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
-
-# Configure logging as soon as possible
-configure_logging(settings.DEBUG)
-
-
-
 # Call init_db to create database tables on startup
 init_db()  # Initialize database and tables on startup
 

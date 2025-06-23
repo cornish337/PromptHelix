@@ -288,7 +288,7 @@ class ResultsEvaluatorAgent(BaseAgent):
         logger.info(f"Agent '{self.agent_id}': Constraint check result - Metrics={metrics}, Errors#={len(errors)}")
         return {"metrics": metrics, "errors": errors}
 
-    def _analyze_content(self, llm_output: str, task_desc: str, prompt_chromosome: PromptChromosome, synthetic_input_context: Optional[str] = None) -> tuple[dict, list]:
+    async def _analyze_content(self, llm_output: str, task_desc: str, prompt_chromosome: PromptChromosome, synthetic_input_context: Optional[str] = None) -> tuple[dict, list]: # Changed to async
         """
         Analyzes LLM output content using another LLM for quality, relevance, coherence, etc.
         Falls back to placeholder values if LLM analysis fails.
@@ -359,9 +359,9 @@ Example:
 
         # Pass self.db if available and needed by call_llm_api. Assuming self.db might be None.
         # call_llm_api is designed to handle db=None.
-        response_str = call_llm_api(prompt_str_for_llm, provider=self.llm_provider, model=self.evaluation_llm_model, db=self.db)
+        response_str = await call_llm_api(prompt_str_for_llm, provider=self.llm_provider, model=self.evaluation_llm_model, db=self.db) # Added await
 
-        if response_str in LLM_API_ERROR_STRINGS:
+        if response_str in LLM_API_ERROR_STRINGS: # This check is fine as response_str will be a string after await
             logger.warning(f"Agent '{self.agent_id}': LLM call for content analysis failed with error code: {response_str}. Using fallback metrics.")
             api_error_message = f"LLM API Error: {response_str}"
             errors.append(api_error_message)
@@ -428,7 +428,8 @@ Example:
 
         return llm_derived_metrics, errors
 
-    async def process_request(self, request_data: dict) -> dict: # Changed to async def
+    # process_request was already marked async, ensure its internal calls are awaited.
+    async def process_request(self, request_data: dict) -> dict:
         """
         Evaluates the LLM output for a given prompt, primarily using another LLM for content analysis.
 
@@ -474,7 +475,7 @@ Example:
 
         synthetic_input_context = request_data.get("synthetic_input_context") # Get from request
         
-        content_metrics, content_errors = self._analyze_content(llm_output, task_desc, prompt_chromosome, synthetic_input_context) # Pass to analyzer
+        content_metrics, content_errors = await self._analyze_content(llm_output, task_desc, prompt_chromosome, synthetic_input_context) # Added await
         metrics.update(content_metrics)
         errors.extend(content_errors) # Errors from the LLM analysis process itself
         

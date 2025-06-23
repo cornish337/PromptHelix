@@ -442,11 +442,11 @@ def main_cli():
         try:
             from prompthelix.utils import llm_utils
 
-            response = llm_utils.call_llm_api(
+            response = asyncio.run(llm_utils.call_llm_api( # Added asyncio.run()
                 prompt="Hello from PromptHelix",
                 provider=args.provider,
                 model=args.model,
-            )
+            ))
             print(f"LLM response from {args.provider}: {response}")
         except Exception as e:
             logging.exception("CLI: LLM connectivity check failed")
