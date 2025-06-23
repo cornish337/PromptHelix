@@ -495,8 +495,10 @@ def list_chromosomes_for_run(
 async def test_llm_prompt_route(request_data: schemas.LLMTestRequest, db: DbSession = Depends(get_db)):
 
     try:
+
         # llm_utils.call_llm_api is an asynchronous function, so it requires await
         response_text = await llm_utils.call_llm_api(
+
             prompt=request_data.prompt_text, provider=request_data.llm_service, db=db
         )
         try:
