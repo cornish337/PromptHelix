@@ -57,14 +57,14 @@ class TestPopulationManager(unittest.TestCase):
 
     def test_init_invalid_population_size(self):
         """Test __init__ with invalid population_size."""
-        with self.assertRaisesRegex(ValueError, "Population size must be positive."):
+        with self.assertRaisesRegex(ValueError, "Population size must be a positive integer."):
             PopulationManager(self.mock_genetic_ops, self.mock_fitness_eval, self.mock_architect_agent, population_size=0)
-        with self.assertRaisesRegex(ValueError, "Population size must be positive."):
+        with self.assertRaisesRegex(ValueError, "Population size must be a positive integer."):
             PopulationManager(self.mock_genetic_ops, self.mock_fitness_eval, self.mock_architect_agent, population_size=-5)
 
     def test_init_invalid_elitism_count(self):
         """Test __init__ with invalid elitism_count."""
-        with self.assertRaisesRegex(ValueError, "Elitism count must be non-negative."):
+        with self.assertRaisesRegex(ValueError, "Elitism count must be a non-negative integer."):
             PopulationManager(self.mock_genetic_ops, self.mock_fitness_eval, self.mock_architect_agent, population_size=10, elitism_count=-1)
 
         with self.assertRaisesRegex(ValueError, "Elitism count cannot exceed population size."):

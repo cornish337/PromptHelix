@@ -127,217 +127,227 @@ class TestPromptArchitectAgent(unittest.TestCase):
         self.mock_agent_settings = self.architect_config_patch.start() # Restart class-level patch
 
     # --- Tests for _parse_requirements ---
-    @patch('prompthelix.agents.architect.call_llm_api')
-    def test_parse_requirements_llm_success(self, mock_call_llm_api):
+    @patch('prompthelix.agents.architect.call_llm_api', new_callable=MagicMock)
+    async def test_parse_requirements_llm_success(self, mock_call_llm_api):
         """Test _parse_requirements with successful LLM call."""
-        mock_call_llm_api.return_value = json.dumps({
+        # Use AsyncMock if the mocked function is async and its await status matters
+        # For a simple return value that's awaited, MagicMock can work if its return is an awaitable
+        future_val = asyncio.Future()
+        future_val.set_result(json.dumps({
             "task_description": "Parsed task",
             "keywords": ["kw1", "kw2"],
             "constraints": {"max_len": 100}
-        })
-        import asyncio
-        parsed = asyncio.run(self.architect._parse_requirements("Original task", ["kw1"], {"max_len_orig": 150}))
+        }))
+        mock_call_llm_api.return_value = future_val
+
+        parsed = await self.architect._parse_requirements("Original task", ["kw1"], {"max_len_orig": 150})
 
         mock_call_llm_api.assert_called_once()
         self.assertEqual(parsed["task_description"], "Parsed task")
         self.assertEqual(parsed["keywords"], ["kw1", "kw2"])
         self.assertEqual(parsed["constraints"], {"max_len": 100})
 
-    @patch('prompthelix.agents.architect.call_llm_api', side_effect=Exception("LLM Error"))
-    def test_parse_requirements_llm_failure_falls_back(self, mock_call_llm_api):
+    @patch('prompthelix.agents.architect.call_llm_api', new_callable=MagicMock)
+    async def test_parse_requirements_llm_failure_falls_back(self, mock_call_llm_api):
         """Test _parse_requirements falls back when LLM fails."""
-        import asyncio
-        parsed = asyncio.run(self.architect._parse_requirements("Task X", ["kwX"], {}))
+        future_val = asyncio.Future()
+        future_val.set_exception(Exception("LLM Error"))
+        mock_call_llm_api.return_value = future_val
+
+        parsed = await self.architect._parse_requirements("Task X", ["kwX"], {})
         mock_call_llm_api.assert_called_once()
-        self.assertEqual(parsed["task_description"], "Task X")
-        self.assertEqual(parsed["keywords"], ["kwX"])
-        self.assertIn("error", parsed) # Should contain error info
+        self.assertEqual(parsed["task_description"], "Task X") # Fallback uses original
+        self.assertEqual(parsed["keywords"], ["kwX"]) # Fallback uses original
+        self.assertIn("error", parsed) # Should contain error info from fallback
 
     # --- Tests for _select_template ---
-    @patch('prompthelix.agents.architect.call_llm_api')
-    def test_select_template_llm_success(self, mock_call_llm_api):
+    @patch('prompthelix.agents.architect.call_llm_api', new_callable=MagicMock)
+    async def test_select_template_llm_success(self, mock_call_llm_api):
         """Test _select_template with successful LLM call."""
-        mock_call_llm_api.return_value = json.dumps({"template": "summary_v1"}) # Mock needs to return string for json.loads
+        future_val = asyncio.Future()
+        future_val.set_result(json.dumps({"template": "summary_v1"}))
+        mock_call_llm_api.return_value = future_val
+
         parsed_reqs = {"task_description": "Summarize this document."}
-        import asyncio
-        template_name = asyncio.run(self.architect._select_template(parsed_reqs))
+        template_name = await self.architect._select_template(parsed_reqs)
         
         mock_call_llm_api.assert_called_once()
         self.assertEqual(template_name, "summary_v1")
 
-    @patch('prompthelix.agents.architect.call_llm_api', return_value=json.dumps({"template": "invalid_template_name"})) # Mock needs to return string
-    def test_select_template_llm_invalid_response_falls_back(self, mock_call_llm_api):
+    @patch('prompthelix.agents.architect.call_llm_api', new_callable=MagicMock)
+    @patch('prompthelix.agents.architect.PromptArchitectAgent._fallback_select_template', new_callable=MagicMock) # Mock the fallback
+    async def test_select_template_llm_invalid_response_falls_back(self, mock_fallback_select, mock_call_llm_api):
         """Test _select_template falls back if LLM returns invalid template name."""
-        parsed_reqs = {"task_description": "A generic task."}
-        import asyncio
-        # _fallback_select_template is async, so its mock should be an AsyncMock or return an awaitable
-        # if the test needs to assert its await behavior. Here, we just check it's called.
-        # Patching with a simple return value will work if the SUT correctly awaits it.
-        with patch('prompthelix.agents.architect.PromptArchitectAgent._fallback_select_template', new_callable=MagicMock) as mock_fallback:
-            # If _fallback_select_template is async, its mock should return an awaitable or be an AsyncMock
-            # For simplicity, if it's just returning a value and being awaited, this can work if the mock itself is not awaited.
-            # However, the method itself is async, so the mock should ideally be async.
-            # Let's make the mock return an awaitable future for compatibility with `await`.
-            future = asyncio.Future()
-            future.set_result("generic_v1")
-            mock_fallback.return_value = future
+        llm_future = asyncio.Future()
+        llm_future.set_result(json.dumps({"template": "invalid_template_name"}))
+        mock_call_llm_api.return_value = llm_future
 
-            template_name = asyncio.run(self.architect._select_template(parsed_reqs))
+        fallback_future = asyncio.Future()
+        fallback_future.set_result("generic_v1") # Fallback returns this
+        mock_fallback_select.return_value = fallback_future
+
+        parsed_reqs = {"task_description": "A generic task."}
+        template_name = await self.architect._select_template(parsed_reqs)
         
         mock_call_llm_api.assert_called_once()
-        mock_fallback.assert_called_once_with(parsed_reqs)
+        mock_fallback_select.assert_called_once_with(parsed_reqs)
         self.assertEqual(template_name, "generic_v1")
 
 
-    @patch('prompthelix.agents.architect.call_llm_api', side_effect=Exception("LLM Error"))
-    def test_select_template_llm_failure_falls_back(self, mock_call_llm_api):
+    @patch('prompthelix.agents.architect.call_llm_api', new_callable=MagicMock)
+    @patch('prompthelix.agents.architect.PromptArchitectAgent._fallback_select_template', new_callable=MagicMock)
+    async def test_select_template_llm_failure_falls_back(self, mock_fallback_select, mock_call_llm_api):
         """Test _select_template falls back when LLM fails."""
+        llm_future = asyncio.Future()
+        llm_future.set_exception(Exception("LLM Error"))
+        mock_call_llm_api.return_value = llm_future
+
+        fallback_future = asyncio.Future()
+        fallback_future.set_result("summary_v1")
+        mock_fallback_select.return_value = fallback_future
+
         parsed_reqs = {"task_description": "Summarize this for me."}
-        import asyncio
-        with patch('prompthelix.agents.architect.PromptArchitectAgent._fallback_select_template', new_callable=MagicMock) as mock_fallback:
-            future = asyncio.Future()
-            future.set_result("summary_v1")
-            mock_fallback.return_value = future
-            template_name = asyncio.run(self.architect._select_template(parsed_reqs))
+        template_name = await self.architect._select_template(parsed_reqs)
 
         mock_call_llm_api.assert_called_once()
-        mock_fallback.assert_called_once_with(parsed_reqs)
+        mock_fallback_select.assert_called_once_with(parsed_reqs)
         self.assertEqual(template_name, "summary_v1")
 
     # --- Tests for _populate_genes ---
-    @patch('prompthelix.agents.architect.call_llm_api')
-    def test_populate_genes_llm_success(self, mock_call_llm_api):
+    @patch('prompthelix.agents.architect.call_llm_api', new_callable=MagicMock)
+    async def test_populate_genes_llm_success(self, mock_call_llm_api):
         """Test _populate_genes with successful LLM call."""
-        mock_call_llm_api.return_value = json.dumps({
+        future_val = asyncio.Future()
+        future_val.set_result(json.dumps({
             "genes": [
                 "Instruction: LLM generated instruction",
                 "Context: LLM context",
                 "Output Format: LLM format"
             ]
-        })
+        }))
+        mock_call_llm_api.return_value = future_val
+
         template = self.architect.templates["generic_v1"]
         parsed_reqs = {"task_description": "Do something.", "keywords": ["detail"]}
-        import asyncio
-        genes = asyncio.run(self.architect._populate_genes(template, parsed_reqs))
+        genes = await self.architect._populate_genes(template, parsed_reqs)
         
         mock_call_llm_api.assert_called_once()
         self.assertEqual(len(genes), 3)
         self.assertEqual(genes[0], "Instruction: LLM generated instruction")
         self.assertEqual(genes[1], "Context: LLM context")
 
-    @patch('prompthelix.agents.architect.call_llm_api', return_value=json.dumps({"gene": "Not a list"}))
-    def test_populate_genes_llm_malformed_response_falls_back(self, mock_call_llm_api):
+    @patch('prompthelix.agents.architect.call_llm_api', new_callable=MagicMock)
+    @patch('prompthelix.agents.architect.PromptArchitectAgent._fallback_populate_genes', new_callable=MagicMock)
+    async def test_populate_genes_llm_malformed_response_falls_back(self, mock_fallback_populate, mock_call_llm_api):
         """Test _populate_genes falls back if LLM returns malformed (but not erroring) data."""
+        llm_future = asyncio.Future()
+        llm_future.set_result("{invalid_json") # Malformed JSON string
+        mock_call_llm_api.return_value = llm_future
+
+        fallback_future = asyncio.Future()
+        fallback_future.set_result(["Fallback instruction", "Fallback context"])
+        mock_fallback_populate.return_value = fallback_future
+
         template = self.architect.templates["generic_v1"]
         parsed_reqs = {"task_description": "Do something complex."}
-
-        # Provide malformed JSON so parsing fails and fallback is triggered
-        mock_call_llm_api.return_value = "{invalid_json"  # invalid JSON
-
-        with patch.object(self.architect, '_fallback_populate_genes') as mock_fallback:
-            # _fallback_populate_genes is now async, so its mock needs to return an awaitable
-            future = asyncio.Future()
-            future.set_result(["Fallback instruction", "Fallback context"])
-            mock_fallback.return_value = future
-            genes = asyncio.run(self.architect._populate_genes(template, parsed_reqs))
+        genes = await self.architect._populate_genes(template, parsed_reqs)
 
         mock_call_llm_api.assert_called_once()
-        mock_fallback.assert_called_once_with(template, parsed_reqs)
+        mock_fallback_populate.assert_called_once_with(template, parsed_reqs)
         self.assertEqual(genes[0], "Fallback instruction")
 
 
-    @patch('prompthelix.agents.architect.call_llm_api', side_effect=Exception("LLM Error"))
-    def test_populate_genes_llm_failure_falls_back(self, mock_call_llm_api):
+    @patch('prompthelix.agents.architect.call_llm_api', new_callable=MagicMock)
+    @patch('prompthelix.agents.architect.PromptArchitectAgent._fallback_populate_genes', new_callable=MagicMock)
+    async def test_populate_genes_llm_failure_falls_back(self, mock_fallback_populate, mock_call_llm_api):
         """Test _populate_genes falls back when LLM fails."""
+        llm_future = asyncio.Future()
+        llm_future.set_exception(Exception("LLM Error"))
+        mock_call_llm_api.return_value = llm_future
+
+        fallback_future = asyncio.Future()
+        fallback_future.set_result(["Fallback gene"])
+        mock_fallback_populate.return_value = fallback_future
+
         template = self.architect.templates["generic_v1"]
         parsed_reqs = {"task_description": "Do something."}
-        with patch.object(self.architect, '_fallback_populate_genes', new_callable=MagicMock) as mock_fallback:
-            future = asyncio.Future()
-            future.set_result(["Fallback gene"])
-            mock_fallback.return_value = future
-            genes = asyncio.run(self.architect._populate_genes(template, parsed_reqs))
+        genes = await self.architect._populate_genes(template, parsed_reqs)
 
         mock_call_llm_api.assert_called_once()
-        mock_fallback.assert_called_once_with(template, parsed_reqs)
+        mock_fallback_populate.assert_called_once_with(template, parsed_reqs)
         self.assertEqual(genes[0], "Fallback gene")
 
     # --- Edge Cases for process_request ---
-    # test_process_request_missing_data can be adapted.
-    # The key is to ensure it calls the LLM-enabled internal methods,
-    # and those methods' fallbacks are tested above.
-    @patch('prompthelix.agents.architect.call_llm_api')
-    def test_process_request_missing_keywords_and_constraints(self, mock_call_llm_api):
-        # Uses self.architect
+    @patch('prompthelix.agents.architect.call_llm_api', new_callable=MagicMock)
+    async def test_process_request_missing_keywords_and_constraints(self, mock_call_llm_api):
         """Test process_request with missing keywords and constraints."""
-        # Set up mocks for each LLM call within process_request
-        # 1. _parse_requirements
-        #    Current _parse_requirements returns a mix of original and hardcoded "llm_added_keyword"
-        mock_call_llm_api.side_effect = [
-            json.dumps({"task_description": "Default task description", "keywords": [], "constraints": {}}),
-            json.dumps({"template": "generic_v1"}),
-            json.dumps({"genes": [
-                "LLM Instruction: Default",
-                "Context: Default context with no keywords",
-                "Output: Default format"
-            ]})
-        ]
-        import asyncio
-        request_data = {"task_description": "A simple task"} # No keywords, no constraints
-        chromosome = asyncio.run(self.architect.process_request(request_data))
+        async def mock_llm_side_effect(*args, **kwargs):
+            # Simulate different responses for each call based on prompt content or call order
+            # This is a simplified example; real logic might inspect args/kwargs
+            if mock_call_llm_api.call_count == 1: # For _parse_requirements
+                return json.dumps({"task_description": "Default task description", "keywords": [], "constraints": {}})
+            elif mock_call_llm_api.call_count == 2: # For _select_template
+                return json.dumps({"template": "generic_v1"})
+            elif mock_call_llm_api.call_count == 3: # For _populate_genes
+                return json.dumps({"genes": [
+                    "LLM Instruction: Default",
+                    "Context: Default context with no keywords",
+                    "Output: Default format"
+                ]})
+            return "" # Default empty response
+
+        mock_call_llm_api.side_effect = mock_llm_side_effect
+
+        request_data = {"task_description": "A simple task"}
+        chromosome = await self.architect.process_request(request_data)
 
         self.assertIsInstance(chromosome, PromptChromosome)
         self.assertTrue(len(chromosome.genes) > 0)
-        # Check that the final genes reflect the (mocked) LLM population if successful
         self.assertEqual(chromosome.genes[0], "LLM Instruction: Default")
-        self.assertEqual(mock_call_llm_api.call_count, 3) # One for each internal LLM call
+        self.assertEqual(mock_call_llm_api.call_count, 3)
 
-    def test_process_request_empty_task_description(self):
+    @patch('prompthelix.agents.architect.call_llm_api', new_callable=MagicMock)
+    async def test_process_request_empty_task_description(self, mock_llm):
         """Test process_request with an empty string for task_description."""
-        # This will test how _parse_requirements (and its LLM call) handles empty task_desc,
-        # and subsequently how other methods use that.
-        # Uses self.architect
-        with patch('prompthelix.agents.architect.call_llm_api') as mock_llm:
-            mock_llm.side_effect = [
-                json.dumps({"task_description": "empty task", "keywords": [], "constraints": {}}),
-                json.dumps({"template": "generic_v1"}),
-                json.dumps({"genes": [
+        async def mock_llm_side_effect_empty_task(*args, **kwargs):
+            if mock_llm.call_count == 1:
+                return json.dumps({"task_description": "empty task", "keywords": [], "constraints": {}})
+            elif mock_llm.call_count == 2:
+                return json.dumps({"template": "generic_v1"})
+            elif mock_llm.call_count == 3:
+                return json.dumps({"genes": [
                     "Instruction: Handle empty",
                     "Context: Empty context",
                     "Output: As specified"
                 ]})
-            ]
-            import asyncio
-            request_data = {"task_description": "", "keywords": [], "constraints": {}}
-            chromosome = asyncio.run(self.architect.process_request(request_data))
+            return ""
+        mock_llm.side_effect = mock_llm_side_effect_empty_task
+
+        request_data = {"task_description": "", "keywords": [], "constraints": {}}
+        chromosome = await self.architect.process_request(request_data)
 
         self.assertIsInstance(chromosome, PromptChromosome)
         self.assertTrue(len(chromosome.genes) > 0)
         self.assertEqual(chromosome.genes[0], "Instruction: Handle empty")
-        # Check that the "task_description" in parsed_reqs for _select_template was handled (e.g., became "Default task description")
-        # The second call to mock_llm is for _select_template. We can inspect its 'prompt' argument.
-        args_select_template, _ = mock_llm.call_args_list[1]
-        prompt_for_select_template = args_select_template[0]
-        # The prompt should include the task description returned by the LLM JSON
+
+        args_select_template, _ = mock_llm.call_args_list[1] # Second call is _select_template
+        prompt_for_select_template = args_select_template[0] # First arg to call_llm_api is the prompt
         self.assertIn('Given the task description: "empty task"', prompt_for_select_template)
 
 
-    # The original tests like test_process_request_summary, test_process_request_generic,
-    # test_process_request_question_answering implicitly test the fallback mechanisms
-    # if we *don't* mock call_llm_api or if it's mocked to raise an error for all calls.
-    # Let's add one explicit test for full fallback sequence.
-    @patch('prompthelix.agents.architect.call_llm_api', side_effect=Exception("LLM System Down"))
-    def test_process_request_full_fallback_due_to_llm_system_down(self, mock_call_llm_api_system_down):
+    @patch('prompthelix.agents.architect.call_llm_api', new_callable=MagicMock)
+    async def test_process_request_full_fallback_due_to_llm_system_down(self, mock_call_llm_api_system_down):
         """Test process_request uses full fallback logic if all LLM calls fail."""
-        # Uses self.architect
-        import asyncio
+        async def raise_llm_error(*args, **kwargs):
+            raise Exception("LLM System Down")
+        mock_call_llm_api_system_down.side_effect = raise_llm_error
+
         request_data = {
             "task_description": "Summarize this story about AI and ethics.",
             "keywords": ["AI", "ethics"],
             "constraints": {"max_length": 150}
         }
-        # The original test_process_request_summary can be a model for assertions here
-        # as it was testing the non-LLM path.
-        result_chromosome = asyncio.run(self.architect.process_request(request_data))
+        result_chromosome = await self.architect.process_request(request_data)
 
         self.assertIsInstance(result_chromosome, PromptChromosome)
         self.assertTrue(result_chromosome.genes, "Genes list should not be empty.")

@@ -1,6 +1,7 @@
 from prompthelix.message_bus import MessageBus
 import logging
 import time  # Added
+import asyncio # Added import
 
 logger = logging.getLogger(__name__)
 

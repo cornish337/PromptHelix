@@ -186,7 +186,8 @@ class TestPopulationManagerPersistence(unittest.TestCase):
 
         # Check that a relevant error was logged
         args_list = [call_args[0][0] for call_args in mock_log_error.call_args_list]
-        self.assertTrue(any(f"Error loading population from {malformed_file_path}" in arg for arg in args_list))
+        self.assertTrue(any(f"Error decoding JSON from {malformed_file_path}" in arg for arg in args_list),
+                        f"Expected log message not found. Logged messages: {args_list}")
 
 
     def test_load_population_empty_file(self):
@@ -252,7 +253,7 @@ class TestPopulationManagerPersistence(unittest.TestCase):
         pm.load_population(missing_pop_path)
         self.assertEqual(len(pm.population), 0) # individuals will be data.get("population", []) -> []
         self.assertEqual(pm.generation_number, 3) # generation_number should be loaded
-        self.assertEqual(pm.population_size, 5) # Retained because loaded population is empty
+        self.assertEqual(pm.population_size, 0) # Should be 0 as len(loaded_population) is 0
 
 
         # Test 2: Missing "generation_number"

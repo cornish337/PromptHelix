@@ -245,7 +245,7 @@ class PopulationManager:
         self.population_size = population_size
         self.elitism_count = elitism_count
         self.initial_prompt_str = initial_prompt_str
-        self.parallel_workers = parallel_workers # Note: parallel_workers not used in current async model
+        self.parallel_workers = parallel_workers
         self.message_bus = message_bus
         self.population_path = population_path
         self.status: str = "IDLE"
@@ -254,11 +254,28 @@ class PopulationManager:
         self.run_id: Optional[str] = None
         self.population: List[PromptChromosome] = []
         self.generation_number = 0
-        # Ensure type checks if necessary, e.g., for prompt_architect_agent
-        if not isinstance(prompt_architect_agent, BaseAgent): # Example type check
-             from prompthelix.agents.architect import PromptArchitectAgent
-             if not isinstance(prompt_architect_agent, PromptArchitectAgent):
-                  raise TypeError("prompt_architect_agent must be an instance of PromptArchitectAgent or derivative of BaseAgent.")
+
+        # --- Input Validation ---
+        if not isinstance(genetic_operators, GeneticOperators):
+            raise TypeError("genetic_operators must be an instance of GeneticOperators.")
+        # Assuming FitnessEvaluator is the concrete class, or use a BaseFitnessEvaluator if defined
+        if not isinstance(fitness_evaluator, FitnessEvaluator): # Or BaseFitnessEvaluator
+            raise TypeError("fitness_evaluator must be an instance of FitnessEvaluator.")
+
+        # prompt_architect_agent type check already exists, let's refine it slightly
+        # to ensure it's also checked against BaseAgent more broadly if specific type fails.
+        from prompthelix.agents.architect import PromptArchitectAgent # Keep local import
+        if not isinstance(prompt_architect_agent, PromptArchitectAgent): # Check specific type first
+            if not isinstance(prompt_architect_agent, BaseAgent): # Fallback to BaseAgent check
+                 raise TypeError("prompt_architect_agent must be an instance of PromptArchitectAgent or a derivative of BaseAgent.")
+
+        if not isinstance(population_size, int) or population_size <= 0:
+            raise ValueError("Population size must be a positive integer.")
+        if not isinstance(elitism_count, int) or elitism_count < 0:
+            raise ValueError("Elitism count must be a non-negative integer.")
+        if elitism_count > population_size:
+            raise ValueError("Elitism count cannot exceed population size.")
+        # --- End Input Validation ---
 
 
     async def initialize_population(self, initial_task_description: str, initial_keywords: List[str],
@@ -374,11 +391,11 @@ class PopulationManager:
         file_path = file_path or self.population_path
         if not file_path or not os.path.exists(file_path):
             logger.info(f"PopulationManager: No population file at {file_path}; starting fresh.")
-        self.population = []
-        self.generation_number = 0
-        return
+            self.population = []
+            self.generation_number = 0
+            return # Corrected: return here if file not found, to avoid proceeding to try block
 
-        try:
+        try: # Corrected: try block should start here
             with open(file_path, "r", encoding="utf-8") as fh:
                 content = fh.read()
                 if not content.strip():  # Check for empty or whitespace-only content
@@ -417,24 +434,30 @@ class PopulationManager:
                     self.population.append(chromosome)
                 except Exception as e_chromo:
                     logger.error(f"Error deserializing chromosome data: {chromo_data}. Error: {e_chromo}", exc_info=True)
+
+            self.population_size = len(self.population) # Update population_size to actual loaded count
             logger.info(f"PopulationManager: Population loaded successfully from {file_path}. Generation: {self.generation_number}, Size: {len(self.population)}")
 
-        except FileNotFoundError:
-            logger.info(f"PopulationManager: Population file {file_path} not found. Starting fresh.")
-            self.population = []
-            self.generation_number = 0
+        except FileNotFoundError: # This case is now handled by the check above
+             logger.info(f"PopulationManager: Population file {file_path} not found (should have been caught earlier). Starting fresh.") # Should not happen
+             self.population = []
+             self.generation_number = 0
+             # Keep self.population_size as initially set, or set to 0 if preferred for "fresh start"
         except json.JSONDecodeError as e_json:
-            logger.error(f"Error decoding JSON from {file_path}: {e_json}. Initializing empty population.", exc_info=True)
+            logger.error(f"Error decoding JSON from {file_path}: {e_json}. Resetting population state.", exc_info=True)
             self.population = []
             self.generation_number = 0
+            self.population_size = 0 # Reset size on decode error
         except (IOError, OSError) as e_io:
-            logger.error(f"IOError/OSError reading population from {file_path}: {e_io}. Initializing empty population.", exc_info=True)
+            logger.error(f"IOError/OSError reading population from {file_path}: {e_io}. Resetting population state.", exc_info=True)
             self.population = []
             self.generation_number = 0
+            self.population_size = 0 # Reset size on IO error
         except Exception as e: # Catch-all for other unexpected errors
-            logger.error(f"Unexpected error loading population from {file_path}: {e}. Initializing empty population.", exc_info=True)
+            logger.error(f"Unexpected error loading population from {file_path}: {e}. Resetting population state.", exc_info=True)
             self.population = []
             self.generation_number = 0
+            self.population_size = 0 # Reset size on other errors
 
 
     async def broadcast_ga_update(
@@ -570,18 +593,43 @@ class PopulationManager:
 
             if mutation_coroutines:
                 # Gather results from mutation coroutines, only take as many as needed
-                mutated_offspring_results = await asyncio.gather(*mutation_coroutines)
-                next_population.extend(mutated_offspring_results[:num_offspring_needed - (len(mutation_coroutines) - len(mutated_offspring_results))])
+                mutated_offspring_results = await asyncio.gather(*mutation_coroutines, return_exceptions=True) # Added return_exceptions
+                for res in mutated_offspring_results:
+                    if isinstance(res, PromptChromosome):
+                        next_population.append(res)
+                    elif isinstance(res, Exception):
+                        logger.error(f"PopulationManager: Error during mutation: {res}", exc_info=False) # Log error from mutation
+                # Ensure we don't exceed population size due to errors/successful mutations mix
+                next_population = next_population[:self.population_size]
 
 
         self.population = next_population[:self.population_size] # Ensure exact population size
+
+        # --- Evaluate the new population (especially offspring) ---
+        logger.info(f"PopulationManager: Evaluating new generation {current_generation_num}. Population size: {len(self.population)}")
+        eval_tasks = []
+        for chromo in self.population:
+            # Only evaluate if fitness is 0.0 (newly created or reset) or if re-evaluation is desired.
+            # For simplicity, let's re-evaluate all for now, or only those with fitness 0.0
+            if chromo.fitness_score == 0.0: # Or always re-evaluate:
+                 eval_tasks.append(self.fitness_evaluator.evaluate(chromo, task_description, success_criteria, self.run_id, current_generation_num))
+
+        if eval_tasks:
+            evaluation_results = await asyncio.gather(*eval_tasks, return_exceptions=True)
+            for i, result in enumerate(evaluation_results):
+                if isinstance(result, Exception):
+                    # Chromosome corresponding to this error (this assumes eval_tasks maps directly to a subset of self.population)
+                    # This mapping is tricky if only some are evaluated.
+                    # For now, log a general error. A more robust mapping would be needed if we only eval some.
+                    logger.error(f"PopulationManager: Error evaluating a chromosome in new generation: {result}", exc_info=False)
+                    # The chromosome's fitness remains 0.0 or its previous value if not re-evaluated.
+
+        self.population.sort(key=lambda c: c.fitness_score, reverse=True)
         self.generation_number = current_generation_num # Update generation number
 
-        logger.info(f"PopulationManager: Advanced to generation {self.generation_number}. New population size: {len(self.population)}")
+        logger.info(f"PopulationManager: Advanced to generation {self.generation_number}. New population size: {len(self.population)}. Evaluation complete.")
 
         # --- DB Logging and Periodic Saving (after new population is formed, before next eval cycle) ---
-        # Note: The evaluation of this *newly formed* generation happens at the *start* of the *next* call to evolve_population or by the GA runner.
-        # Metrics here are for the generation that was just completed *before* these new offspring were created.
 
         # For DB logging of metrics for the *completed* generation (generation_number -1 if just incremented, or current_generation_num if it represents completed one)
         # This logic might need adjustment based on when add_generation_metric is intended to be called.
@@ -616,5 +664,3 @@ class PopulationManager:
 # Ensure other methods like pause_evolution, resume_evolution, stop_evolution, broadcast_ga_update if they call async methods, are also async.
 # For now, assuming they are simple state changes or their async calls are already handled.
 # The save_population and load_population are synchronous IO, which is fine if not called from deep within an async critical path without care.
-
-[end of prompthelix/genetics/engine.py]

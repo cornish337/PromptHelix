@@ -149,9 +149,8 @@ class GeneticAlgorithmRunner(BaseExperimentRunner):
                 await self.population_manager.evolve_population( # Added await
                     task_description=task_description,
                     success_criteria=success_criteria,
-                    target_style=target_style,
                     db_session=self._db_session,
-                    experiment_run=self._experiment_run,
+                    experiment_run=self._experiment_run
                 )
 
                 # Periodic saving of the population

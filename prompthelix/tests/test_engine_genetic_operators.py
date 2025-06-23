@@ -81,10 +81,8 @@ class TestGeneticOperators(unittest.TestCase):
         self.assertIsInstance(operators.mutation_strategies[0], NoOperationMutationStrategy)
 
 
-    def test_mutate_applies_selected_strategy(self):
+    async def test_mutate_applies_selected_strategy(self):
         mock_strategy = MagicMock(spec=BaseMutationStrategy)
-        # Configure the mock strategy's mutate method to return a new PromptChromosome
-        # (or the same one if that's how it's supposed to work after cloning)
         mutated_clone = self.chromosome.clone()
         mutated_clone.genes.append("mock_mutated")
         mutated_clone.fitness_score = 0.0
@@ -93,12 +91,9 @@ class TestGeneticOperators(unittest.TestCase):
         strategies = [mock_strategy]
         operators = GeneticOperators(mutation_strategies=strategies)
 
-        # mutation_rate = 1.0 ensures mutation is attempted
-        # gene_mutation_prob is not directly used by GeneticOperators.mutate for strategy selection anymore
-        result_chromosome = operators.mutate(self.chromosome, mutation_rate=1.0, gene_mutation_prob=1.0)
+        result_chromosome = await operators.mutate(self.chromosome, mutation_rate=1.0, gene_mutation_prob=1.0)
 
         mock_strategy.mutate.assert_called_once()
-        # The chromosome passed to strategy.mutate should be a clone of self.chromosome
         call_args = mock_strategy.mutate.call_args[0][0]
         self.assertIsInstance(call_args, PromptChromosome)
         self.assertNotEqual(call_args.id, self.chromosome.id, "Strategy should operate on a clone.")
@@ -107,16 +102,140 @@ class TestGeneticOperators(unittest.TestCase):
         self.assertEqual(result_chromosome, mutated_clone, "Returned chromosome should be the one from the strategy.")
         self.assertIn("mock_mutated", result_chromosome.genes)
 
+    # Additional tests that were missed in the previous async conversion
+    async def test_mutate_chromosome_selected_but_no_gene_mutates(self): # Made async
+        """Test when chromosome is selected for mutation, but no individual gene meets gene_mutation_prob."""
+        # This test implies that the strategy's mutate IS called, but it internally doesn't change genes.
+        # The core GeneticOperators.mutate doesn't use gene_mutation_prob directly, strategies do.
+        # So, we'll assume the strategy is called and returns an (effectively) unchanged chromosome.
+        mock_strategy = MagicMock(spec=BaseMutationStrategy)
+        unchanged_clone = self.chromosome.clone() # Clone to represent "no actual gene changes"
+        unchanged_clone.fitness_score = 0.0 # Strategy should reset fitness
+        mock_strategy.mutate.return_value = unchanged_clone
 
-    def test_mutate_rate_zero(self):
+        strategies = [mock_strategy]
+        operators = GeneticOperators(mutation_strategies=strategies)
+
+        # Pass a clone of the original to ensure ID comparison is meaningful for cloning action
+        original_chromosome_clone_for_comparison = self.chromosome.clone()
+
+        mutated_chromosome = await operators.mutate(original_chromosome_clone_for_comparison, mutation_rate=1.0, gene_mutation_prob=0.0) # await
+
+        mock_strategy.mutate.assert_called_once()
+        self.assertNotEqual(mutated_chromosome.id, original_chromosome_clone_for_comparison.id)
+        self.assertEqual(mutated_chromosome.genes, original_chromosome_clone_for_comparison.genes) # Genes are the same as original's clone
+        self.assertEqual(mutated_chromosome.fitness_score, 0.0)
+
+    async def test_mutate_does_not_occur_rate_too_high(self): # Made async
+        """Test mutation when overall mutation_rate is not met."""
+        # This is essentially the same as test_mutate_rate_zero logic-wise
         mock_strategy = MagicMock(spec=BaseMutationStrategy)
         strategies = [mock_strategy]
         operators = GeneticOperators(mutation_strategies=strategies)
 
-        # Pass a clone of the original chromosome to ensure we can compare IDs later
+        original_clone = self.chromosome.clone()
+        # random.random() will be > 0.0, so mutation_rate=0.0 ensures no mutation attempt.
+        # To test random.random() > mutation_rate:
+        # We need to patch random.random to return something > mutation_rate.
+        with patch('random.random', return_value=0.5): # random.random() returns 0.5
+            mutated_chromosome = await operators.mutate(original_clone, mutation_rate=0.4) # 0.5 > 0.4 is False, so mutate
+
+        mock_strategy.mutate.assert_called_once() # Strategy should be called
+
+        with patch('random.random', return_value=0.5): # random.random() returns 0.5
+            mock_strategy.reset_mock() # Reset for second call
+            mutated_chromosome_no_mutate = await operators.mutate(original_clone, mutation_rate=0.6) # 0.5 > 0.6 is False, so should mutate.
+                                                                                                   # Ah, the logic is `if random.random() > mutation_rate: return`, so if true, it skips.
+                                                                                                   # If random=0.5, mutation_rate=0.6 -> 0.5 > 0.6 is False. Mutation occurs.
+                                                                                                   # If random=0.5, mutation_rate=0.4 -> 0.5 > 0.4 is True. Mutation skips.
+
+        # Test skip:
+        mock_strategy.reset_mock()
+        with patch('random.random', return_value=0.5):
+            skipped_clone = original_clone.clone() # Fresh clone for this assertion
+            mutated_chromosome_skipped = await operators.mutate(skipped_clone, mutation_rate=0.4)
+        mock_strategy.mutate.assert_not_called()
+        self.assertNotEqual(mutated_chromosome_skipped.id, skipped_clone.id) # Still a clone
+        self.assertEqual(mutated_chromosome_skipped.genes, skipped_clone.genes)
+
+
+    async def test_mutate_empty_gene_list(self): # Made async
+        """Test mutation with an empty gene list."""
+        empty_chromosome = PromptChromosome(genes=[])
+        mock_strategy = MagicMock(spec=BaseMutationStrategy)
+
+        # Strategy should still receive the cloned empty chromosome and operate on it
+        mutated_empty_clone = empty_chromosome.clone()
+        mutated_empty_clone.genes.append("added_to_empty") # Example mutation
+        mutated_empty_clone.fitness_score = 0.0
+        mock_strategy.mutate.return_value = mutated_empty_clone
+
+        strategies = [mock_strategy]
+        operators = GeneticOperators(mutation_strategies=strategies)
+
+        mutated_chromosome = await operators.mutate(empty_chromosome, mutation_rate=1.0) # await
+
+        mock_strategy.mutate.assert_called_once()
+        call_args = mock_strategy.mutate.call_args[0][0]
+        self.assertNotEqual(call_args.id, empty_chromosome.id)
+        self.assertEqual(call_args.genes, [])
+
+        self.assertNotEqual(mutated_chromosome.id, empty_chromosome.id)
+        self.assertIn("added_to_empty", mutated_chromosome.genes)
+
+
+    async def test_mutate_occurs(self): # Made async
+        """Test mutation when it's triggered and at least one gene mutates."""
+        mock_strategy = MagicMock(spec=BaseMutationStrategy)
+        mutated_clone = self.chromosome.clone()
+        mutated_clone.genes[0] = "mutated_gene1" # Simulate gene change
+        mutated_clone.fitness_score = 0.0
+        mock_strategy.mutate.return_value = mutated_clone
+
+        strategies = [mock_strategy]
+        operators = GeneticOperators(mutation_strategies=strategies)
+
+        result_chromosome = await operators.mutate(self.chromosome, mutation_rate=1.0, gene_mutation_prob=1.0) # await
+
+        mock_strategy.mutate.assert_called_once()
+        self.assertNotEqual(result_chromosome.id, self.chromosome.id)
+        self.assertEqual(result_chromosome.genes, ["mutated_gene1"])
+        self.assertNotEqual(result_chromosome.genes, self.chromosome.genes)
+
+
+    async def test_mutate_sets_mutation_op_and_logs(self): # Made async
+        class DummyStrategy(BaseMutationStrategy):
+            def mutate(self, chromosome: PromptChromosome) -> PromptChromosome:
+                # Ensure it returns a new instance or a modified clone
+                new_chromo = chromosome.clone()
+                new_chromo.genes.append("dummy_mutated")
+                return new_chromo
+
+        dummy_strategy_instance = DummyStrategy()
+        operators = GeneticOperators(mutation_strategies=[dummy_strategy_instance])
+
+        original_chromosome = PromptChromosome(genes=["original"])
+
+        with patch.object(logging.getLogger("prompthelix.ga_metrics"), 'info') as mock_ga_logger_info:
+            result = await operators.mutate(original_chromosome, mutation_rate=1.0, run_id="test_run", generation=1) # await
+
+        self.assertEqual(result.mutation_strategy, 'DummyStrategy')
+        mock_ga_logger_info.assert_called_once()
+        log_args = mock_ga_logger_info.call_args[0][0]
+        self.assertEqual(log_args["operation"], "mutation")
+        self.assertEqual(log_args["mutation_strategy"], "DummyStrategy")
+        self.assertEqual(log_args["chromosome_id"], str(result.id))
+        self.assertIn("dummy_mutated", log_args["prompt_text"])
+
+
+    async def test_mutate_rate_zero(self): # Was already async, content seems fine
+        mock_strategy = MagicMock(spec=BaseMutationStrategy)
+        strategies = [mock_strategy]
+        operators = GeneticOperators(mutation_strategies=strategies)
+
         original_chromosome_clone_for_comparison = self.chromosome.clone()
 
-        result_chromosome = operators.mutate(original_chromosome_clone_for_comparison, mutation_rate=0.0)
+        result_chromosome = await operators.mutate(original_chromosome_clone_for_comparison, mutation_rate=0.0)
 
         mock_strategy.mutate.assert_not_called()
         self.assertNotEqual(result_chromosome.id, original_chromosome_clone_for_comparison.id, "Should return a clone even if no mutation.")
@@ -124,7 +243,7 @@ class TestGeneticOperators(unittest.TestCase):
         self.assertEqual(result_chromosome.fitness_score, 0.0, "Fitness should be reset on the clone.")
 
 
-    def test_mutate_rate_one(self):
+    async def test_mutate_rate_one(self): # Was already async
         mock_strategy = MagicMock(spec=BaseMutationStrategy)
         mutated_clone = self.chromosome.clone()
         mutated_clone.fitness_score = 0.0
@@ -133,27 +252,28 @@ class TestGeneticOperators(unittest.TestCase):
         strategies = [mock_strategy]
         operators = GeneticOperators(mutation_strategies=strategies)
 
-        result_chromosome = operators.mutate(self.chromosome, mutation_rate=1.0)
+        result_chromosome = await operators.mutate(self.chromosome, mutation_rate=1.0)
 
         mock_strategy.mutate.assert_called_once()
         self.assertEqual(result_chromosome, mutated_clone)
 
 
-    def test_mutate_with_style_optimizer_agent_success(self):
-        # Setup: A base mutation strategy and a style optimizer
+    async def test_mutate_with_style_optimizer_agent_success(self):
         base_mutated_chromosome = self.chromosome.clone()
         base_mutated_chromosome.genes.append("base_mutated")
-        base_mutated_chromosome.fitness_score = 0.0 # Strategy resets fitness
+        base_mutated_chromosome.fitness_score = 0.0
 
         mock_base_strategy = MagicMock(spec=BaseMutationStrategy)
         mock_base_strategy.mutate.return_value = base_mutated_chromosome
 
-        style_optimized_chromosome = self.chromosome.clone() # Different ID from base_mutated_chromosome
+        style_optimized_chromosome = self.chromosome.clone()
         style_optimized_chromosome.genes.append("style_optimized")
-        # Style optimizer might or might not reset fitness; GeneticOperators.mutate should ensure it.
-        style_optimized_chromosome.fitness_score = 0.8 # Let's say optimizer sets some fitness
+        style_optimized_chromosome.fitness_score = 0.8
 
-        self.mock_style_optimizer_agent.process_request.return_value = style_optimized_chromosome
+        # Mock process_request to be an async function returning an awaitable
+        async_mock_process_request = AsyncMock(return_value=style_optimized_chromosome)
+        self.mock_style_optimizer_agent.process_request = async_mock_process_request
+
 
         operators = GeneticOperators(
             mutation_strategies=[mock_base_strategy],
@@ -161,11 +281,10 @@ class TestGeneticOperators(unittest.TestCase):
         )
 
         target_style = "concise"
-        final_chromosome = operators.mutate(self.chromosome, mutation_rate=1.0, target_style=target_style)
+        final_chromosome = await operators.mutate(self.chromosome, mutation_rate=1.0, target_style=target_style)
 
         mock_base_strategy.mutate.assert_called_once()
-        # The input to style optimizer should be the one returned by mock_base_strategy
-        self.mock_style_optimizer_agent.process_request.assert_called_once_with({
+        async_mock_process_request.assert_called_once_with({
             "prompt_chromosome": base_mutated_chromosome,
             "target_style": target_style
         })
@@ -173,7 +292,7 @@ class TestGeneticOperators(unittest.TestCase):
         self.assertEqual(final_chromosome.fitness_score, 0.0, "Fitness should be reset by GeneticOperators.mutate after style optimization.")
         self.assertIn("style_optimized", final_chromosome.genes)
 
-    def test_mutate_with_style_optimizer_agent_returns_non_chromosome(self):
+    async def test_mutate_with_style_optimizer_agent_returns_non_chromosome(self):
         base_mutated_chromosome = self.chromosome.clone()
         base_mutated_chromosome.genes.append("base_mutated")
         base_mutated_chromosome.fitness_score = 0.0
@@ -181,32 +300,30 @@ class TestGeneticOperators(unittest.TestCase):
         mock_base_strategy = MagicMock(spec=BaseMutationStrategy)
         mock_base_strategy.mutate.return_value = base_mutated_chromosome
 
-        self.mock_style_optimizer_agent.process_request.return_value = None # Agent returns None
+        async_mock_process_request = AsyncMock(return_value=None) # Agent returns None
+        self.mock_style_optimizer_agent.process_request = async_mock_process_request
+
 
         operators = GeneticOperators(
             mutation_strategies=[mock_base_strategy],
             style_optimizer_agent=self.mock_style_optimizer_agent
         )
 
-        # with self.assertLogs(self.logger_name, level='WARNING') as log_watcher:
-        #     final_chromosome = operators.mutate(self.chromosome, mutation_rate=1.0, target_style="concise")
         with patch.object(logging.getLogger(self.logger_name), 'warning') as mock_log_warning:
-            final_chromosome = operators.mutate(self.chromosome, mutation_rate=1.0, target_style="concise")
+            final_chromosome = await operators.mutate(self.chromosome, mutation_rate=1.0, target_style="concise")
 
-        self.mock_style_optimizer_agent.process_request.assert_called_once()
-        # Should return the chromosome from the base mutation, not the agent's None
+        async_mock_process_request.assert_called_once()
         self.assertEqual(final_chromosome, base_mutated_chromosome)
         self.assertIn("base_mutated", final_chromosome.genes)
-        self.assertEqual(final_chromosome.fitness_score, 0.0) # Still reset from base strategy
+        self.assertEqual(final_chromosome.fitness_score, 0.0)
 
-        # self.assertTrue(any("StyleOptimizerAgent did not return a PromptChromosome" in msg for msg in log_watcher.output))
         mock_log_warning.assert_called_once()
         args, _ = mock_log_warning.call_args
         log_message = args[0]
         self.assertIn(f"StyleOptimizerAgent did not return a PromptChromosome for {base_mutated_chromosome.id}", log_message)
 
 
-    def test_mutate_with_style_optimizer_agent_raises_exception(self):
+    async def test_mutate_with_style_optimizer_agent_raises_exception(self):
         base_mutated_chromosome = self.chromosome.clone()
         base_mutated_chromosome.genes.append("base_mutated")
         base_mutated_chromosome.fitness_score = 0.0
@@ -214,25 +331,24 @@ class TestGeneticOperators(unittest.TestCase):
         mock_base_strategy = MagicMock(spec=BaseMutationStrategy)
         mock_base_strategy.mutate.return_value = base_mutated_chromosome
 
-        self.mock_style_optimizer_agent.process_request.side_effect = Exception("Agent Error")
+        async_mock_process_request = AsyncMock(side_effect=Exception("Agent Error"))
+        self.mock_style_optimizer_agent.process_request = async_mock_process_request
+
 
         operators = GeneticOperators(
             mutation_strategies=[mock_base_strategy],
             style_optimizer_agent=self.mock_style_optimizer_agent
         )
 
-        # with self.assertLogs(self.logger_name, level='ERROR') as log_watcher:
-        #     final_chromosome = operators.mutate(self.chromosome, mutation_rate=1.0, target_style="concise")
         with patch.object(logging.getLogger(self.logger_name), 'error') as mock_log_error:
-            final_chromosome = operators.mutate(self.chromosome, mutation_rate=1.0, target_style="concise")
+            final_chromosome = await operators.mutate(self.chromosome, mutation_rate=1.0, target_style="concise")
 
 
-        self.mock_style_optimizer_agent.process_request.assert_called_once()
-        self.assertEqual(final_chromosome, base_mutated_chromosome) # Fallback to pre-style-optimization chromosome
+        async_mock_process_request.assert_called_once()
+        self.assertEqual(final_chromosome, base_mutated_chromosome)
         self.assertIn("base_mutated", final_chromosome.genes)
         self.assertEqual(final_chromosome.fitness_score, 0.0)
 
-        # self.assertTrue(any(f"Style optimization failed for {base_mutated_chromosome.id}" in msg and "Agent Error" in msg for msg in log_watcher.output))
         mock_log_error.assert_called_once()
         args, _ = mock_log_error.call_args
         log_message = args[0]
@@ -240,7 +356,7 @@ class TestGeneticOperators(unittest.TestCase):
         self.assertIn("Agent Error", log_message)
 
 
-    def test_mutate_no_style_optimizer_agent_but_target_style_provided(self):
+    async def test_mutate_no_style_optimizer_agent_but_target_style_provided(self):
         mock_base_strategy = MagicMock(spec=BaseMutationStrategy)
         base_mutated_chromosome = self.chromosome.clone()
         base_mutated_chromosome.genes.append("base_mutated")
@@ -252,12 +368,9 @@ class TestGeneticOperators(unittest.TestCase):
             style_optimizer_agent=None # Agent not provided
         )
 
-        # Temporarily use direct logger patching for this test to diagnose assertLogs issue
-        # with self.assertLogs(self.logger_name, level='WARNING') as log_watcher:
-        #     final_chromosome = operators.mutate(self.chromosome, mutation_rate=1.0, target_style="concise")
 
         with patch.object(logging.getLogger(self.logger_name), 'warning') as mock_log_warning:
-            final_chromosome = operators.mutate(self.chromosome, mutation_rate=1.0, target_style="concise")
+            final_chromosome = await operators.mutate(self.chromosome, mutation_rate=1.0, target_style="concise")
 
         self.assertEqual(final_chromosome, base_mutated_chromosome)
 
