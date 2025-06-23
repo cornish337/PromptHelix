@@ -152,13 +152,20 @@ class TestCli(unittest.TestCase):
             sitecustomize_code = textwrap.dedent(
                 """
                 import types, sys, os
+                from unittest.mock import Mock
 
-                def main_ga_loop(*args, **kwargs):
+                async def main_ga_loop(*args, **kwargs): # Changed to async def
                     pop = kwargs.get('population_path')
                     if pop:
                         with open(pop, 'w') as f:
                             f.write('mock')
-                    return None
+
+                    # Simulate a PromptChromosome object if needed by subsequent CLI code
+                    mock_chromosome = Mock()
+                    mock_chromosome.to_prompt_string = Mock(return_value="Mocked prompt from sitecustomize")
+                    mock_chromosome.id = "mock-sitecustomize-id"
+                    mock_chromosome.fitness_score = 0.99
+                    return mock_chromosome # Return a mock chromosome
 
                 fake = types.ModuleType('prompthelix.orchestrator')
                 fake.main_ga_loop = main_ga_loop

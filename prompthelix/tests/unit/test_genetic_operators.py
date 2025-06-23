@@ -1,13 +1,13 @@
 import unittest
 import random
-from unittest.mock import patch, Mock
+from unittest.mock import patch, Mock, AsyncMock
 from prompthelix.genetics.engine import GeneticOperators, PromptChromosome
 from prompthelix.genetics.strategy_base import BaseMutationStrategy # Changed import
 
-class TestGeneticOperators(unittest.TestCase):
+class TestGeneticOperators(unittest.IsolatedAsyncioTestCase): # Changed to IsolatedAsyncioTestCase
     """Test suite for the GeneticOperators class."""
 
-    def setUp(self):
+    async def asyncSetUp(self): # Changed to asyncSetUp
         """Set up common test data."""
         self.operators = GeneticOperators()
         self.population = [
@@ -133,7 +133,7 @@ class TestGeneticOperators(unittest.TestCase):
     # --- Test mutate ---
     @patch('random.choice') # To control mutation type
     @patch('random.random') # To control mutation rates
-    def test_mutate_occurs(self, mock_random_rates, mock_random_choice):
+    async def test_mutate_occurs(self, mock_random_rates, mock_random_choice): # Added async
         """Test mutation when it's triggered and at least one gene mutates."""
         from prompthelix.genetics.mutation_strategies import PlaceholderReplaceStrategy # Import strategy
         # First random.random() for overall mutation_rate, subsequent for gene_mutation_prob
@@ -141,7 +141,7 @@ class TestGeneticOperators(unittest.TestCase):
         mock_random_choice.return_value = PlaceholderReplaceStrategy() # Return an instance
 
         original_genes = list(self.chromosome_to_mutate.genes) # Deep copy for comparison
-        mutated_chromosome = self.operators.mutate(self.chromosome_to_mutate, mutation_rate=0.1, gene_mutation_prob=0.2)
+        mutated_chromosome = await self.operators.mutate(self.chromosome_to_mutate, mutation_rate=0.1, gene_mutation_prob=0.2) # Added await
 
         self.assertNotEqual(mutated_chromosome.id, self.chromosome_to_mutate.id)
         self.assertEqual(mutated_chromosome.fitness_score, 0.0)
@@ -155,19 +155,19 @@ class TestGeneticOperators(unittest.TestCase):
 
 
     @patch('random.random')
-    def test_mutate_does_not_occur_rate_too_high(self, mock_random_rate):
+    async def test_mutate_does_not_occur_rate_too_high(self, mock_random_rate): # Added async
         """Test mutation when overall mutation_rate is not met."""
         mock_random_rate.return_value = 0.5 # Higher than mutation_rate
         
         original_genes = list(self.chromosome_to_mutate.genes)
-        mutated_chromosome = self.operators.mutate(self.chromosome_to_mutate, mutation_rate=0.1, gene_mutation_prob=0.2)
+        mutated_chromosome = await self.operators.mutate(self.chromosome_to_mutate, mutation_rate=0.1, gene_mutation_prob=0.2) # Added await
         
         self.assertNotEqual(mutated_chromosome.id, self.chromosome_to_mutate.id, "Should be a clone even if no mutation happens.")
         self.assertEqual(mutated_chromosome.genes, original_genes, "Genes should be unchanged if mutation_rate not met.")
         self.assertEqual(mutated_chromosome.fitness_score, 0.0, "Fitness of cloned chromosome should be reset.")
 
     @patch('random.random')
-    def test_mutate_chromosome_selected_but_no_gene_mutates(self, mock_random_rates):
+    async def test_mutate_chromosome_selected_but_no_gene_mutates(self, mock_random_rates): # Added async
         """Test when chromosome is selected for mutation, but no individual gene meets gene_mutation_prob.
            This should trigger the fallback to mutate at least one gene.
         """
@@ -176,7 +176,7 @@ class TestGeneticOperators(unittest.TestCase):
         mock_random_rates.side_effect = [0.05, 0.9, 0.9, 0.9] 
         
         original_genes = list(self.chromosome_to_mutate.genes)
-        mutated_chromosome = self.operators.mutate(self.chromosome_to_mutate, mutation_rate=0.1, gene_mutation_prob=0.2)
+        mutated_chromosome = await self.operators.mutate(self.chromosome_to_mutate, mutation_rate=0.1, gene_mutation_prob=0.2) # Added await
         
         self.assertNotEqual(mutated_chromosome.id, self.chromosome_to_mutate.id)
         self.assertEqual(mutated_chromosome.fitness_score, 0.0)
@@ -185,12 +185,12 @@ class TestGeneticOperators(unittest.TestCase):
                         "Genes should remain unchanged if NoOperationMutationStrategy is chosen and no fallback exists.")
 
 
-    def test_mutate_empty_gene_list(self):
+    async def test_mutate_empty_gene_list(self): # Added async
         """Test mutation with an empty gene list."""
         empty_chromosome = PromptChromosome(genes=[], fitness_score=0.3)
         
         with patch('random.random', return_value=0.05): # Ensure mutation is attempted
-            mutated_chromosome = self.operators.mutate(empty_chromosome, mutation_rate=0.1, gene_mutation_prob=0.2)
+            mutated_chromosome = await self.operators.mutate(empty_chromosome, mutation_rate=0.1, gene_mutation_prob=0.2) # Added await
             
             self.assertNotEqual(mutated_chromosome.id, empty_chromosome.id)
             self.assertEqual(mutated_chromosome.genes, []) # Genes should remain empty
@@ -198,26 +198,28 @@ class TestGeneticOperators(unittest.TestCase):
 
     @patch('random.choice')
     @patch('random.random')
-    def test_mutate_with_style_optimizer(self, mock_random, mock_choice):
+    async def test_mutate_with_style_optimizer(self, mock_random, mock_choice): # Added async
         """Mutation should incorporate StyleOptimizerAgent output when provided."""
         from prompthelix.genetics.mutation_strategies import PlaceholderReplaceStrategy # Import strategy
         mock_random.side_effect = [0.05, 0.05]  # Trigger mutation and mutate gene0
         mock_choice.return_value = PlaceholderReplaceStrategy() # Return an instance
 
-        style_mock = Mock()
+        style_mock = AsyncMock() # Changed to AsyncMock
+        # Configure the mock for an async process_request
         style_mock.process_request.return_value = PromptChromosome(genes=["styled"], fitness_score=0.0)
+
 
         operators = GeneticOperators(style_optimizer_agent=style_mock)
         chromo = PromptChromosome(genes=["gene"], fitness_score=0.1)
 
-        result = operators.mutate(chromo, mutation_rate=0.1, gene_mutation_prob=0.2, target_style="formal")
+        result = await operators.mutate(chromo, mutation_rate=0.1, gene_mutation_prob=0.2, target_style="formal") # Added await
 
         style_mock.process_request.assert_called_once()
         self.assertEqual(result.genes, ["styled"])
 
     @patch('random.random')
     @patch('random.randint')
-    def test_crossover_sets_parents(self, mock_randint, mock_random):
+    def test_crossover_sets_parents(self, mock_randint, mock_random): # This is not a mutate test, no async needed unless crossover becomes async
         mock_random.return_value = 0.0
         mock_randint.return_value = 0
         child1, child2 = self.operators.crossover(self.parent1, self.parent2, crossover_rate=1.0)
@@ -226,12 +228,12 @@ class TestGeneticOperators(unittest.TestCase):
 
     @patch('random.choice')
     @patch('random.random')
-    def test_mutate_sets_mutation_op_and_logs(self, mock_random, mock_choice):
+    async def test_mutate_sets_mutation_op_and_logs(self, mock_random, mock_choice): # Added async
         class DummyStrategy(BaseMutationStrategy): # Changed inheritance
             def __init__(self, settings=None, **kwargs): # Added __init__ for abstract class
                 super().__init__(settings=settings, **kwargs)
 
-            def mutate(self, chromosome: PromptChromosome) -> PromptChromosome:
+            def mutate(self, chromosome: PromptChromosome) -> PromptChromosome: # This is sync, but called by async mutate
                 c = chromosome.clone()
                 c.genes.append('x')
                 return c
@@ -243,7 +245,7 @@ class TestGeneticOperators(unittest.TestCase):
         operators = GeneticOperators(mutation_strategies=[strategy])
 
         with patch('prompthelix.genetics.engine.logger.info') as mock_log_info:
-            result = operators.mutate(self.chromosome_to_mutate, mutation_rate=1.0)
+            result = await operators.mutate(self.chromosome_to_mutate, mutation_rate=1.0) # Added await
 
         self.assertEqual(result.mutation_strategy, 'DummyStrategy')
         # parent_ids for a mutated chromosome should be the ID of the chromosome it was mutated from.

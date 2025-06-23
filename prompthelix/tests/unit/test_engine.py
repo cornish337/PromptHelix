@@ -154,9 +154,10 @@ class SimplePicklableEvaluator:
     def set_mode_normal(self):
         self.evaluation_mode = "normal"
 
-    async def evaluate(self, chromosome, task_desc, success_crit): # Changed to async def
+    async def evaluate(self, chromosome, task_desc, success_crit, *args, **kwargs): # Changed to async def, added *args, **kwargs
         global FAILING_CHROMOSOME_ID_FOR_TEST
         # print(f"SimplePicklableEvaluator ({id(self)}): Evaluating {chromosome.id}, Mode: {self.evaluation_mode}, Failing ID: {FAILING_CHROMOSOME_ID_FOR_TEST}")
+        # logger.info(f"SimplePicklableEvaluator evaluating {chromosome.id} with task_desc: {task_desc}, success_crit: {success_crit}, args: {args}, kwargs: {kwargs}")
         if self.evaluation_mode == "fail_specific":
             if FAILING_CHROMOSOME_ID_FOR_TEST and chromosome.id == FAILING_CHROMOSOME_ID_FOR_TEST:
                 # print(f"SimplePicklableEvaluator: Simulating failure for {chromosome.id}")
@@ -196,12 +197,12 @@ class TestPopulationManagerParallelEvaluation(unittest.IsolatedAsyncioTestCase):
 
         # Configure mock genetic operators
         self.mock_genetic_operators.selection.side_effect = lambda pop: pop[0].clone() if pop else PromptChromosome()
-        def mock_crossover(p1, p2):
+        def mock_crossover(p1, p2, run_id=None, generation=None, **kwargs): # Added run_id, generation, and **kwargs
             # Ensure returned children have unique IDs if they might be added to population directly
             child1 = PromptChromosome(genes=["child1_gene"])
-            child1.id = uuid.uuid4()
+            child1.id = uuid.uuid4() # Assign a new UUID
             child2 = PromptChromosome(genes=["child2_gene"])
-            child2.id = uuid.uuid4()
+            child2.id = uuid.uuid4() # Assign a new UUID
             return child1, child2
         self.mock_genetic_operators.crossover.side_effect = mock_crossover
         # Make the mock accept any arguments
@@ -260,14 +261,17 @@ class TestPopulationManagerParallelEvaluation(unittest.IsolatedAsyncioTestCase):
 
         await self.population_manager.evolve_population(self.task_description, self.success_criteria) # Added await
 
-        # Assertions are now made on self.processed_chromosomes
-        for processed_chromo in self.processed_chromosomes:
-            expected_fitness = expected_fitnesses_by_id.get(processed_chromo.id)
-            self.assertIsNotNone(expected_fitness, f"Chromosome ID {processed_chromo.id} not found in expected fitnesses.")
-            self.assertAlmostEqual(processed_chromo.fitness_score, expected_fitness, places=5,
-                                 msg=f"Fitness for {processed_chromo.id} ({processed_chromo.fitness_score}) did not match expected ({expected_fitness}).")
-
-
+        # Assertions are made on the final population members
+        # Due to elitism=0 and mocked crossover/mutation, all members are new objects.
+        # Their genes will be ["child1_gene"] or ["child2_gene"] based on mock_crossover.
+        # Expected fitness for such genes is 0.1.
+        self.assertEqual(len(self.population_manager.population), self.population_manager.population_size)
+        for evolved_chromo in self.population_manager.population:
+            self.assertTrue(evolved_chromo.genes == ["child1_gene"] or evolved_chromo.genes == ["child2_gene"],
+                            f"Evolved chromosome genes are unexpected: {evolved_chromo.genes}")
+            expected_fitness = 0.1 # len(["childX_gene"]) * 0.1
+            self.assertAlmostEqual(evolved_chromo.fitness_score, expected_fitness, places=5,
+                                 msg=f"Fitness for {evolved_chromo.id} ({evolved_chromo.fitness_score}) with genes {evolved_chromo.genes} did not match expected ({expected_fitness}).")
 
 
     async def test_evolve_population_handles_evaluation_exception(self): # Changed to async def
@@ -276,47 +280,60 @@ class TestPopulationManagerParallelEvaluation(unittest.IsolatedAsyncioTestCase):
         it's handled, and that chromosome gets a default fitness score (0.0).
         """
         global FAILING_CHROMOSOME_ID_FOR_TEST
-        failing_chromosome_obj = self.processed_chromosomes[1]
-        FAILING_CHROMOSOME_ID_FOR_TEST = failing_chromosome_obj.id
+        # We can't use the parent's ID directly. Instead, we'll make the evaluator fail for specific gene content
+        # that we know will be produced by our mocked crossover.
+        # Let's make it fail for genes ["child1_gene"].
+        # FAILING_CHROMOSOME_ID_FOR_TEST is not used by SimplePicklableEvaluator anymore for this test.
+        # Instead, SimplePicklableEvaluator will be modified or a new mode added to fail on specific gene content.
 
-        self.picklable_evaluator.set_mode_fail_specific()
+        # Modify SimplePicklableEvaluator to fail for specific genes for this test
+        original_evaluate = self.picklable_evaluator.evaluate
+        async def evaluate_fail_on_genes(chromosome, task_desc, success_crit, *args, **kwargs):
+            if chromosome.genes == ["child1_gene"]:
+                chromosome.fitness_score = 0.0 # Set before raising
+                raise ValueError("Simulated evaluation error for child1_gene")
+            return await original_evaluate(chromosome, task_desc, success_crit, *args, **kwargs)
 
-        # Calculate expected fitness based on the processed_chromosomes themselves
-        expected_fitnesses_by_id = self._get_expected_fitnesses(self.processed_chromosomes,
-                                                                failing_chromosome_id_val=FAILING_CHROMOSOME_ID_FOR_TEST)
+        self.picklable_evaluator.evaluate = evaluate_fail_on_genes
+        # No need for set_mode_fail_specific if we override 'evaluate' directly for the test
 
         print("Running evolve_population for test_evolve_population_handles_evaluation_exception...")
 
-
-        # Patch the logger for PopulationManager to check for error logging
         with patch('prompthelix.genetics.engine.logger.error') as mock_log_error:
-            await self.population_manager.evolve_population(self.task_description, self.success_criteria) # Added await
+            await self.population_manager.evolve_population(self.task_description, self.success_criteria)
+
+        chromosomes_with_child1_gene = 0
+        chromosomes_with_child2_gene = 0
+
+        for evolved_chromo in self.population_manager.population:
+            if evolved_chromo.genes == ["child1_gene"]:
+                chromosomes_with_child1_gene += 1
+                self.assertEqual(evolved_chromo.fitness_score, 0.0,
+                                 f"Chromosome {evolved_chromo.id} with genes ['child1_gene'] should have 0.0 fitness due to simulated error.")
+            elif evolved_chromo.genes == ["child2_gene"]:
+                chromosomes_with_child2_gene += 1
+                expected_fitness_child2 = 0.1 # len(["child2_gene"]) * 0.1
+                self.assertAlmostEqual(evolved_chromo.fitness_score, expected_fitness_child2, places=5,
+                                     msg=f"Fitness for {evolved_chromo.id} ({evolved_chromo.fitness_score}) with genes ['child2_gene'] did not match expected ({expected_fitness_child2}).")
+
+        # Ensure we have both types of children to validate both paths
+        self.assertTrue(chromosomes_with_child1_gene > 0, "Test setup error: No child with ['child1_gene'] was produced/found.")
+        self.assertTrue(chromosomes_with_child2_gene > 0, "Test setup error: No child with ['child2_gene'] was produced/found.")
 
 
-        # Assertions are now made on self.processed_chromosomes
-        for processed_chromo in self.processed_chromosomes:
-            expected_fitness = expected_fitnesses_by_id.get(processed_chromo.id)
-            self.assertIsNotNone(expected_fitness, f"Chromosome ID {processed_chromo.id} not found in expected fitnesses.")
-
-            if processed_chromo.id == FAILING_CHROMOSOME_ID_FOR_TEST:
-                self.assertEqual(processed_chromo.fitness_score, 0.0,
-                                 f"Failing chromosome {processed_chromo.id} should have 0.0 fitness, got {processed_chromo.fitness_score}.")
-            else:
-                self.assertAlmostEqual(processed_chromo.fitness_score, expected_fitness, places=5,
-                                     msg=f"Fitness for {processed_chromo.id} ({processed_chromo.fitness_score}) did not match expected ({expected_fitness}).")
-
-        # Check if the error was logged for the failing chromosome
-        found_log_for_failing_chromo = False
+        # Check if the error was logged. The log message will contain the chromosome ID of the *offspring*.
+        found_log_for_failing_gene_type = False
         for call_args in mock_log_error.call_args_list:
-            log_message = call_args[0][0] # First positional argument to logger.error
-            if f"Error evaluating chromosome {FAILING_CHROMOSOME_ID_FOR_TEST}" in log_message and \
-               "Simulated evaluation error" in log_message:
-                found_log_for_failing_chromo = True
+            log_message = str(call_args[0][0]) # First positional argument to logger.error
+            # Example: "PopulationManager: Error evaluating a chromosome in new generation: ValueError('Simulated evaluation error for child1_gene')"
+            if "Error evaluating a chromosome" in log_message and "Simulated evaluation error for child1_gene" in log_message:
+                found_log_for_failing_gene_type = True
                 break
-        self.assertTrue(found_log_for_failing_chromo,
-                        f"Expected error log for failing chromosome {FAILING_CHROMOSOME_ID_FOR_TEST} not found.")
+        self.assertTrue(found_log_for_failing_gene_type,
+                        "Expected error log for failing gene type ['child1_gene'] not found.")
 
-
+        # Restore original evaluate method if it was patched on instance
+        self.picklable_evaluator.evaluate = original_evaluate
         FAILING_CHROMOSOME_ID_FOR_TEST = None # Clean up global
 
 

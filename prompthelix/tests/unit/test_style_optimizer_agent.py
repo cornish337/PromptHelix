@@ -1,5 +1,6 @@
 import unittest
-from unittest.mock import patch # Added import
+from unittest.mock import patch, MagicMock, AsyncMock # Added MagicMock, AsyncMock
+import asyncio # Added asyncio
 from prompthelix.agents.style_optimizer import StyleOptimizerAgent
 from prompthelix.genetics.chromosome import PromptChromosome
 
@@ -75,7 +76,7 @@ class TestStyleOptimizerAgent(unittest.TestCase):
         self.assertIn("replace", self.optimizer.style_rules["formal"])
         self.assertIn("prepend_politeness", self.optimizer.style_rules["formal"])
 
-    def test_process_request_formal_style(self):
+    async def test_process_request_formal_style(self):
         """Test process_request with 'formal' style transformation."""
         original_genes = [
             "Instruction: don't summarize stuff quickly.",
@@ -83,19 +84,21 @@ class TestStyleOptimizerAgent(unittest.TestCase):
         ]
         original_prompt = PromptChromosome(genes=original_genes)
         request_data = {"prompt_chromosome": original_prompt, "target_style": "formal"}
-        result_chromosome = self.optimizer.process_request(request_data)
+        # Since process_request is now async
+        with patch('prompthelix.agents.style_optimizer.call_llm_api', new_callable=AsyncMock) as mock_llm_api:
+            # Simulate LLM returning genes that then get rule-based processed, or just let rule-based run
+            mock_llm_api.side_effect = Exception("Simulated LLM failure to test rule-based path")
+            result_chromosome = await self.optimizer.process_request(request_data)
+
 
         self.assertIsInstance(result_chromosome, PromptChromosome)
         self.assertNotEqual(result_chromosome.genes, original_genes, "Genes should have been modified.")
         
-        expected_gene1_part1 = "Please Instruction: do not summarize items quickly." # Politeness + replacements
-        # The exact output depends on how _load_style_rules and process_request are implemented.
-        # We check for key transformations.
         self.assertTrue(result_chromosome.genes[0].startswith("Please "), "First gene should start with 'Please ' for formal style instructions.")
         self.assertIn("do not summarize items quickly.", result_chromosome.genes[0], "Formal transformations (don't->do not, stuff->items) not applied correctly to first gene.")
         self.assertIn("want to see it done well.", result_chromosome.genes[1], "Formal transformation (wanna->want to) not applied correctly to second gene.")
 
-    def test_process_request_casual_style(self):
+    async def test_process_request_casual_style(self):
         """Test process_request with 'casual' style transformation."""
         original_genes = [
             "Instruction: Please do not itemize the documents meticulously.",
@@ -103,50 +106,51 @@ class TestStyleOptimizerAgent(unittest.TestCase):
         ]
         original_prompt = PromptChromosome(genes=original_genes)
         request_data = {"prompt_chromosome": original_prompt, "target_style": "casual"}
-        result_chromosome = self.optimizer.process_request(request_data)
+        with patch('prompthelix.agents.style_optimizer.call_llm_api', new_callable=AsyncMock) as mock_llm_api:
+            mock_llm_api.side_effect = Exception("Simulated LLM failure to test rule-based path")
+            result_chromosome = await self.optimizer.process_request(request_data)
 
         self.assertIsInstance(result_chromosome, PromptChromosome)
         self.assertNotEqual(result_chromosome.genes, original_genes, "Genes should have been modified.")
         
-        # Check for casual transformations
-        # "Please " and "Kindly " should be removed, "do not" -> "don't", "items" -> "stuff" (though "itemize" might not be in casual rules)
         self.assertNotIn("Please", result_chromosome.genes[0], "'Please' not removed for casual style.")
         self.assertIn("Instruction: don't itemize the documents meticulously.", result_chromosome.genes[0], "Casual transformation (do not->don't) not applied correctly.")
         self.assertNotIn("Kindly", result_chromosome.genes[1], "'Kindly' not removed for casual style.")
         self.assertIn("Context: provide the stuff.", result_chromosome.genes[1], "Casual transformation for 'stuff' or removal of 'Kindly' failed.")
 
 
-    def test_process_request_unrecognized_style(self):
+    async def test_process_request_unrecognized_style(self):
         """Test process_request with an unrecognized target style."""
         original_genes = ["Instruction: Test this.", "Context: Unchanged."]
         original_prompt = PromptChromosome(genes=original_genes)
         request_data = {"prompt_chromosome": original_prompt, "target_style": "non_existent_style"}
-        result_chromosome = self.optimizer.process_request(request_data)
+        with patch('prompthelix.agents.style_optimizer.call_llm_api', new_callable=AsyncMock) as mock_llm_api:
+            mock_llm_api.side_effect = Exception("Simulated LLM failure") # Ensure LLM path fails
+            result_chromosome = await self.optimizer.process_request(request_data)
 
         self.assertIsInstance(result_chromosome, PromptChromosome)
-        # The agent's current implementation returns the original chromosome object if style is not found
-        self.assertEqual(result_chromosome, original_prompt, "Should return original chromosome for unrecognized style.")
-        self.assertEqual(result_chromosome.genes, original_genes, "Genes should be unchanged for unrecognized style.")
+        self.assertEqual(result_chromosome, original_prompt, "Should return original chromosome for unrecognized style if LLM fails and no rules.")
+        self.assertEqual(result_chromosome.genes, original_genes, "Genes should be unchanged for unrecognized style if LLM fails and no rules.")
 
-    def test_process_request_invalid_input(self):
+    async def test_process_request_invalid_input(self):
         """Test process_request with invalid 'prompt_chromosome' input."""
         invalid_prompt_input = "This is not a PromptChromosome object."
         request_data = {"prompt_chromosome": invalid_prompt_input, "target_style": "formal"}
-        result = self.optimizer.process_request(request_data)
-
-        # The agent's current implementation returns the original input if it's not a PromptChromosome
+        result = await self.optimizer.process_request(request_data)
         self.assertEqual(result, invalid_prompt_input, "Should return the original invalid input.")
 
         request_data_none = {"prompt_chromosome": None, "target_style": "formal"}
-        result_none = self.optimizer.process_request(request_data_none)
+        result_none = await self.optimizer.process_request(request_data_none)
         self.assertIsNone(result_none, "Should return None for None input.")
 
     # --- Tests for the new optimize method ---
 
-    @patch('prompthelix.agents.style_optimizer.call_llm_api')
-    def test_optimize_real_mode(self, mock_call_llm_api):
+    @patch('prompthelix.agents.style_optimizer.call_llm_api', new_callable=AsyncMock)
+    async def test_optimize_real_mode(self, mock_call_llm_api):
         """Test optimize method in 'REAL' LLM mode."""
-        mock_call_llm_api.return_value = "Optimized: Be concise and clear."
+        future_val = asyncio.Future()
+        future_val.set_result("Optimized: Be concise and clear.")
+        mock_call_llm_api.return_value = future_val
 
         settings = {"llm_mode": "REAL", "default_llm_provider": "test_provider", "default_llm_model": "test_model"}
         agent = StyleOptimizerAgent(settings=settings)
@@ -155,16 +159,19 @@ class TestStyleOptimizerAgent(unittest.TestCase):
         tone = "professional"
         expected_llm_template = f"Rephrase the following prompt to be more {tone}: {original_prompt}"
 
-        result = agent.optimize(original_prompt, tone=tone)
+        result = await agent.optimize(original_prompt, tone=tone)
 
         self.assertEqual(result, "Optimized: Be concise and clear.")
+        # For async mocks, assert_called_once_with might need adjustment if args are complex
+        # or use await mock_call_llm_api.assert_awaited_once_with(...) if it's an AsyncMock
         mock_call_llm_api.assert_called_once_with(
-            prompt_text=expected_llm_template,
+            prompt=expected_llm_template, # Changed from prompt_text to prompt to match call_llm_api
             provider="test_provider",
-            model="test_model"
+            model="test_model",
+            db=None # call_llm_api expects db
         )
 
-    def test_optimize_placeholder_mode(self):
+    async def test_optimize_placeholder_mode(self):
         """Test optimize method in non-REAL (e.g., 'PLACEHOLDER') LLM mode."""
         settings = {"llm_mode": "PLACEHOLDER"} # Explicitly set to non-REAL
         agent = StyleOptimizerAgent(settings=settings)
@@ -173,28 +180,30 @@ class TestStyleOptimizerAgent(unittest.TestCase):
         tone = "friendly"
         expected_output = f"{original_prompt} [Styled: Placeholder]"
 
-        result = agent.optimize(original_prompt, tone=tone)
+        result = await agent.optimize(original_prompt, tone=tone)
         self.assertEqual(result, expected_output)
 
-    def test_optimize_default_mode_is_placeholder(self):
+    async def test_optimize_default_mode_is_placeholder(self):
         """Test optimize method defaults to placeholder behavior if llm_mode is not set."""
         # Agent initialized with no settings or settings missing llm_mode
-        agent_no_settings = StyleOptimizerAgent(settings=None) # self.optimizer from setUp could also be used if settings are known
+        agent_no_settings = StyleOptimizerAgent(settings=None)
         original_prompt = "Another prompt"
         tone = "direct"
         expected_output = f"{original_prompt} [Styled: Placeholder]"
-        result = agent_no_settings.optimize(original_prompt, tone=tone)
+        result = await agent_no_settings.optimize(original_prompt, tone=tone)
         self.assertEqual(result, expected_output)
 
         agent_empty_settings = StyleOptimizerAgent(settings={})
-        result_empty_settings = agent_empty_settings.optimize(original_prompt, tone=tone)
+        result_empty_settings = await agent_empty_settings.optimize(original_prompt, tone=tone)
         self.assertEqual(result_empty_settings, expected_output)
 
 
-    @patch('prompthelix.agents.style_optimizer.call_llm_api')
-    def test_optimize_real_mode_llm_api_error(self, mock_call_llm_api):
+    @patch('prompthelix.agents.style_optimizer.call_llm_api', new_callable=MagicMock)
+    async def test_optimize_real_mode_llm_api_error(self, mock_call_llm_api):
         """Test optimize method in 'REAL' mode when call_llm_api raises an error."""
-        mock_call_llm_api.side_effect = Exception("LLM API failed")
+        future_val = asyncio.Future()
+        future_val.set_exception(Exception("LLM API failed"))
+        mock_call_llm_api.return_value = future_val
 
         settings = {"llm_mode": "REAL", "default_llm_provider": "test_provider", "default_llm_model": "test_model"}
         agent = StyleOptimizerAgent(settings=settings)
@@ -203,7 +212,7 @@ class TestStyleOptimizerAgent(unittest.TestCase):
         tone = "urgent"
         expected_output = f"{original_prompt} [Styled: Placeholder - Error]"
 
-        result = agent.optimize(original_prompt, tone=tone)
+        result = await agent.optimize(original_prompt, tone=tone)
 
         self.assertEqual(result, expected_output)
         mock_call_llm_api.assert_called_once()

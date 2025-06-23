@@ -15,34 +15,47 @@ class TestMetricsFallback(unittest.TestCase):
 
         # Store original textstat if it's already loaded
         self.original_textstat_module = sys.modules.get(self.textstat_module_name)
+        self.textstat_was_present = self.textstat_module_name in sys.modules
 
-        # Ensure textstat is not in sys.modules to simulate ImportError on next import/reload
-        if self.textstat_module_name in sys.modules:
-            del sys.modules[self.textstat_module_name]
+        # Temporarily make textstat unimportable or appear as None
+        sys.modules[self.textstat_module_name] = None # This will cause `import textstat` to import None
 
-        # Reload the metrics module. During this reload, 'import textstat' should fail.
-        # The try-except block within metrics.py should then set its local 'textstat' to None.
-        importlib.reload(evaluation_metrics_module)
+        # Reload the metrics module. During this reload, 'import textstat' will get None,
+        # and the try-except block in metrics.py should catch an error if it tries to use None as a module,
+        # or the `textstat = None` line in the except block will ensure its internal textstat is None.
+        try:
+            importlib.reload(evaluation_metrics_module)
+        except Exception as e:
+            # This reload might fail if textstat=None causes issues deeper in metrics.py's import-time code
+            # For now, we assume the try-except in metrics.py handles it gracefully.
+            logging.error(f"Error reloading metrics module during setUp: {e}")
         self.metrics = evaluation_metrics_module
 
     def tearDown(self):
-        # Restore textstat to sys.modules if it was originally there
-        if self.original_textstat_module is not None:
-            sys.modules[self.textstat_module_name] = self.original_textstat_module
-        elif self.textstat_module_name in sys.modules: # If it somehow got added back during test (shouldn't happen)
-            del sys.modules[self.textstat_module_name]
+        # Restore textstat to sys.modules
+        if self.textstat_was_present:
+            if self.original_textstat_module is not None:
+                sys.modules[self.textstat_module_name] = self.original_textstat_module
+            else:
+                # This case should ideally not happen if textstat_was_present is true,
+                # but as a safeguard:
+                if self.textstat_module_name in sys.modules: # pragma: no cover
+                    del sys.modules[self.textstat_module_name]
+        else: # textstat was not originally in sys.modules
+            if self.textstat_module_name in sys.modules:
+                 del sys.modules[self.textstat_module_name]
+
 
         # Reload the metrics module again to ensure it's in a clean state for other tests
-        # (textstat should now import successfully if it's installed in the environment)
         try:
             importlib.reload(evaluation_metrics_module)
-        except ImportError: # pragma: no cover
-            # This might happen if textstat was never installed and self.original_textstat_module was None
-            logging.warning(f"Could not reload {self.metrics_module_name} in tearDown, possibly textstat is not installed.")
+        except Exception: # pragma: no cover
+            logging.warning(f"Could not reload {self.metrics_module_name} in tearDown.")
 
 
     def test_fallback_metrics(self):
         # After reload in setUp, evaluation_metrics_module.textstat should be None
+        # due to the try-except block in metrics.py
         self.assertIsNone(self.metrics.textstat,
                           f"self.metrics.textstat should be None after simulating ImportError. Value: {self.metrics.textstat}")
         clarity = self.metrics.calculate_clarity_score("A simple sentence.")

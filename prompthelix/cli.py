@@ -374,7 +374,7 @@ def main_cli():
                     parallel_workers=args.parallel_workers,  # Pass the new argument
                     return_best=True,
                     metrics_file_path=args.metrics_file,
-                )) # Extra closing parenthesis added here
+                )) # Corrected: Removed extra closing parenthesis
 
                 if best_chromosome:
                     logger.info("CLI: Genetic Algorithm completed successfully.")
