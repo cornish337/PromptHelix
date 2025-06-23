@@ -288,7 +288,9 @@ class ResultsEvaluatorAgent(BaseAgent):
         logger.info(f"Agent '{self.agent_id}': Constraint check result - Metrics={metrics}, Errors#={len(errors)}")
         return {"metrics": metrics, "errors": errors}
 
+
     async def _analyze_content(self, llm_output: str, task_desc: str, prompt_chromosome: PromptChromosome, synthetic_input_context: Optional[str] = None) -> tuple[dict, list]: # Changed to async
+
         """
         Analyzes LLM output content using another LLM for quality, relevance, coherence, etc.
         Falls back to placeholder values if LLM analysis fails.
@@ -359,7 +361,9 @@ Example:
 
         # Pass self.db if available and needed by call_llm_api. Assuming self.db might be None.
         # call_llm_api is designed to handle db=None.
+
         response_str = await call_llm_api(prompt_str_for_llm, provider=self.llm_provider, model=self.evaluation_llm_model, db=self.db) # Added await
+
 
         if response_str in LLM_API_ERROR_STRINGS: # This check is fine as response_str will be a string after await
             logger.warning(f"Agent '{self.agent_id}': LLM call for content analysis failed with error code: {response_str}. Using fallback metrics.")

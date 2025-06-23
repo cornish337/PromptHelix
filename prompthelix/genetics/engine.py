@@ -316,7 +316,216 @@ class PopulationManager:
         self.status = "IDLE"
         await self.broadcast_ga_update(event_type="population_initialized", additional_data={"population_size": len(self.population)})
 
-    async def evolve_population(self, task_description: str, success_criteria: Optional[Dict] = None, db_session=None, experiment_run=None):
+
+    async def pause_evolution(self):
+        self.is_paused = True
+        self.status = "PAUSED"
+        await self.broadcast_ga_update(event_type="ga_paused")
+        # logger.info(f"PopulationManager (ID: {id(self)}): Evolution paused.")
+
+    async def resume_evolution(self):
+        self.is_paused = False
+        self.status = "RUNNING"
+        await self.broadcast_ga_update(event_type="ga_resumed")
+        # logger.info(f"PopulationManager (ID: {id(self)}): Evolution resumed.")
+
+    async def stop_evolution(self):
+        self.should_stop = True
+        self.is_paused = False # Clear pause state on stop
+        self.status = "STOPPING"  # Set STOPPING before broadcasting
+        await self.broadcast_ga_update(event_type="ga_stopping")
+        # logger.info(f"PopulationManager (ID: {id(self)}): Evolution stop requested.")
+
+    def get_ga_status(self) -> Dict:
+        return {
+            "status": self.status,
+            "generation": self.generation_number,
+            "population_size": len(self.population),
+            "is_paused": self.is_paused,
+            "should_stop": self.should_stop,
+            "fittest_individual_id": str(self.get_fittest_individual().id) if self.population else None,
+            "fittest_individual_score": self.get_fittest_individual().fitness_score if self.population else None,
+        }
+
+    def save_population(self, file_path: Optional[str] = None) -> None:
+        file_path = file_path or self.population_path
+        if not file_path:
+            raise ValueError("population_path must be provided to save_population")
+        data = {
+            "generation_number": self.generation_number,
+            "population": [
+                {
+                    "genes": c.genes,
+                    "fitness_score": c.fitness_score,
+                    "parents": c.parent_ids,
+                    "mutation_strategy": c.mutation_strategy,
+                }
+                for c in self.population
+            ],
+        }
+        try:
+            with open(file_path, "w", encoding="utf-8") as fh:
+                json.dump(data, fh)
+            logger.info(f"PopulationManager: Population saved successfully to {file_path}")
+        except (IOError, OSError) as e:
+            logger.error(f"Error saving population to {file_path}: {e}", exc_info=True)
+
+    def load_population(self, file_path: Optional[str] = None) -> None:
+        file_path = file_path or self.population_path
+        if not file_path or not os.path.exists(file_path):
+            logger.info(f"PopulationManager: No population file at {file_path}; starting fresh.")
+        self.population = []
+        self.generation_number = 0
+        return
+
+        try:
+            with open(file_path, "r", encoding="utf-8") as fh:
+                content = fh.read()
+                if not content.strip():  # Check for empty or whitespace-only content
+                    logger.error(f"Error loading population from {file_path}: File is empty.")
+                    self.population = []
+                    self.generation_number = 0
+                    return
+
+                data = json.loads(content)
+
+            if not isinstance(data, dict):
+                logger.error(
+                    f"Error loading population from {file_path}: File content is not a JSON object (dictionary). "
+                    f"Loaded type: {type(data)}"
+                )
+                self.population = []
+                self.generation_number = 0
+                return
+
+            self.generation_number = data.get("generation_number", 0)
+            loaded_population_data = data.get("population", [])
+            # Assuming PromptChromosome can be reconstructed from the dicts in loaded_population_data
+            # This part might need adjustment based on how PromptChromosome is serialized/deserialized
+            self.population = []
+            for chromo_data in loaded_population_data:
+                # This is a placeholder for actual deserialization logic
+                # For example, if PromptChromosome takes genes, fitness_score, etc. in its constructor:
+                try:
+                    chromosome = PromptChromosome(
+                        genes=chromo_data.get("genes", []),
+                        # id=chromo_data.get("id"), # ID should be regenerated or handled carefully
+                        fitness_score=chromo_data.get("fitness_score", 0.0)
+                    )
+                    chromosome.parent_ids = chromo_data.get("parents", [])
+                    chromosome.mutation_strategy = chromo_data.get("mutation_strategy")
+                    self.population.append(chromosome)
+                except Exception as e_chromo:
+                    logger.error(f"Error deserializing chromosome data: {chromo_data}. Error: {e_chromo}", exc_info=True)
+            logger.info(f"PopulationManager: Population loaded successfully from {file_path}. Generation: {self.generation_number}, Size: {len(self.population)}")
+
+        except FileNotFoundError:
+            logger.info(f"PopulationManager: Population file {file_path} not found. Starting fresh.")
+            self.population = []
+            self.generation_number = 0
+        except json.JSONDecodeError as e_json:
+            logger.error(f"Error decoding JSON from {file_path}: {e_json}. Initializing empty population.", exc_info=True)
+            self.population = []
+            self.generation_number = 0
+        except (IOError, OSError) as e_io:
+            logger.error(f"IOError/OSError reading population from {file_path}: {e_io}. Initializing empty population.", exc_info=True)
+            self.population = []
+            self.generation_number = 0
+        except Exception as e: # Catch-all for other unexpected errors
+            logger.error(f"Unexpected error loading population from {file_path}: {e}. Initializing empty population.", exc_info=True)
+            self.population = []
+            self.generation_number = 0
+
+
+    async def broadcast_ga_update(
+        self,
+        event_type: str,
+        selected_parent_ids=None,
+        additional_data=None,
+        include_population_sample: bool = False,
+        sample_size: int = 5
+    ):
+        if (
+            self.message_bus
+            and getattr(self.message_bus, "connection_manager", None)
+        ):
+            fitness_scores = [c.fitness_score for c in self.population if c.fitness_score is not None] # Ensure scores are not None
+
+            if fitness_scores: # Check if list is not empty after filtering
+                best_fitness = max(fitness_scores) if fitness_scores else None
+                fitness_min = min(fitness_scores)
+                fitness_max = max(fitness_scores)
+                fitness_mean = statistics.mean(fitness_scores)
+                fitness_median = statistics.median(fitness_scores)
+                fitness_std_dev = (
+                    statistics.stdev(fitness_scores)
+                    if len(fitness_scores) > 1
+                    else 0.0
+                )
+                fittest_chromosome_string = (
+                    self.get_fittest_individual().to_prompt_string()
+                )
+            else:
+                best_fitness = None
+                fitness_min = None
+                fitness_max = None
+                fitness_mean = None
+                fitness_median = None
+                fitness_std_dev = None
+                fittest_chromosome_string = None
+
+            payload = {
+                "type": event_type,
+                "data": {
+                    "status": self.status,
+                    "generation": self.generation_number,
+                    "population_size": len(self.population),
+                    "best_fitness": best_fitness,
+                    "fitness_min": fitness_min,
+                    "fitness_max": fitness_max,
+                    "fitness_mean": fitness_mean,
+                    "fitness_median": fitness_median,
+                    "fitness_std_dev": fitness_std_dev,
+                    "fittest_chromosome_string": fittest_chromosome_string,
+                    "population_diversity": fitness_std_dev, # Add population_diversity, using std_dev as proxy
+                    "is_paused": self.is_paused,
+                    "should_stop": self.should_stop,
+                    "selected_parent_ids": selected_parent_ids,
+                    "timestamp": datetime.utcnow().isoformat(),
+                },
+            }
+            if additional_data:
+                payload["data"].update(additional_data)
+
+            if include_population_sample and self.population:
+                # Sort population by fitness to get the top N (if not already sorted)
+                # Assuming self.population is already sorted by fitness_score descending
+                # from evolve_population or initialize_population
+                sample = self.population[:sample_size]
+                payload["data"]["population_sample"] = [
+                    {
+                        "id": str(chromo.id),
+                        "genes": chromo.genes,
+                        "fitness_score": chromo.fitness_score,
+                        "parent_ids": chromo.parent_ids, # Ensure this is part of PromptChromosome
+                        "mutation_strategy": chromo.mutation_strategy
+                    }
+                    for chromo in sample
+                ]
+            else:
+                payload["data"]["population_sample"] = []
+
+
+            try:
+                await self.message_bus.connection_manager.broadcast_json(payload)
+            except Exception as e:
+                logger.error(f"Error during broadcast_json in broadcast_ga_update: {e}", exc_info=True)
+                # Decide if this should raise or just log. For now, logging.
+
+
+    async def evolve_population(self, task_description: str, success_criteria: Optional[Dict] = None, db_session=None, experiment_run=None): # Changed to async def
+        # Ensure status is RUNNING at the start of a generation evolution
+
         if self.status != "RUNNING" and not self.is_paused and not self.should_stop:
             self.status = "RUNNING"
             await self.broadcast_ga_update(event_type="ga_generation_started", include_population_sample=True)

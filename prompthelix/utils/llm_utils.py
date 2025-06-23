@@ -96,7 +96,7 @@ async def call_openai_api(prompt: str, model: str = "gpt-3.5-turbo", db: Session
         logger.error(f"Error during prompt processing: {e}. Using original prompt.", exc_info=True)
 
     try:
-        response = await client.chat.completions.acreate(  # Changed to acreate and added await
+        response = await client.chat.completions.create(  # Changed to acreate and added await
             model=model,
             messages=[{"role": "user", "content": processed_prompt}],
         )
