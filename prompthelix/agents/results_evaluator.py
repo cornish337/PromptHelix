@@ -359,7 +359,7 @@ Example:
 
         # Pass self.db if available and needed by call_llm_api. Assuming self.db might be None.
         # call_llm_api is designed to handle db=None.
-        response_str = call_llm_api(prompt_str_for_llm, provider=self.llm_provider, model=self.evaluation_llm_model, db=self.db)
+        response_str = await call_llm_api(prompt_str_for_llm, provider=self.llm_provider, model=self.evaluation_llm_model, db=self.db)
 
         if response_str in LLM_API_ERROR_STRINGS:
             logger.warning(f"Agent '{self.agent_id}': LLM call for content analysis failed with error code: {response_str}. Using fallback metrics.")
