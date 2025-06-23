@@ -56,7 +56,7 @@ class TestResultsEvaluatorAgent(unittest.TestCase):
         expected_kfp_override = os.path.join(KNOWLEDGE_DIR, "override_eval_config.json")
         self.assertEqual(evaluator_with_override.knowledge_file_path, expected_kfp_override)
 
-    def test_agent_creation_no_settings_uses_fallbacks(self):
+    def test_agent_creation_no_settings_uses_fallbacks(self): # Reverted to sync
         EXPECTED_FALLBACK_LLM_PROVIDER = "openai"
         EXPECTED_FALLBACK_EVAL_MODEL = "gpt-4"
         EXPECTED_FALLBACK_FITNESS_WEIGHTS = {

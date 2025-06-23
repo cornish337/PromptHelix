@@ -87,7 +87,7 @@ class StyleOptimizerAgent(BaseAgent):
             )
             self.style_rules = self._get_default_style_rules()
 
-    def optimize(self, prompt: str, tone: str = "concise") -> str:
+    async def optimize(self, prompt: str, tone: str = "concise") -> str: # Changed to async
         llm_template = f"Rephrase the following prompt to be more {tone}: {prompt}"
         if not hasattr(self, 'settings') or self.settings is None:
             logger.warning(f"Agent '{self.agent_id}': Settings not available. Defaulting to non-REAL mode for optimize.")
@@ -99,8 +99,8 @@ class StyleOptimizerAgent(BaseAgent):
         if llm_mode == "REAL":
             try:
                 logger.info(f"Agent '{self.agent_id}': Calling LLM for style optimization. Tone: {tone}. Prompt: \"{prompt[:100]}...\"")
-                optimized_prompt = call_llm_api(
-                    prompt_text=llm_template,
+                optimized_prompt = await call_llm_api( # Added await
+                    prompt=llm_template, # Corrected param name from prompt_text to prompt
                     provider=self.llm_provider,
                     model=self.llm_model
                 )
@@ -153,7 +153,7 @@ class StyleOptimizerAgent(BaseAgent):
                 diffs.append(f"Gene {i+1} removed: '{old_genes[i]}'")
         return diffs
 
-    def process_request(self, request_data: dict) -> PromptChromosome:
+    async def process_request(self, request_data: dict) -> PromptChromosome: # Changed to async
         original_chromosome = request_data.get("prompt_chromosome")
         target_style = request_data.get("target_style")
 
@@ -183,10 +183,10 @@ Target Style: {target_style}
 Rewritten Prompt Segments (JSON list of strings):
 """
         try:
-            response_str = call_llm_api(llm_prompt, provider=self.llm_provider, model=self.llm_model)
+            response_str = await call_llm_api(llm_prompt, provider=self.llm_provider, model=self.llm_model) # Added await
             logger.info(f"Agent '{self.agent_id}': LLM raw response for style optimization: {response_str}")
 
-            parsed_genes = self._parse_llm_gene_response(response_str)
+            parsed_genes = self._parse_llm_gene_response(response_str) # This is a sync helper, fine
             if parsed_genes and len(parsed_genes) == len(original_genes_str_list):
                 llm_optimized_genes = parsed_genes
                 logger.info(f"Agent '{self.agent_id}': Successfully optimized style '{target_style}' using LLM.")

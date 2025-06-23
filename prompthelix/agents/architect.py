@@ -154,7 +154,7 @@ class PromptArchitectAgent(BaseAgent):
         except Exception as e:
             logger.error(f"Agent '{self.agent_id}': Failed to save prompt templates to '{self.knowledge_file_path}': {e}", exc_info=True)
 
-    def _parse_requirements(self, task_desc: str, keywords: list, constraints: dict) -> dict:
+    async def _parse_requirements(self, task_desc: str, keywords: list, constraints: dict) -> dict:
         """
         Placeholder method to parse and interpret input requirements.
 
@@ -177,10 +177,10 @@ class PromptArchitectAgent(BaseAgent):
 
             Respond ONLY with valid JSON.
             """
-            response = call_llm_api(prompt, provider=self.llm_provider, model=self.llm_model)
+            response = await call_llm_api(prompt, provider=self.llm_provider, model=self.llm_model)
             logger.info(f"Agent '{self.agent_id}' - LLM response for parsing: {response}")
 
-            if response in LLM_API_ERROR_STRINGS or response.startswith("GENERATION_STOPPED_"):
+            if response in LLM_API_ERROR_STRINGS or (isinstance(response, str) and response.startswith("GENERATION_STOPPED_")):
                 logger.error(f"Agent '{self.agent_id}': LLM API call failed for parsing requirements: {response}. Using fallback.")
                 return {
                     "task_description": task_desc if task_desc else "Default task description",
@@ -218,7 +218,7 @@ class PromptArchitectAgent(BaseAgent):
             logger.debug(f"Agent '{self.agent_id}': Exiting _parse_requirements with fallback error result: {fallback_result}")
             return fallback_result
 
-    def _select_template(self, parsed_requirements: dict) -> str:
+    async def _select_template(self, parsed_requirements: dict) -> str:
         """
         Selects a prompt template based on parsed requirements using an LLM.
 
@@ -239,12 +239,12 @@ class PromptArchitectAgent(BaseAgent):
             Which template is most suitable for this task?
             Respond with only the name of the template (e.g., "summary_v1").
             """
-            llm_response = call_llm_api(prompt, provider=self.llm_provider, model=self.llm_model)
+            llm_response = await call_llm_api(prompt, provider=self.llm_provider, model=self.llm_model)
             logger.info(f"Agent '{self.agent_id}' - LLM response for template selection: {llm_response}")
 
-            if llm_response in LLM_API_ERROR_STRINGS or llm_response.startswith("GENERATION_STOPPED_"):
+            if llm_response in LLM_API_ERROR_STRINGS or (isinstance(llm_response, str) and llm_response.startswith("GENERATION_STOPPED_")):
                 logger.error(f"Agent '{self.agent_id}': LLM API call returned an error string for template selection: {llm_response}. Using fallback.")
-                return self._fallback_select_template(parsed_requirements)
+                return await self._fallback_select_template(parsed_requirements) # Await if it becomes async
 
             # If LLM directly returns the template name as a string:
             selected_template_name = llm_response.strip().strip('"')
@@ -254,13 +254,13 @@ class PromptArchitectAgent(BaseAgent):
                 return selected_template_name
             else:
                 logger.warning(f"Agent '{self.agent_id}' - LLM returned invalid or unknown template name '{selected_template_name}'. Falling back.")
-                return self._fallback_select_template(parsed_requirements)
+                return await self._fallback_select_template(parsed_requirements) # Await if it becomes async
 
         except Exception as e: # Catches errors from call_llm_api or other unexpected issues
             logger.error(f"Agent '{self.agent_id}': Error during LLM call or processing for template selection: {e}. Using fallback.", exc_info=True)
-            return self._fallback_select_template(parsed_requirements)
+            return await self._fallback_select_template(parsed_requirements) # Await if it becomes async
 
-    def _fallback_select_template(self, parsed_requirements: dict) -> str:
+    async def _fallback_select_template(self, parsed_requirements: dict) -> str: # Changed to async
         """ Fallback template selection logic if LLM fails. """
         task_desc = parsed_requirements.get("task_description") or ""
         task_desc_lower = task_desc.lower()
@@ -273,7 +273,7 @@ class PromptArchitectAgent(BaseAgent):
         logger.info(f"Agent '{self.agent_id}' - Fallback selected template: {template_name}")
         return template_name
 
-    def _populate_genes(self, template: dict, parsed_requirements: dict) -> list:
+    async def _populate_genes(self, template: dict, parsed_requirements: dict) -> list:
         """
         Populates genes for a PromptChromosome using an LLM based on a template
         and parsed requirements.
@@ -313,34 +313,35 @@ class PromptArchitectAgent(BaseAgent):
             "Output Format: A short paragraph."
         ]
         """
-        llm_response = call_llm_api(prompt, provider=self.llm_provider, model=self.llm_model)
+        llm_response = await call_llm_api(prompt, provider=self.llm_provider, model=self.llm_model)
         logger.info(f"Agent '{self.agent_id}' - LLM response for gene population: {llm_response}")
 
-        if llm_response in LLM_API_ERROR_STRINGS or llm_response.startswith("GENERATION_STOPPED_"):
+        if llm_response in LLM_API_ERROR_STRINGS or (isinstance(llm_response, str) and llm_response.startswith("GENERATION_STOPPED_")):
             logger.error(f"Agent '{self.agent_id}': LLM API call failed for gene population: {llm_response}. Falling back.")
-            return self._fallback_populate_genes(template, parsed_requirements)
+            return await self._fallback_populate_genes(template, parsed_requirements) # Await if it becomes async
 
         try:
-            data = json.loads(llm_response)
-            if not isinstance(data, dict):
-                logger.warning("LLM response for gene population was not a JSON object. Using fallback.")
-                return self._fallback_populate_genes(template, parsed_requirements)
+            data = json.loads(llm_response) # This assumes llm_response is a string
+            if not isinstance(data, dict): # Should be list based on prompt example
+                logger.warning("LLM response for gene population was not a JSON object (expected list). Using fallback.")
+                return await self._fallback_populate_genes(template, parsed_requirements)
 
-            genes = data.get("genes")
-            if not isinstance(genes, list) or not genes: # Ensure genes is a non-empty list
-                logger.warning("LLM response for 'genes' was not a valid non-empty list. Using fallback.")
-                return self._fallback_populate_genes(template, parsed_requirements)
+            # The prompt asks for a list of strings, not a dict with a "genes" key.
+            # Assuming `data` is the list of genes itself.
+            if not isinstance(data, list) or not data or not all(isinstance(g, str) for g in data):
+                logger.warning("LLM response for 'genes' was not a valid non-empty list of strings. Using fallback.")
+                return await self._fallback_populate_genes(template, parsed_requirements)
 
-            logger.info(f"Agent '{self.agent_id}' - LLM populated genes: {genes}")
-            return genes
+            logger.info(f"Agent '{self.agent_id}' - LLM populated genes: {data}")
+            return data # Return the list directly
         except json.JSONDecodeError as e:
             logger.error(f"Agent '{self.agent_id}': Error decoding JSON from LLM for gene population: {e}. Falling back to basic population.", exc_info=True)
-            return self._fallback_populate_genes(template, parsed_requirements)
+            return await self._fallback_populate_genes(template, parsed_requirements)
         except Exception as e: # Catch other unexpected errors
             logger.error(f"Agent '{self.agent_id}': Unexpected error during gene population processing: {e}. Falling back to basic population.", exc_info=True)
-            return self._fallback_populate_genes(template, parsed_requirements)
+            return await self._fallback_populate_genes(template, parsed_requirements)
 
-    def _fallback_populate_genes(self, template: dict, parsed_requirements: dict) -> list:
+    async def _fallback_populate_genes(self, template: dict, parsed_requirements: dict) -> list: # Changed to async
         """ Fallback gene population logic if LLM fails. """
         genes = []
         genes.append(template["instruction"])
@@ -378,7 +379,7 @@ class PromptArchitectAgent(BaseAgent):
         # No specific exit log for _fallback_populate_genes as it's simple and the info log covers its output.
         return genes
 
-    def process_request(self, request_data: dict) -> PromptChromosome:
+    async def process_request(self, request_data: dict) -> PromptChromosome: # Changed to async
         """
         Designs an initial prompt structure (PromptChromosome) based on the request.
 
@@ -407,10 +408,10 @@ class PromptArchitectAgent(BaseAgent):
         constraints = request_data.get("constraints", {})
 
         # 1. Parse requirements (placeholder)
-        parsed_reqs = self._parse_requirements(task_desc, keywords, constraints)
+        parsed_reqs = await self._parse_requirements(task_desc, keywords, constraints)
 
         # 2. Select a template (placeholder)
-        template_name = self._select_template(parsed_reqs)
+        template_name = await self._select_template(parsed_reqs)
         selected_template = self.templates.get(template_name)
 
         if not selected_template:
@@ -422,7 +423,7 @@ class PromptArchitectAgent(BaseAgent):
             return PromptChromosome(genes=fallback_genes, fitness_score=0.0) # fitness_score set by evaluator
 
         # 3. Populate genes based on template and inputs (placeholder)
-        genes = self._populate_genes(selected_template, parsed_reqs)
+        genes = await self._populate_genes(selected_template, parsed_reqs)
         
         # Fitness score is typically not set by architect, but by evaluator later
         prompt_chromosome = PromptChromosome(genes=genes, fitness_score=0.0)

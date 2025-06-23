@@ -242,7 +242,7 @@ class MetaLearnerAgent(BaseAgent):
             self.data_log = []
 
 
-    def _analyze_evaluation_data(self, eval_data: dict):
+    async def _analyze_evaluation_data(self, eval_data: dict): # Changed to async
         prompt_chromosome = eval_data.get("prompt_chromosome")
         fitness_score = eval_data.get("fitness_score")
 
@@ -272,7 +272,7 @@ Example: ["Clear instruction segment", "Concise context", "Specific output forma
 If no clear patterns are identifiable, return an empty list.
 """
         try:
-            response_str = call_llm_api(llm_prompt, provider=self.llm_provider, model=self.llm_model)
+            response_str = await call_llm_api(llm_prompt, provider=self.llm_provider, model=self.llm_model) # Added await
             identified_features = self._parse_llm_list_response(response_str)
 
             if identified_features:
@@ -309,7 +309,7 @@ If no clear patterns are identifiable, return an empty list.
             self._update_knowledge_base("legacy_successful_patterns", pattern)
 
 
-    def _analyze_critique_data(self, critique_data: dict):
+    async def _analyze_critique_data(self, critique_data: dict): # Changed to async
         feedback_points = critique_data.get("feedback_points", [])
         metric_details = critique_data.get("metric_details")
         prompt_chromosome = critique_data.get("prompt_chromosome")
@@ -341,7 +341,7 @@ Example: ["Lack of clarity in instructions", "Overly complex context", "Missing 
 If no clear themes emerge, return an empty list.
 """
             try:
-                response_str = call_llm_api(llm_prompt, provider=self.llm_provider, model=self.llm_model)
+                response_str = await call_llm_api(llm_prompt, provider=self.llm_provider, model=self.llm_model) # Added await
                 identified_themes = self._parse_llm_list_response(response_str)
 
                 if identified_themes:
@@ -375,7 +375,7 @@ If no clear themes emerge, return an empty list.
                 logger.debug(f"Agent '{self.agent_id}': Updated legacy_common_pitfalls for theme '{theme}' to count {current_pitfalls[theme]}.")
 
 
-    def _identify_system_patterns(self):
+    async def _identify_system_patterns(self): # Changed to async
         logger.info(f"{self.agent_id} - LLM Identifying system patterns...")
         logger.info(f"Agent '{self.agent_id}': Identifying system patterns using LLM on qualitative data.")
         sample_successful_features = self.knowledge_base["successful_prompt_features"][-10:]
@@ -394,7 +394,7 @@ Return your analysis as a JSON list of strings. Example: ["System tends to gener
 If no clear patterns emerge, return an empty list.
 """
             try:
-                response_str = call_llm_api(llm_prompt, provider=self.llm_provider, model=self.llm_model)
+                response_str = await call_llm_api(llm_prompt, provider=self.llm_provider, model=self.llm_model) # Added await
                 identified_llm_trends = self._parse_llm_list_response(response_str)
                 if identified_llm_trends:
                     for trend in identified_llm_trends:
@@ -529,7 +529,7 @@ If no clear patterns emerge, return an empty list.
         return list(set(recommendations))
 
 
-    def process_request(self, request_data: dict) -> dict:
+    async def process_request(self, request_data: dict) -> dict: # Changed to async
         data_type = request_data.get("data_type")
         data = request_data.get("data")
         knowledge_updated = False
@@ -543,17 +543,17 @@ If no clear patterns emerge, return an empty list.
         knowledge_updated = True
 
         if data_type == "evaluation_result":
-            self._analyze_evaluation_data(data)
+            await self._analyze_evaluation_data(data) # Added await
             knowledge_updated = True
         elif data_type == "critique_result":
-            self._analyze_critique_data(data)
+            await self._analyze_critique_data(data) # Added await
             knowledge_updated = True
         else:
             logger.warning(f"Agent '{self.agent_id}': Unknown data_type '{data_type}'. Data logged but not specifically analyzed.")
 
         if len(self.data_log) % 3 == 0:
              logger.info(f"Agent '{self.agent_id}': Triggering system pattern identification (log size: {len(self.data_log)}).")
-             self._identify_system_patterns()
+             await self._identify_system_patterns() # Added await
              knowledge_updated = True
 
         if knowledge_updated and self.persist_on_update:

@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import patch, mock_open, MagicMock
 import os
 import json
+import asyncio # Added import
 from prompthelix.agents.meta_learner import MetaLearnerAgent
 from prompthelix.genetics.chromosome import PromptChromosome
 from prompthelix.config import AGENT_SETTINGS as GLOBAL_AGENT_SETTINGS, KNOWLEDGE_DIR # For easy access to structure
@@ -89,7 +90,7 @@ class TestMetaLearnerAgent(unittest.TestCase):
         with patch('prompthelix.agents.meta_learner.call_llm_api', return_value='["Effective instruction"]') as mock_llm:
             with patch.object(MetaLearnerAgent, 'save_knowledge') as mock_save:
                 initial_pattern_count = len(learner.knowledge_base["successful_prompt_features"])
-                result = learner.process_request(request_data)
+                result = asyncio.run(learner.process_request(request_data))
 
         self.assertEqual(result["status"], "Data processed successfully.")
         self.assertEqual(len(learner.knowledge_base["successful_prompt_features"]), initial_pattern_count + 1)
@@ -126,7 +127,7 @@ class TestMetaLearnerAgent(unittest.TestCase):
         # Mock LLM call for qualitative feedback analysis
         with patch('prompthelix.agents.meta_learner.call_llm_api', return_value='["Brevity concern theme"]') as mock_llm_qualitative:
             with patch.object(MetaLearnerAgent, 'save_knowledge') as mock_save:
-                result = learner.process_request(request_data)
+                result = asyncio.run(learner.process_request(request_data))
 
         self.assertEqual(result["status"], "Data processed successfully.")
 
@@ -168,7 +169,7 @@ class TestMetaLearnerAgent(unittest.TestCase):
 
         # Mock LLM for qualitative trend part of _identify_system_patterns to isolate statistical part
         with patch('prompthelix.agents.meta_learner.call_llm_api', return_value='["LLM trend from other data"]') as mock_llm_qual_trends:
-            learner._identify_system_patterns() # Call directly for focused test
+            asyncio.run(learner._identify_system_patterns()) # Call directly for focused test
 
         self.assertTrue(learner.knowledge_base["statistical_prompt_metric_trends"])
         found_clarity_trend = False
@@ -215,15 +216,15 @@ class TestMetaLearnerAgent(unittest.TestCase):
         with patch.object(MetaLearnerAgent, 'save_knowledge'): # Mock save
             prompt1 = PromptChromosome(genes=["P1 G1"])
             eval_data1 = {"prompt_chromosome": prompt1, "fitness_score": 0.8}
-            learner.process_request({"data_type": "evaluation_result", "data": eval_data1})
+            asyncio.run(learner.process_request({"data_type": "evaluation_result", "data": eval_data1}))
 
             critique_data1 = {"feedback_points": ["Legacy Pitfall: Too short"], "metric_details": {"clarity_score": 0.5}}
-            learner.process_request({"data_type": "critique_result", "data": critique_data1})
+            asyncio.run(learner.process_request({"data_type": "critique_result", "data": critique_data1}))
 
             prompt2 = PromptChromosome(genes=["P2 G1", "P2 G2"])
             eval_data2 = {"prompt_chromosome": prompt2, "fitness_score": 0.85}
             # This third call should trigger _identify_system_patterns
-            learner.process_request({"data_type": "evaluation_result", "data": eval_data2})
+            asyncio.run(learner.process_request({"data_type": "evaluation_result", "data": eval_data2}))
 
         # Check for LLM-derived qualitative trends
         self.assertTrue(any("LLM trend: Focus on X" in t.get("trend_description", "") for t in learner.knowledge_base["llm_identified_trends"]))
@@ -250,8 +251,8 @@ class TestMetaLearnerAgent(unittest.TestCase):
             # Potentially more if other analysis methods are called by _identify_system_patterns itself
         ]
         with patch.object(MetaLearnerAgent, 'save_knowledge'): # Mock save
-            learner.process_request({"data_type": "evaluation_result", "data": eval_data})
-            learner.process_request({"data_type": "critique_result", "data": critique_data}) # data_log len = 2, 1 metric_stat
+            asyncio.run(learner.process_request({"data_type": "evaluation_result", "data": eval_data}))
+            asyncio.run(learner.process_request({"data_type": "critique_result", "data": critique_data})) # data_log len = 2, 1 metric_stat
 
             # Add more metric stats to trigger statistical trend analysis for clarity
             for i in range(4):
@@ -265,7 +266,7 @@ class TestMetaLearnerAgent(unittest.TestCase):
             # Avg clarity: (0.3 + 0.2 + 0.25 + 0.3 + 0.35) / 5 = 1.4 / 5 = 0.28. This should be < 0.6.
 
             # This call makes data_log len = 3, triggering _identify_system_patterns
-            result = learner.process_request({"data_type": "evaluation_result", "data": eval_data})
+            result = asyncio.run(learner.process_request({"data_type": "evaluation_result", "data": eval_data}))
 
         self.assertIsInstance(result["recommendations"], list)
         self.assertTrue(result["recommendations"])
@@ -283,7 +284,7 @@ class TestMetaLearnerAgent(unittest.TestCase):
         request_data = {"data_type": "unknown_type", "data": {"info": "test"}}
 
         with patch.object(MetaLearnerAgent, 'save_knowledge') as mock_save:
-             result = learner.process_request(request_data)
+             result = asyncio.run(learner.process_request(request_data))
 
         self.assertEqual(result["status"], "Data processed successfully.")
         self.assertIsInstance(result["recommendations"], list)

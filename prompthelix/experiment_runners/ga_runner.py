@@ -236,20 +236,20 @@ class GeneticAlgorithmRunner(BaseExperimentRunner):
 
         return self.population_manager.get_fittest_individual() # Return the best one found
 
-    async def pause(self) -> None: # Changed to async def
+    async def pause(self) -> None:
         """Pauses the GA evolution by calling the PopulationManager's method."""
         logger.info("GeneticAlgorithmRunner: Received pause request.")
-        await self.population_manager.pause_evolution() # Added await
+        await self.population_manager.pause_evolution()
 
-    async def resume(self) -> None: # Changed to async def
+    async def resume(self) -> None:
         """Resumes the GA evolution by calling the PopulationManager's method."""
         logger.info("GeneticAlgorithmRunner: Received resume request.")
-        await self.population_manager.resume_evolution() # Added await
+        await self.population_manager.resume_evolution()
 
-    async def stop(self) -> None: # Changed to async def
+    async def stop(self) -> None:
         """Stops the GA evolution by calling the PopulationManager's method."""
         logger.info("GeneticAlgorithmRunner: Received stop request.")
-        await self.population_manager.stop_evolution() # Added await
+        await self.population_manager.stop_evolution()
 
     def get_status(self) -> Dict[str, Any]:
         """
