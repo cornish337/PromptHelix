@@ -288,7 +288,7 @@ class ResultsEvaluatorAgent(BaseAgent):
         logger.info(f"Agent '{self.agent_id}': Constraint check result - Metrics={metrics}, Errors#={len(errors)}")
         return {"metrics": metrics, "errors": errors}
 
-    def _analyze_content(self, llm_output: str, task_desc: str, prompt_chromosome: PromptChromosome, synthetic_input_context: Optional[str] = None) -> tuple[dict, list]:
+    async def _analyze_content(self, llm_output: str, task_desc: str, prompt_chromosome: PromptChromosome, synthetic_input_context: Optional[str] = None) -> tuple[dict, list]:
         """
         Analyzes LLM output content using another LLM for quality, relevance, coherence, etc.
         Falls back to placeholder values if LLM analysis fails.
