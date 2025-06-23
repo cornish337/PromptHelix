@@ -1,5 +1,5 @@
 from prompthelix.agents.base import BaseAgent
-from prompthelix.genetics.engine import PromptChromosome
+from prompthelix.genetics.chromosome import PromptChromosome # Updated import
 from prompthelix.utils.llm_utils import call_llm_api
 from prompthelix.evaluation import metrics as ph_metrics # Added import
 import random  # For placeholder metric generation
@@ -15,7 +15,13 @@ logger = logging.getLogger(__name__)
 # Default knowledge filename if nothing else is provided
 FALLBACK_LLM_PROVIDER = "openai"
 FALLBACK_EVAL_MODEL = "gpt-4"
-FALLBACK_FITNESS_WEIGHTS = {"constraint_adherence": 0.5, "llm_quality_assessment": 0.5}
+# Weights for calculating a prompt's overall fitness score if no
+# configuration is provided via settings or AGENT_SETTINGS.  These
+# values balance constraint adherence and LLM-assessed quality equally.
+FALLBACK_FITNESS_WEIGHTS = {
+    "constraint_adherence": 0.5,
+    "llm_quality_assessment": 0.5,
+}
 FALLBACK_KNOWLEDGE_FILE = "results_evaluator_config.json"
 
 
@@ -282,7 +288,7 @@ class ResultsEvaluatorAgent(BaseAgent):
         logger.info(f"Agent '{self.agent_id}': Constraint check result - Metrics={metrics}, Errors#={len(errors)}")
         return {"metrics": metrics, "errors": errors}
 
-    async def _analyze_content(self, llm_output: str, task_desc: str, prompt_chromosome: PromptChromosome) -> tuple[dict, list]:
+    def _analyze_content(self, llm_output: str, task_desc: str, prompt_chromosome: PromptChromosome, synthetic_input_context: Optional[str] = None) -> tuple[dict, list]:
         """
         Analyzes LLM output content using another LLM for quality, relevance, coherence, etc.
         Falls back to placeholder values if LLM analysis fails.
@@ -291,12 +297,13 @@ class ResultsEvaluatorAgent(BaseAgent):
             llm_output (str): The output from the LLM to be evaluated.
             task_desc (str): The original task description.
             prompt_chromosome (PromptChromosome): The prompt that generated the output.
+            synthetic_input_context (Optional[str]): Specific input scenario if this output is from a synthetic test.
 
         Returns:
             tuple[dict, list]: A tuple containing a dictionary of LLM-assessed content metrics
                                and a list of error/warning strings from the analysis.
         """
-        logger.info(f"Agent '{self.agent_id}': LLM Analyzing content for task: '{task_desc[:50]}...' using model {self.evaluation_llm_model}")
+        logger.info(f"Agent '{self.agent_id}': LLM Analyzing content for task: '{task_desc[:50]}...' using model {self.evaluation_llm_model}. Synthetic input context: {'Provided' if synthetic_input_context else 'None'}")
 
         # Defined error strings from llm_utils.py
         LLM_API_ERROR_STRINGS = {
@@ -318,7 +325,10 @@ Original Task Description:
 
 Prompt Used:
 {str(prompt_chromosome)}
-
+{f'''
+Input Scenario Context (for this specific output):
+{synthetic_input_context}
+''' if synthetic_input_context else ""}
 Generated Output:
 {llm_output}
 
@@ -349,7 +359,7 @@ Example:
 
         # Pass self.db if available and needed by call_llm_api. Assuming self.db might be None.
         # call_llm_api is designed to handle db=None.
-        response_str = await call_llm_api(prompt_str_for_llm, provider=self.llm_provider, model=self.evaluation_llm_model, db=self.db)
+        response_str = call_llm_api(prompt_str_for_llm, provider=self.llm_provider, model=self.evaluation_llm_model, db=self.db)
 
         if response_str in LLM_API_ERROR_STRINGS:
             logger.warning(f"Agent '{self.agent_id}': LLM call for content analysis failed with error code: {response_str}. Using fallback metrics.")
@@ -418,7 +428,7 @@ Example:
 
         return llm_derived_metrics, errors
 
-    async def process_request(self, request_data: dict) -> dict:
+    async def process_request(self, request_data: dict) -> dict: # Changed to async def
         """
         Evaluates the LLM output for a given prompt, primarily using another LLM for content analysis.
 
@@ -461,8 +471,10 @@ Example:
         constraint_feedback = self._check_constraints(llm_output, success_criteria)
         errors.extend(constraint_feedback.get("errors", [])) # Constraint violations are added to 'errors'
         metrics.update(constraint_feedback.get("metrics", {}))
+
+        synthetic_input_context = request_data.get("synthetic_input_context") # Get from request
         
-        content_metrics, content_errors = await self._analyze_content(llm_output, task_desc, prompt_chromosome)
+        content_metrics, content_errors = self._analyze_content(llm_output, task_desc, prompt_chromosome, synthetic_input_context) # Pass to analyzer
         metrics.update(content_metrics)
         errors.extend(content_errors) # Errors from the LLM analysis process itself
         
@@ -502,11 +514,27 @@ Example:
 
         # Broadcast the evaluation result if a bus is available
         if self.message_bus:
-            try:
-                loop = asyncio.get_running_loop()
-                loop.create_task(self.message_bus.broadcast_message("evaluation_result", result, sender_id=self.agent_id))
-            except RuntimeError:
-                asyncio.run(self.message_bus.broadcast_message("evaluation_result", result, sender_id=self.agent_id))
+            # asyncio.run(self.message_bus.broadcast_message("evaluation_result", result, sender_id=self.agent_id))
+            # This method (process_request) itself needs to be async to use await here.
+            # For now, if message_bus.broadcast_message is async, this will cause issues
+            # or require process_request to become async.
+            # Assuming for a moment that broadcast_message can be called synchronously or handles its own loop.
+            # If broadcast_message is truly async and needs awaiting, this whole chain needs to be async.
+            # Based on the RuntimeError, broadcast_message is likely async and needs await.
+            # This implies process_request should be async.
+            # However, directly changing it here without changing callers will break things.
+            # The error "asyncio.run() cannot be called from a running event loop"
+            # means this process_request is being called from within an existing asyncio.run() context (likely from cli.py -> orchestrator.py)
+            # So, the asyncio.run() here is the problem.
+            # The correct fix is to make this method async and use await, and ensure its callers also await it.
+            # This change is made in the next step, for now removing the problematic asyncio.run()
+            # and assuming that the caller will handle the async nature if broadcast_message is async.
+            # For the immediate fix of the "nested asyncio.run()" error:
+            # If self.message_bus.broadcast_message is async, this needs to be:
+            # await self.message_bus.broadcast_message("evaluation_result", result, sender_id=self.agent_id)
+            # And this method (process_request) must be `async def`.
+            # Let's make that change now.
+            await self.message_bus.broadcast_message("evaluation_result", result, sender_id=self.agent_id)
 
         # Debug logging before returning
         logger.info(f"REA.process_request: Type of prompt_chromosome input: {type(request_data.get('prompt_chromosome'))}")

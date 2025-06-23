@@ -1,11 +1,12 @@
 from prompthelix.agents.base import BaseAgent
-from prompthelix.genetics.engine import PromptChromosome
-from prompthelix.utils.llm_utils import call_llm_api
+from prompthelix.genetics.chromosome import PromptChromosome # Updated import
+from prompthelix.utils.llm_utils import call_llm_api # Removed LLMProvider
 from prompthelix.config import AGENT_SETTINGS, KNOWLEDGE_DIR # Keep KNOWLEDGE_DIR for default path construction
 import os
 import json
 import logging
 from typing import Optional, Dict # Added for type hinting
+import random # Added for fallback gene population
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +15,20 @@ FALLBACK_LLM_PROVIDER = "openai"
 FALLBACK_LLM_MODEL = "gpt-3.5-turbo"
 FALLBACK_KNOWLEDGE_FILE = "architect_knowledge.json"
 
+# Known error strings from llm_utils.py
+LLM_API_ERROR_STRINGS = {
+    "API_KEY_MISSING_ERROR", "RATE_LIMIT_ERROR", "AUTHENTICATION_ERROR",
+    "API_CONNECTION_ERROR", "INVALID_REQUEST_ERROR", "API_ERROR", "OPENAI_ERROR",
+    "UNEXPECTED_OPENAI_CALL_ERROR", "ANTHROPIC_ERROR", "API_STATUS_ERROR",
+    "UNEXPECTED_ANTHROPIC_CALL_ERROR", "MALFORMED_CLAUDE_RESPONSE_CONTENT",
+    "EMPTY_CLAUDE_RESPONSE", "GOOGLE_SDK_ERROR", "UNEXPECTED_GOOGLE_CALL_ERROR",
+    "BLOCKED_PROMPT_ERROR", "API_SERVER_ERROR", "EMPTY_GOOGLE_RESPONSE",
+    "INVALID_ARGUMENT_ERROR", "UNSUPPORTED_PROVIDER_ERROR",
+    "GENERATION_STOPPED_SAFETY", "GENERATION_STOPPED_RECITATION", # Common Google stop reasons
+    "UNEXPECTED_CALL_LLM_API_ERROR" # General fallback from call_llm_api
+}
+# Add any specific "GENERATION_STOPPED_*" error prefixes if needed, or handle with startswith
+# For now, direct known strings are listed.
 
 class PromptArchitectAgent(BaseAgent):
     # agent_id class variable can serve as a default if not overridden by pipeline config.
@@ -120,17 +135,9 @@ class PromptArchitectAgent(BaseAgent):
                 f"Agent '{self.agent_id}': Error decoding JSON from '{self.knowledge_file_path}': {e}. Using default templates.",
                 exc_info=True,
             )
-            logging.error(
-                f"Agent '{self.agent_id}': Error decoding JSON from '{self.knowledge_file_path}': {e}. Using default templates.",
-                exc_info=True,
-            )
             self.templates = self._get_default_templates()
         except Exception as e:
             logger.error(
-                f"Agent '{self.agent_id}': Failed to load templates from '{self.knowledge_file_path}': {e}. Using default templates.",
-                exc_info=True,
-            )
-            logging.error(
                 f"Agent '{self.agent_id}': Failed to load templates from '{self.knowledge_file_path}': {e}. Using default templates.",
                 exc_info=True,
             )
@@ -159,39 +166,57 @@ class PromptArchitectAgent(BaseAgent):
         Returns:
             dict: A dictionary of parsed requirements.
         """
-        print(f"{self.agent_id} - Parsing requirements using LLM: Task='{task_desc}', Keywords='{keywords}', Constraints='{constraints}'")
+        logger.debug(f"Agent '{self.agent_id}': Entering _parse_requirements with task_desc: '{task_desc}', keywords: {keywords}, constraints: {constraints}")
 
-        prompt = f"""
-        Parse the following task requirements into JSON with keys 'task_description', 'keywords', and 'constraints'.
-        Task Description: "{task_desc}"
-        Keywords: {keywords}
-        Constraints: {constraints}
-
-        Respond ONLY with valid JSON.
-        """
         try:
-            response = call_llm_api(prompt, provider=self.llm_provider, model=self.llm_model)
-            # Basic parsing of a stringified JSON-like response (placeholder)
-            # In a robust implementation, ensure the LLM is prompted for valid JSON
-            logger.info(f"Agent '{self.agent_id}' - LLM response for parsing: {response}")
-            data = json.loads(response)
-            if not isinstance(data, dict):
-                raise ValueError("LLM response for requirements is not a JSON object")
+            prompt = f"""
+            Parse the following task requirements into JSON with keys 'task_description', 'keywords', and 'constraints'.
+            Task Description: "{task_desc}"
+            Keywords: {keywords}
+            Constraints: {constraints}
 
-            return {
+            Respond ONLY with valid JSON.
+            """
+            response = call_llm_api(prompt, provider=self.llm_provider, model=self.llm_model)
+            logger.info(f"Agent '{self.agent_id}' - LLM response for parsing: {response}")
+
+            if response in LLM_API_ERROR_STRINGS or response.startswith("GENERATION_STOPPED_"):
+                logger.error(f"Agent '{self.agent_id}': LLM API call failed for parsing requirements: {response}. Using fallback.")
+                return {
+                    "task_description": task_desc if task_desc else "Default task description",
+                    "keywords": keywords,
+                    "constraints": constraints,
+                    "error": f"LLM API Error: {response}"
+                }
+
+            data = json.loads(response) # This can raise JSONDecodeError
+            if not isinstance(data, dict):
+                logger.warning("LLM response for requirements was not a JSON object. Using fallback.")
+                return {
+                    "task_description": task_desc if task_desc else "Default task description",
+                    "keywords": keywords,
+                    "constraints": constraints,
+                    "error": "LLM response not a JSON object"
+                }
+
+            result = {
                 "task_description": data.get("task_description", task_desc if task_desc else "Default task description"),
                 "keywords": data.get("keywords", keywords),
                 "constraints": data.get("constraints", constraints),
             }
-        except Exception as e:
-            logger.error(f"Agent '{self.agent_id}': Error calling LLM for parsing requirements: {e}", exc_info=True)
-            # Fallback to simpler parsing if LLM call fails
-            return {
+            logger.debug(f"Agent '{self.agent_id}': Exiting _parse_requirements with result: {result}")
+            return result
+        except Exception as e: # Catches errors from call_llm_api, json.loads, or other issues
+            logger.error(f"Agent '{self.agent_id}': Error during LLM call or processing for parsing requirements: {e}", exc_info=True)
+            # Fallback logic
+            fallback_result = {
                 "task_description": task_desc if task_desc else "Default task description",
                 "keywords": keywords,
                 "constraints": constraints,
-                "error": str(e)
+                "error": str(e) # Include the error message in the fallback
             }
+            logger.debug(f"Agent '{self.agent_id}': Exiting _parse_requirements with fallback error result: {fallback_result}")
+            return fallback_result
 
     def _select_template(self, parsed_requirements: dict) -> str:
         """
@@ -203,31 +228,36 @@ class PromptArchitectAgent(BaseAgent):
         Returns:
             str: The name of the selected template.
         """
+        logger.debug(f"Agent '{self.agent_id}': Entering _select_template with parsed_requirements: {parsed_requirements}")
         task_desc = parsed_requirements.get("task_description", "")
         available_templates = list(self.templates.keys())
 
-        prompt = f"""
-        Given the task description: "{task_desc}"
-        And available prompt templates: {available_templates}
-        Which template is most suitable for this task?
-        Respond with only the name of the template (e.g., "summary_v1").
-        """
         try:
+            prompt = f"""
+            Given the task description: "{task_desc}"
+            And available prompt templates: {available_templates}
+            Which template is most suitable for this task?
+            Respond with only the name of the template (e.g., "summary_v1").
+            """
             llm_response = call_llm_api(prompt, provider=self.llm_provider, model=self.llm_model)
-            data = json.loads(llm_response)
-            if not isinstance(data, dict):
-                raise ValueError("LLM response for template selection is not a JSON object")
+            logger.info(f"Agent '{self.agent_id}' - LLM response for template selection: {llm_response}")
 
-            selected_template_name = data.get("template") or data.get("template_name")
+            if llm_response in LLM_API_ERROR_STRINGS or llm_response.startswith("GENERATION_STOPPED_"):
+                logger.error(f"Agent '{self.agent_id}': LLM API call returned an error string for template selection: {llm_response}. Using fallback.")
+                return self._fallback_select_template(parsed_requirements)
+
+            # If LLM directly returns the template name as a string:
+            selected_template_name = llm_response.strip().strip('"')
+
             if selected_template_name in self.templates:
                 logger.info(f"Agent '{self.agent_id}' - LLM selected template: {selected_template_name}")
                 return selected_template_name
             else:
-                logger.warning(f"Agent '{self.agent_id}' - LLM returned invalid template '{selected_template_name}'. Falling back.")
+                logger.warning(f"Agent '{self.agent_id}' - LLM returned invalid or unknown template name '{selected_template_name}'. Falling back.")
                 return self._fallback_select_template(parsed_requirements)
-        except Exception as e:
-            logger.error(f"Agent '{self.agent_id}': Error calling LLM for template selection: {e}", exc_info=True)
-            # Fallback logic (same as original)
+
+        except Exception as e: # Catches errors from call_llm_api or other unexpected issues
+            logger.error(f"Agent '{self.agent_id}': Error during LLM call or processing for template selection: {e}. Using fallback.", exc_info=True)
             return self._fallback_select_template(parsed_requirements)
 
     def _fallback_select_template(self, parsed_requirements: dict) -> str:
@@ -255,6 +285,7 @@ class PromptArchitectAgent(BaseAgent):
         Returns:
             list: A list of gene strings for the PromptChromosome.
         """
+        logger.debug(f"Agent '{self.agent_id}': Entering _populate_genes with template: {template}, parsed_requirements: {parsed_requirements}")
         task_desc = parsed_requirements.get("task_description", "N/A")
         keywords = parsed_requirements.get("keywords", [])
         constraints = parsed_requirements.get("constraints", {})
@@ -282,23 +313,31 @@ class PromptArchitectAgent(BaseAgent):
             "Output Format: A short paragraph."
         ]
         """
-        try:
-            llm_response = call_llm_api(prompt, provider=self.llm_provider, model=self.llm_model)
-            logger.info(f"Agent '{self.agent_id}' - LLM response for gene population: {llm_response}")
+        llm_response = call_llm_api(prompt, provider=self.llm_provider, model=self.llm_model)
+        logger.info(f"Agent '{self.agent_id}' - LLM response for gene population: {llm_response}")
 
+        if llm_response in LLM_API_ERROR_STRINGS or llm_response.startswith("GENERATION_STOPPED_"):
+            logger.error(f"Agent '{self.agent_id}': LLM API call failed for gene population: {llm_response}. Falling back.")
+            return self._fallback_populate_genes(template, parsed_requirements)
+
+        try:
             data = json.loads(llm_response)
             if not isinstance(data, dict):
-                raise ValueError("LLM response for gene population is not a JSON object")
+                logger.warning("LLM response for gene population was not a JSON object. Using fallback.")
+                return self._fallback_populate_genes(template, parsed_requirements)
 
             genes = data.get("genes")
-            if not isinstance(genes, list) or not genes:
-                raise ValueError("LLM returned invalid gene list")
+            if not isinstance(genes, list) or not genes: # Ensure genes is a non-empty list
+                logger.warning("LLM response for 'genes' was not a valid non-empty list. Using fallback.")
+                return self._fallback_populate_genes(template, parsed_requirements)
 
             logger.info(f"Agent '{self.agent_id}' - LLM populated genes: {genes}")
             return genes
-        except Exception as e:
-            logger.error(f"Agent '{self.agent_id}': Error calling LLM for gene population: {e}. Falling back to basic population.", exc_info=True)
-            # Fallback to original simpler gene population
+        except json.JSONDecodeError as e:
+            logger.error(f"Agent '{self.agent_id}': Error decoding JSON from LLM for gene population: {e}. Falling back to basic population.", exc_info=True)
+            return self._fallback_populate_genes(template, parsed_requirements)
+        except Exception as e: # Catch other unexpected errors
+            logger.error(f"Agent '{self.agent_id}': Unexpected error during gene population processing: {e}. Falling back to basic population.", exc_info=True)
             return self._fallback_populate_genes(template, parsed_requirements)
 
     def _fallback_populate_genes(self, template: dict, parsed_requirements: dict) -> list:
@@ -336,6 +375,7 @@ class PromptArchitectAgent(BaseAgent):
         genes.append(f"Output Format: {template['output_format']}")
         
         logger.info(f"Agent '{self.agent_id}' - Fallback populated genes: {genes}")
+        # No specific exit log for _fallback_populate_genes as it's simple and the info log covers its output.
         return genes
 
     def process_request(self, request_data: dict) -> PromptChromosome:
@@ -358,7 +398,8 @@ class PromptArchitectAgent(BaseAgent):
         Returns:
             PromptChromosome: An initial prompt chromosome.
         """
-        logger.info(f"Agent '{self.agent_id}' processing request: {request_data}")
+        logger.debug(f"Agent '{self.agent_id}': Entering process_request with request_data: {request_data}")
+        logger.info(f"Agent '{self.agent_id}' processing request for task: '{request_data.get('task_description', 'N/A')}'")
 
         
         task_desc = request_data.get("task_description", "Default task description")
@@ -384,8 +425,8 @@ class PromptArchitectAgent(BaseAgent):
         genes = self._populate_genes(selected_template, parsed_reqs)
         
         # Fitness score is typically not set by architect, but by evaluator later
-        prompt_chromosome = PromptChromosome(genes=genes, fitness_score=0.0) 
+        prompt_chromosome = PromptChromosome(genes=genes, fitness_score=0.0)
         
-        logger.info(f"Agent '{self.agent_id}' - Created PromptChromosome: {str(prompt_chromosome)}")
+        logger.info(f"Agent '{self.agent_id}' - Created PromptChromosome with ID: {prompt_chromosome.id} and genes: {prompt_chromosome.genes}")
+        logger.debug(f"Agent '{self.agent_id}': Exiting process_request with prompt_chromosome: {str(prompt_chromosome)}")
         return prompt_chromosome
-

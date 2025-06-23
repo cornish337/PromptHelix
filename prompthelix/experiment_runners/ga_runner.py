@@ -42,7 +42,7 @@ class GeneticAlgorithmRunner(BaseExperimentRunner):
     Runs a genetic algorithm experiment for a specified number of generations.
     """
 
-    def __init__(self, population_manager: PopulationManager, num_generations: int, save_frequency: int = 0):
+    def __init__(self, population_manager: PopulationManager, num_generations: int, save_frequency: int = 0, population_persistence_path: Optional[str] = None):
         """
         Initializes the GeneticAlgorithmRunner.
 
@@ -51,6 +51,7 @@ class GeneticAlgorithmRunner(BaseExperimentRunner):
             num_generations: The total number of generations to run.
             save_frequency: How often (in generations) to save the population.
                             0 means disabled.
+            population_persistence_path: Optional path to save the population.
         """
         if not isinstance(population_manager, PopulationManager):
             raise TypeError("population_manager must be an instance of PopulationManager.")
@@ -60,18 +61,19 @@ class GeneticAlgorithmRunner(BaseExperimentRunner):
         self.population_manager = population_manager
         self.num_generations = num_generations
         self.save_frequency = save_frequency
+        self.population_persistence_path = population_persistence_path
         self.current_generation = 0 # Track current generation internally
         self._db_session = None
         self._experiment_run = None
         logger.info(
             f"GeneticAlgorithmRunner initialized for {num_generations} generations "
-            f"with save frequency {save_frequency}, "
+            f"with save frequency {save_frequency}, population path {self.population_persistence_path}, "
             f"with PopulationManager (ID: {id(population_manager)})"
         )
         ph_globals.active_ga_runner = self
         logger.info(f"GeneticAlgorithmRunner instance {id(self)} registered as active_ga_runner.")
 
-    async def run(self, **kwargs) -> Optional[PromptChromosome]:
+    async def run(self, **kwargs) -> Optional[PromptChromosome]: # Changed to async def
         """
         Executes the genetic algorithm for the specified number of generations.
 
@@ -103,13 +105,24 @@ class GeneticAlgorithmRunner(BaseExperimentRunner):
             "num_generations": self.num_generations,
             "population_size": self.population_manager.population_size,
             "elitism_count": self.population_manager.elitism_count,
-            "run_kwargs": kwargs,
+            "run_kwargs": kwargs, # Storing kwargs for potential later inspection or full parameter logging
         }
         self._experiment_run = create_experiment_run(
-            self._db_session, parameters=experiment_parameters
+            self._db_session, parameters=experiment_parameters # Pass experiment_parameters, not just kwargs
         )
-        self.population_manager.status = "RUNNING"  # Ensure status is RUNNING at start
-        self.population_manager.broadcast_ga_update(event_type="ga_run_started_runner")
+        # Ensure experiment_run object and its ID are available
+        if not self._experiment_run or not hasattr(self._experiment_run, 'id'):
+            logger.error("GeneticAlgorithmRunner: Failed to create or retrieve experiment run ID from database.")
+            # Handle error appropriately, e.g., raise an exception or stop execution
+            # For now, let's log and attempt to continue, but run_id will be None.
+            # This situation should ideally not occur if DB operations are successful.
+            self.population_manager.run_id = None # Explicitly set to None
+        else:
+            self.population_manager.run_id = self._experiment_run.id # Set run_id on PopulationManager
+            logger.info(f"GeneticAlgorithmRunner: Experiment run created with ID: {self._experiment_run.id}. Propagated to PopulationManager.")
+
+        self.population_manager.status = "RUNNING"
+        await self.population_manager.broadcast_ga_update(event_type="ga_run_started_runner")
 
         # Extract GA evolution parameters from kwargs
         task_description = kwargs.get("task_description")
@@ -129,26 +142,26 @@ class GeneticAlgorithmRunner(BaseExperimentRunner):
                 if self.population_manager.should_stop:
                     logger.info(f"GeneticAlgorithmRunner: Stop signal received before Generation {self.current_generation}. Stopping run.")
                     self.population_manager.status = "STOPPED"
-                    self.population_manager.broadcast_ga_update(event_type="ga_run_stopped_runner_signal")
+                    await self.population_manager.broadcast_ga_update(event_type="ga_run_stopped_runner_signal") # Added await
                     break
 
                 # evolve_population itself checks for pause/stop and updates status
                 await self.population_manager.evolve_population( # Added await
                     task_description=task_description,
                     success_criteria=success_criteria,
-                    # target_style=target_style, # target_style is not used by current evolve_population
+                    target_style=target_style,
                     db_session=self._db_session,
                     experiment_run=self._experiment_run,
                 )
 
                 # Periodic saving of the population
                 if self.save_frequency > 0 and \
-                   self.population_manager.population_path and \
+                   self.population_persistence_path and \
                    self.population_manager.generation_number > 0 and \
                    self.population_manager.generation_number % self.save_frequency == 0:
                     try:
-                        self.population_manager.save_population(self.population_manager.population_path)
-                        logger.info(f"Periodically saved population at generation {self.population_manager.generation_number} to {self.population_manager.population_path}")
+                        self.population_manager.save_population(self.population_persistence_path)
+                        logger.info(f"Periodically saved population at generation {self.population_manager.generation_number} to {self.population_persistence_path}")
                     except Exception as e:
                         logger.error(f"Error during periodic save of population at generation {self.population_manager.generation_number}: {e}", exc_info=True)
 
@@ -173,7 +186,7 @@ class GeneticAlgorithmRunner(BaseExperimentRunner):
                 if self.population_manager.should_stop and self.population_manager.status != "STOPPED":
                     logger.info(f"GeneticAlgorithmRunner: Stop signal detected after Generation {self.current_generation}. Loop will terminate.")
                     self.population_manager.status = "STOPPED" # Ensure status is updated if not already
-                    self.population_manager.broadcast_ga_update(event_type="ga_run_stopped_runner_post_gen")
+                    await self.population_manager.broadcast_ga_update(event_type="ga_run_stopped_runner_post_gen") # Added await
 
 
             # After the loop
@@ -181,12 +194,12 @@ class GeneticAlgorithmRunner(BaseExperimentRunner):
                 if self.current_generation >= self.num_generations and not self.population_manager.should_stop:
                     logger.info(f"GeneticAlgorithmRunner: Completed all {self.num_generations} generations.")
                     self.population_manager.status = "COMPLETED"
-                    self.population_manager.broadcast_ga_update(event_type="ga_run_completed_runner")
+                    await self.population_manager.broadcast_ga_update(event_type="ga_run_completed_runner") # Added await
                 elif self.population_manager.should_stop: # Should have been caught by loop breaks
                     logger.info("GeneticAlgorithmRunner: Run ended due to stop signal (final check).")
                     if self.population_manager.status != "STOPPED": # Defensive
                          self.population_manager.status = "STOPPED"
-                         self.population_manager.broadcast_ga_update(event_type="ga_run_stopped_runner_final_check")
+                         await self.population_manager.broadcast_ga_update(event_type="ga_run_stopped_runner_final_check") # Added await
                 else:
                     # Unclear state, perhaps num_generations was 0 or loop exited unexpectedly
                     logger.warning(f"GeneticAlgorithmRunner: Loop finished, but status is '{self.population_manager.status}'. Generations run: {self.current_generation}/{self.num_generations}.")
@@ -197,7 +210,7 @@ class GeneticAlgorithmRunner(BaseExperimentRunner):
         except Exception as e:
             logger.error(f"GeneticAlgorithmRunner: An error occurred during the run: {e}", exc_info=True)
             self.population_manager.status = "ERROR"
-            self.population_manager.broadcast_ga_update(event_type="ga_run_error_runner", additional_data={"error": str(e)})
+            await self.population_manager.broadcast_ga_update(event_type="ga_run_error_runner", additional_data={"error": str(e)}) # Added await
             # Re-raise the exception so the caller (orchestrator) is aware
             raise
         finally:
@@ -223,20 +236,20 @@ class GeneticAlgorithmRunner(BaseExperimentRunner):
 
         return self.population_manager.get_fittest_individual() # Return the best one found
 
-    def pause(self) -> None:
+    async def pause(self) -> None: # Changed to async def
         """Pauses the GA evolution by calling the PopulationManager's method."""
         logger.info("GeneticAlgorithmRunner: Received pause request.")
-        self.population_manager.pause_evolution()
+        await self.population_manager.pause_evolution() # Added await
 
-    def resume(self) -> None:
+    async def resume(self) -> None: # Changed to async def
         """Resumes the GA evolution by calling the PopulationManager's method."""
         logger.info("GeneticAlgorithmRunner: Received resume request.")
-        self.population_manager.resume_evolution()
+        await self.population_manager.resume_evolution() # Added await
 
-    def stop(self) -> None:
+    async def stop(self) -> None: # Changed to async def
         """Stops the GA evolution by calling the PopulationManager's method."""
         logger.info("GeneticAlgorithmRunner: Received stop request.")
-        self.population_manager.stop_evolution()
+        await self.population_manager.stop_evolution() # Added await
 
     def get_status(self) -> Dict[str, Any]:
         """

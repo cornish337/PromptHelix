@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch # Added import
 from prompthelix.agents.style_optimizer import StyleOptimizerAgent
-from prompthelix.genetics.engine import PromptChromosome
+from prompthelix.genetics.chromosome import PromptChromosome
 
 class TestStyleOptimizerAgent(unittest.TestCase):
     """Test suite for the StyleOptimizerAgent."""

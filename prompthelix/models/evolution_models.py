@@ -62,3 +62,20 @@ class GAGenerationMetrics(Base):
 
     run = relationship("GAExperimentRun")
 
+
+class UserFeedback(Base):
+    __tablename__ = "user_feedback"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    ga_run_id = Column(Integer, ForeignKey("ga_experiment_runs.id"), nullable=True)
+    # Assuming ga_chromosomes.id is a UUID stored as a string
+    chromosome_id_str = Column(String, nullable=True)
+    prompt_content_snapshot = Column(String, nullable=False) # Storing the actual prompt text
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True) # Assuming a users table
+    rating = Column(Integer, nullable=False) # e.g., 1-5
+    feedback_text = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships (optional, but good practice)
+    run = relationship("GAExperimentRun") # If ga_run_id is not null
+    # user = relationship("User") # If you have a User model and want to link back

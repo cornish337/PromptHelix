@@ -1,59 +1,50 @@
-import builtins
 import importlib
 import sys
 import unittest
+import logging
+# Removed builtins import as we'll use sys.modules manipulation
+
+# Import the module that contains textstat so we can reload it.
+from prompthelix.evaluation import metrics as evaluation_metrics_module
 
 class TestMetricsFallback(unittest.TestCase):
+
     def setUp(self):
-        self.real_import = builtins.__import__
+        self.metrics_module_name = 'prompthelix.evaluation.metrics' # Used for logging
+        self.textstat_module_name = 'textstat'
 
-        def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
-            if name == "textstat":
-                raise ImportError("No textstat")
-            return self.real_import(name, globals, locals, fromlist, level)
+        # Store original textstat if it's already loaded
+        self.original_textstat_module = sys.modules.get(self.textstat_module_name)
 
-        builtins.__import__ = fake_import
+        # Ensure textstat is not in sys.modules to simulate ImportError on next import/reload
+        if self.textstat_module_name in sys.modules:
+            del sys.modules[self.textstat_module_name]
 
-        # Ensure a clean import state for the metrics module and textstat
-        if 'prompthelix.evaluation.metrics' in sys.modules:
-            del sys.modules['prompthelix.evaluation.metrics']
-        if 'textstat' in sys.modules:
-            del sys.modules['textstat']
-
-        # Import the module; it will be processed by fake_import
-        from prompthelix.evaluation import metrics as freshly_imported_metrics
-
-        # No real need to reload again if it's freshly imported after fake_import is set up.
-        # The import itself will trigger the textstat import attempt.
-        self.metrics = freshly_imported_metrics
+        # Reload the metrics module. During this reload, 'import textstat' should fail.
+        # The try-except block within metrics.py should then set its local 'textstat' to None.
+        importlib.reload(evaluation_metrics_module)
+        self.metrics = evaluation_metrics_module
 
     def tearDown(self):
-        builtins.__import__ = self.real_import
+        # Restore textstat to sys.modules if it was originally there
+        if self.original_textstat_module is not None:
+            sys.modules[self.textstat_module_name] = self.original_textstat_module
+        elif self.textstat_module_name in sys.modules: # If it somehow got added back during test (shouldn't happen)
+            del sys.modules[self.textstat_module_name]
 
-        module_name = 'prompthelix.evaluation.metrics'
-
-        # Remove the module that might have been affected by fake_import
-        if module_name in sys.modules:
-            del sys.modules[module_name]
-
-        # Import it fresh using the original import mechanism
-        # This ensures it's available for other tests in a clean state
-        import prompthelix.evaluation.metrics
-
-        # Reload it to be absolutely sure it's initialized correctly,
-        # as just importing might return the version from before del if not careful,
-        # though del then import should be clean. Reload is for safety.
-        if module_name in sys.modules:
-            # Get the definitive reference from sys.modules after import
-            module_to_reload = sys.modules[module_name]
-            importlib.reload(module_to_reload)
-        else:
-            # This would be unexpected if the import above worked
-            logging.warning(f"Module {module_name} was not found in sys.modules after attempting re-import in tearDown.")
+        # Reload the metrics module again to ensure it's in a clean state for other tests
+        # (textstat should now import successfully if it's installed in the environment)
+        try:
+            importlib.reload(evaluation_metrics_module)
+        except ImportError: # pragma: no cover
+            # This might happen if textstat was never installed and self.original_textstat_module was None
+            logging.warning(f"Could not reload {self.metrics_module_name} in tearDown, possibly textstat is not installed.")
 
 
     def test_fallback_metrics(self):
-        self.assertIsNone(self.metrics.textstat)
+        # After reload in setUp, evaluation_metrics_module.textstat should be None
+        self.assertIsNone(self.metrics.textstat,
+                          f"self.metrics.textstat should be None after simulating ImportError. Value: {self.metrics.textstat}")
         clarity = self.metrics.calculate_clarity_score("A simple sentence.")
         specificity = self.metrics.calculate_specificity_score("Explain quantum mechanics.")
         self.assertIsInstance(clarity, float)
