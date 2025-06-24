@@ -4,6 +4,31 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session as SQLAlchemySession # Renamed for clarity
 from sqlalchemy.pool import StaticPool # Import StaticPool
 from fastapi.testclient import TestClient
+from prompthelix.logging_config import setup_logging
+
+# Ensure logging is configured for tests
+setup_logging()
+
+
+@pytest.fixture(autouse=True)
+def mock_llm_api(monkeypatch):
+    """Return a constant response for all llm_api calls during tests."""
+
+    def _mock_call(*args, **kwargs):
+        return "MOCK_RESPONSE"
+
+    # Patch the central utility
+    monkeypatch.setattr("prompthelix.utils.llm_utils.call_llm_api", _mock_call)
+
+    # Also patch already-imported agent modules
+    modules = [
+        "prompthelix.agents.architect",
+        "prompthelix.agents.domain_expert",
+        "prompthelix.agents.results_evaluator",
+        "prompthelix.agents.style_optimizer",
+    ]
+    for mod in modules:
+        monkeypatch.setattr(f"{mod}.call_llm_api", _mock_call, raising=False)
 
 # Import Base and all models to ensure they are registered with Base.metadata
 from prompthelix.models.base import Base

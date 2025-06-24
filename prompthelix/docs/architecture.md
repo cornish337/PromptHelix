@@ -325,6 +325,6 @@ This provides a high-level map to the project's main directories:
     *   `tests/`: Automated tests (unit, integration, interactive).
     *   `utils/`: Shared utility functions (e.g., LLM interaction, config utilities, logging helpers).
     *   `__init__.py`, `main.py`, `cli.py`, `config.py`, `database.py`, `orchestrator.py`, etc.: Core application files.
-*   `tests/`: An older/alternative top-level test directory (most tests seem to be under `prompthelix/tests/`). This might need consolidation or clarification.
+*   `tests/`: *(removed)* Older top-level test directory. All tests now live under `prompthelix/tests/`.
 *   `.github/`: GitHub-specific files, like workflow configurations for CI/CD.
 *   Root directory: Contains files like `Dockerfile`, `docker-compose.yaml`, `requirements.txt`, `README.md`, `LICENSE`.
