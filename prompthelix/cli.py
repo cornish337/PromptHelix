@@ -190,50 +190,25 @@ def main_cli():
                 )
                 print(f"Project root detected as: {project_root}", file=sys.stderr)
                 print(f"Current __file__ is: {__file__}", file=sys.stderr)
-                # Fallback if the structure is different, e.g., /app/tests
-                alt_start_dir = (
-                    os.path.join(project_root, "tests", "interactive")
-                    if args.interactive
-                    else os.path.join(project_root, "tests")
-                )
-                if os.path.isdir(alt_start_dir):
-                    start_dir = alt_start_dir
-                else:
-                    # If the cli.py is not where we think, this might also be problematic.
-                    # For `python -m prompthelix.cli`, CWD is usually the project root.
-                    # So 'prompthelix/tests' should be discoverable from there.
-                    # If running `python prompthelix/cli.py`, then start_dir needs to be '../prompthelix/tests' if CWD is `prompthelix`
-                    # or `prompthelix/tests` if CWD is project root.
-                    # The most robust way is to use package discovery if tests are part of the package.
-                    # For discover by path, it's relative to CWD or an absolute path.
-
-                    # Using 'prompthelix.tests' as the start_dir for package-based discovery
-                    # This requires that 'prompthelix' is in sys.path (e.g. installed or PYTHONPATH set)
-                    # and that tests directory is a package (has __init__.py)
-                    # And subdirectories (unit, integration) also have __init__.py
-                    try:
-                        print(
-                            f"Attempting package discovery for 'prompthelix.tests' from project root '{project_root}'"
-                        )
-                        suite = loader.discover(
-                            start_dir="prompthelix.tests", top_level_dir=project_root
-                        )
-                    except ImportError:
-                        print(
-                            "Package discovery failed. Ensure 'prompthelix' is in PYTHONPATH or installed.",
-                            file=sys.stderr,
-                        )
-                        print(
-                            "Attempting path discovery from CWD: 'prompthelix/tests'",
-                            file=sys.stderr,
-                        )
-                        # This assumes CWD is project root
-                        package_dir = (
-                            "prompthelix/tests/interactive"
-                            if args.interactive
-                            else "prompthelix/tests"
-                        )
-                        suite = loader.discover(start_dir=package_dir)
+                # Attempt package discovery as a fallback
+                try:
+                    print(
+                        f"Attempting package discovery for 'prompthelix.tests' from project root '{project_root}'"
+                    )
+                    suite = loader.discover(
+                        start_dir="prompthelix.tests", top_level_dir=project_root
+                    )
+                except ImportError:
+                    print(
+                        "Package discovery failed. Ensure 'prompthelix' is in PYTHONPATH or installed.",
+                        file=sys.stderr,
+                    )
+                    package_dir = (
+                        "prompthelix/tests/interactive"
+                        if args.interactive
+                        else "prompthelix/tests"
+                    )
+                    suite = loader.discover(start_dir=package_dir)
 
             else:  # start_dir (e.g. /app/prompthelix/tests) was found
                 print(f"Using path discovery from: {start_dir}")

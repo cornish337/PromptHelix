@@ -98,11 +98,8 @@ def list_interactive_tests() -> List[str]:
     """Discover interactive tests from multiple specified directories."""
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 
-    # Define paths to the interactive test directories
-    # Path 1: PROJECT_ROOT/tests/interactive
-    # Path 2: PROJECT_ROOT/prompthelix/tests/interactive
+    # Define path to the interactive test directory
     interactive_test_dirs = [
-        os.path.join(project_root, "tests", "interactive"),
         os.path.join(project_root, "prompthelix", "tests", "interactive")
     ]
 
@@ -138,15 +135,9 @@ TEST_SUITES_CONFIG = [
     {
         "id": "interactive_all",
         "name": "All Interactive Tests",
-        "paths": ["tests/interactive", "prompthelix/tests/interactive"], # Relative to project root
+        "paths": ["prompthelix/tests/interactive"],
         "pattern": "test_*.py",
         "default": True,
-    },
-    {
-        "id": "interactive_general",
-        "name": "General Interactive Tests",
-        "paths": ["tests/interactive"],
-        "pattern": "test_*.py",
     },
     {
         "id": "interactive_prompthelix",
