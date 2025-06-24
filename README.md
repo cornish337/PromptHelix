@@ -228,21 +228,12 @@ The repository includes a `docker-compose.yaml` that runs both the application a
 3.  **Access the application:**
     The API and UI will be available at [http://localhost:8000](http://localhost:8000).
 
-### Starting the Celery Worker
+### Optional Celery Integration
 
-PromptHelix uses Celery for background task processing. A running Redis instance
-is required as both the broker and result backend. The included
-`docker-compose.yaml` starts Redis and sets the `CELERY_BROKER_URL` and
-`CELERY_RESULT_BACKEND_URL` environment variables automatically.
-
-To start a worker locally once Redis is available, run:
-
-```bash
-celery -A prompthelix.celery_app worker -l info
-```
-
-Leave this process running so asynchronous tasks dispatched by the application
-can be executed.
+Older versions experimented with Celery for distributed task processing, but the
+current code relies on FastAPI's built‑in `BackgroundTasks`. The Celery worker
+and task stubs have been removed. If you wish to experiment with Celery, you'll
+need to add your own worker and tasks.
 
 
 ### Manual Deployment
