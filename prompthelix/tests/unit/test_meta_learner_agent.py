@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import patch, mock_open, MagicMock
+from unittest.mock import patch, mock_open, MagicMock, AsyncMock # Added AsyncMock
 import os
 import json
 import asyncio # Added import
@@ -77,20 +77,22 @@ class TestMetaLearnerAgent(unittest.TestCase):
         self.assertIsInstance(learner.data_log, list, "Data log should be initialized as a list.")
 
 
-    def test_process_request_high_fitness_eval(self):
+    async def test_process_request_high_fitness_eval(self):
         """Test process_request with evaluation data indicating high fitness."""
-        # This test is largely the same as before, but ensures it still works with the new structure
-        # and mocks save_knowledge correctly.
         mock_bus = MagicMock(spec=MessageBus)
         learner = MetaLearnerAgent(message_bus=mock_bus, knowledge_file_path=self.default_test_file_path)
         prompt = PromptChromosome(genes=["Good prompt gene 1", "Instruction: Be good"])
         eval_data = {"prompt_chromosome": prompt, "fitness_score": 0.9}
         request_data = {"data_type": "evaluation_result", "data": eval_data}
         
-        with patch('prompthelix.agents.meta_learner.call_llm_api', return_value='["Effective instruction"]') as mock_llm:
+        # Mock call_llm_api to return an awaitable Future
+        mock_llm_future = asyncio.Future()
+        mock_llm_future.set_result(json.dumps(["Effective instruction"])) # LLM response as JSON string
+
+        with patch('prompthelix.agents.meta_learner.call_llm_api', return_value=mock_llm_future) as mock_llm:
             with patch.object(MetaLearnerAgent, 'save_knowledge') as mock_save:
                 initial_pattern_count = len(learner.knowledge_base["successful_prompt_features"])
-                result = asyncio.run(learner.process_request(request_data))
+                result = await learner.process_request(request_data)
 
         self.assertEqual(result["status"], "Data processed successfully.")
         self.assertEqual(len(learner.knowledge_base["successful_prompt_features"]), initial_pattern_count + 1)
@@ -102,7 +104,7 @@ class TestMetaLearnerAgent(unittest.TestCase):
             mock_save.assert_called()
 
 
-    def test_process_request_critique_data_with_metrics(self):
+    async def test_process_request_critique_data_with_metrics(self):
         """Test processing critique data that includes programmatic metric_details."""
         mock_bus = MagicMock(spec=MessageBus)
         learner = MetaLearnerAgent(message_bus=mock_bus, knowledge_file_path=self.default_test_file_path)
@@ -115,7 +117,7 @@ class TestMetaLearnerAgent(unittest.TestCase):
             "prompt_length_score": 0.9
         }
         critique_data = {
-            "prompt_chromosome": dummy_prompt, # Optional, but good for context
+            "prompt_chromosome": dummy_prompt,
             "feedback_points": critique_feedback_points,
             "metric_details": metric_details_payload
         }
@@ -124,52 +126,47 @@ class TestMetaLearnerAgent(unittest.TestCase):
         initial_metric_stats_count = len(learner.knowledge_base["prompt_metric_stats"])
         initial_legacy_pitfalls_count = learner.knowledge_base["legacy_common_pitfalls"].get("Structural Issue", 0)
 
-        # Mock LLM call for qualitative feedback analysis
-        with patch('prompthelix.agents.meta_learner.call_llm_api', return_value='["Brevity concern theme"]') as mock_llm_qualitative:
+        mock_llm_future = asyncio.Future()
+        mock_llm_future.set_result(json.dumps(["Brevity concern theme"]))
+        with patch('prompthelix.agents.meta_learner.call_llm_api', return_value=mock_llm_future) as mock_llm_qualitative:
             with patch.object(MetaLearnerAgent, 'save_knowledge') as mock_save:
-                result = asyncio.run(learner.process_request(request_data))
+                result = await learner.process_request(request_data)
 
         self.assertEqual(result["status"], "Data processed successfully.")
-
-        # Check programmatic metrics storage
         self.assertEqual(len(learner.knowledge_base["prompt_metric_stats"]), initial_metric_stats_count + 1)
         stored_metric_set = learner.knowledge_base["prompt_metric_stats"][-1]
         self.assertEqual(stored_metric_set["metrics"], metric_details_payload)
         self.assertEqual(stored_metric_set["prompt_id"], str(dummy_prompt.id))
 
-        # Check qualitative theme storage (if LLM was called for it)
         if critique_feedback_points:
-            mock_llm_qualitative.assert_called_once() # Ensure LLM was called for the feedback points
+            mock_llm_qualitative.assert_called_once()
             self.assertTrue(any(theme_entry["critique_theme"] == "Brevity concern theme" for theme_entry in learner.knowledge_base["common_critique_themes"]))
-        else:
+        else: # pragma: no cover
             mock_llm_qualitative.assert_not_called()
 
-        # Check fallback legacy pitfall update (includes "Programmatic Metric" now too)
-        # The _fallback_analyze_critique_data is always called.
         self.assertGreaterEqual(learner.knowledge_base["legacy_common_pitfalls"].get("Structural Issue: A bit short.", 0), initial_legacy_pitfalls_count)
-
 
         if learner.persist_on_update:
             mock_save.assert_called()
 
 
-    def test_identify_system_patterns_with_metric_stats(self):
+    async def test_identify_system_patterns_with_metric_stats(self): # Changed to async
         """Test _identify_system_patterns derives trends from prompt_metric_stats."""
         mock_bus = MagicMock(spec=MessageBus)
         learner = MetaLearnerAgent(message_bus=mock_bus, knowledge_file_path=self.default_test_file_path)
-        # Populate prompt_metric_stats with enough data to trigger trend derivation
         sample_metrics = [
             {"prompt_id": "p1", "metrics": {"clarity_score": 0.4, "completeness_score": 0.8, "specificity_score": 0.7, "prompt_length_score": 0.9}},
             {"prompt_id": "p2", "metrics": {"clarity_score": 0.3, "completeness_score": 0.9, "specificity_score": 0.6, "prompt_length_score": 0.8}},
             {"prompt_id": "p3", "metrics": {"clarity_score": 0.5, "completeness_score": 0.7, "specificity_score": 0.5, "prompt_length_score": 0.7}},
             {"prompt_id": "p4", "metrics": {"clarity_score": 0.35, "completeness_score": 0.8, "specificity_score": 0.7, "prompt_length_score": 0.9}},
             {"prompt_id": "p5", "metrics": {"clarity_score": 0.45, "completeness_score": 0.85, "specificity_score": 0.75, "prompt_length_score": 0.88}},
-        ] # Avg clarity will be (0.4+0.3+0.5+0.35+0.45)/5 = 0.4
+        ]
         learner.knowledge_base["prompt_metric_stats"] = sample_metrics
 
-        # Mock LLM for qualitative trend part of _identify_system_patterns to isolate statistical part
-        with patch('prompthelix.agents.meta_learner.call_llm_api', return_value='["LLM trend from other data"]') as mock_llm_qual_trends:
-            asyncio.run(learner._identify_system_patterns()) # Call directly for focused test
+        mock_llm_future = asyncio.Future()
+        mock_llm_future.set_result(json.dumps(["LLM trend from other data"]))
+        with patch('prompthelix.agents.meta_learner.call_llm_api', return_value=mock_llm_future) as mock_llm_qual_trends:
+            await learner._identify_system_patterns()
 
         self.assertTrue(learner.knowledge_base["statistical_prompt_metric_trends"])
         found_clarity_trend = False
@@ -201,30 +198,36 @@ class TestMetaLearnerAgent(unittest.TestCase):
     # --- Keeping existing tests below, may need minor adaptations for KB structure / mocks ---
     # test_identify_system_patterns_indirectly needs to be reviewed due to new structure of KB
     # and new logic in _identify_system_patterns
-    @patch('prompthelix.agents.meta_learner.call_llm_api')
-    def test_identify_system_patterns_indirectly_updated(self, mock_llm):
+    @patch('prompthelix.agents.meta_learner.call_llm_api', new_callable=MagicMock)
+    async def test_identify_system_patterns_indirectly_updated(self, mock_llm):
         """Updated test for _identify_system_patterns via process_request calls."""
         mock_bus = MagicMock(spec=MessageBus)
         learner = MetaLearnerAgent(message_bus=mock_bus, knowledge_file_path=self.default_test_file_path)
         
-        mock_llm.side_effect = [
-            '["High fitness feature 1"]',  # For eval_data1's _analyze_evaluation_data
-            '["Critique theme 1"]',       # For critique_data1's _analyze_critique_data
-            '["High fitness feature 2"]',  # For eval_data2's _analyze_evaluation_data
-            '["LLM trend: Focus on X"]'   # For _identify_system_patterns (qualitative part)
-        ]
+        async def mock_llm_side_effect_for_id_patterns(*args, **kwargs):
+            if mock_llm.call_count == 1: # _analyze_evaluation_data for eval_data1
+                return json.dumps(["High fitness feature 1"])
+            elif mock_llm.call_count == 2: # _analyze_critique_data for critique_data1
+                return json.dumps(["Critique theme 1"])
+            elif mock_llm.call_count == 3: # _analyze_evaluation_data for eval_data2
+                return json.dumps(["High fitness feature 2"])
+            elif mock_llm.call_count == 4: # _identify_system_patterns (qualitative)
+                return json.dumps(["LLM trend: Focus on X"])
+            return json.dumps([]) # Default empty list
+        mock_llm.side_effect = mock_llm_side_effect_for_id_patterns
+
         with patch.object(MetaLearnerAgent, 'save_knowledge'): # Mock save
             prompt1 = PromptChromosome(genes=["P1 G1"])
             eval_data1 = {"prompt_chromosome": prompt1, "fitness_score": 0.8}
-            asyncio.run(learner.process_request({"data_type": "evaluation_result", "data": eval_data1}))
+            await learner.process_request({"data_type": "evaluation_result", "data": eval_data1})
 
             critique_data1 = {"feedback_points": ["Legacy Pitfall: Too short"], "metric_details": {"clarity_score": 0.5}}
-            asyncio.run(learner.process_request({"data_type": "critique_result", "data": critique_data1}))
+            await learner.process_request({"data_type": "critique_result", "data": critique_data1})
 
             prompt2 = PromptChromosome(genes=["P2 G1", "P2 G2"])
             eval_data2 = {"prompt_chromosome": prompt2, "fitness_score": 0.85}
             # This third call should trigger _identify_system_patterns
-            asyncio.run(learner.process_request({"data_type": "evaluation_result", "data": eval_data2}))
+            await learner.process_request({"data_type": "evaluation_result", "data": eval_data2})
 
         # Check for LLM-derived qualitative trends
         self.assertTrue(any("LLM trend: Focus on X" in t.get("trend_description", "") for t in learner.knowledge_base["llm_identified_trends"]))
@@ -233,8 +236,8 @@ class TestMetaLearnerAgent(unittest.TestCase):
         self.assertTrue(learner.knowledge_base["legacy_performance_trends"] or not learner.knowledge_base["legacy_successful_patterns"])
 
 
-    @patch('prompthelix.agents.meta_learner.call_llm_api')
-    def test_generate_recommendations_indirectly_updated(self, mock_llm):
+    @patch('prompthelix.agents.meta_learner.call_llm_api', new_callable=MagicMock)
+    async def test_generate_recommendations_indirectly_updated(self, mock_llm):
         """Updated test for _generate_recommendations checking for various recommendation types."""
         mock_bus = MagicMock(spec=MessageBus)
         learner = MetaLearnerAgent(message_bus=mock_bus, knowledge_file_path=self.default_test_file_path)
@@ -242,19 +245,22 @@ class TestMetaLearnerAgent(unittest.TestCase):
         eval_data = {"prompt_chromosome": prompt, "fitness_score": 0.9}
         critique_data = {"feedback_points": ["Test feedback"], "metric_details": {"clarity_score": 0.3}} # low clarity
         
-        # Mock LLM side effects for multiple process_request calls and _identify_system_patterns
-        mock_llm.side_effect = [
-            '["Feature from eval 1"]',  # eval_data
-            '["Theme from critique 1"]',# critique_data
-            '["Feature from eval 2"]',  # eval_data again
-            '["LLM System Trend: Be Concise"]', # _identify_system_patterns (qualitative)
-            # Potentially more if other analysis methods are called by _identify_system_patterns itself
-        ]
-        with patch.object(MetaLearnerAgent, 'save_knowledge'): # Mock save
-            asyncio.run(learner.process_request({"data_type": "evaluation_result", "data": eval_data}))
-            asyncio.run(learner.process_request({"data_type": "critique_result", "data": critique_data})) # data_log len = 2, 1 metric_stat
+        async def mock_llm_side_effect_for_recs(*args, **kwargs):
+            if mock_llm.call_count == 1: # eval_data
+                return json.dumps(["Feature from eval 1"])
+            elif mock_llm.call_count == 2: # critique_data
+                return json.dumps(["Theme from critique 1"])
+            elif mock_llm.call_count == 3: # eval_data again (for process_request)
+                return json.dumps(["Feature from eval 2"])
+            elif mock_llm.call_count == 4: # _identify_system_patterns (qualitative)
+                return json.dumps(["LLM System Trend: Be Concise"])
+            return json.dumps([])
+        mock_llm.side_effect = mock_llm_side_effect_for_recs
 
-            # Add more metric stats to trigger statistical trend analysis for clarity
+        with patch.object(MetaLearnerAgent, 'save_knowledge'): # Mock save
+            await learner.process_request({"data_type": "evaluation_result", "data": eval_data})
+            await learner.process_request({"data_type": "critique_result", "data": critique_data})
+
             for i in range(4):
                 learner.knowledge_base["prompt_metric_stats"].append({
                     "prompt_id": f"dummy_id_{i}",
@@ -262,29 +268,24 @@ class TestMetaLearnerAgent(unittest.TestCase):
                                 "specificity_score": 0.6, "prompt_length_score": 0.8},
                     "associated_critique_feedback_count": 0
                 })
-            # Now we have 1 (from critique_data) + 4 = 5 entries.
-            # Avg clarity: (0.3 + 0.2 + 0.25 + 0.3 + 0.35) / 5 = 1.4 / 5 = 0.28. This should be < 0.6.
 
-            # This call makes data_log len = 3, triggering _identify_system_patterns
-            result = asyncio.run(learner.process_request({"data_type": "evaluation_result", "data": eval_data}))
+            result = await learner.process_request({"data_type": "evaluation_result", "data": eval_data})
 
         self.assertIsInstance(result["recommendations"], list)
         self.assertTrue(result["recommendations"])
 
-        # Check for LLM system trend recommendation
         self.assertTrue(any("LLM Insight: LLM System Trend: Be Concise" in rec for rec in result["recommendations"]))
-        # Check for metric trend recommendation (clarity was 0.3, should trigger)
         self.assertTrue(any("Metric Trend: Average clarity score is relatively low" in rec for rec in result["recommendations"]))
 
 
-    def test_process_request_unknown_data_type(self):
+    async def test_process_request_unknown_data_type(self):
         """Test process_request with an unknown data type."""
         mock_bus = MagicMock(spec=MessageBus)
         learner = MetaLearnerAgent(message_bus=mock_bus, knowledge_file_path=self.default_test_file_path)
         request_data = {"data_type": "unknown_type", "data": {"info": "test"}}
 
         with patch.object(MetaLearnerAgent, 'save_knowledge') as mock_save:
-             result = asyncio.run(learner.process_request(request_data))
+             result = await learner.process_request(request_data)
 
         self.assertEqual(result["status"], "Data processed successfully.")
         self.assertIsInstance(result["recommendations"], list)
@@ -293,17 +294,17 @@ class TestMetaLearnerAgent(unittest.TestCase):
             mock_save.assert_called_once()
 
 
-    def test_process_request_missing_keys(self):
+    async def test_process_request_missing_keys(self):
         """Test process_request with missing data_type or data keys."""
         mock_bus = MagicMock(spec=MessageBus)
         learner = MetaLearnerAgent(message_bus=mock_bus, knowledge_file_path=self.default_test_file_path)
         request_no_type = {"data": {"info": "test"}}
-        result_no_type = learner.process_request(request_no_type)
+        result_no_type = await learner.process_request(request_no_type) # await here
         self.assertEqual(result_no_type["status"], "Error: Missing data_type or data.")
         self.assertEqual(len(result_no_type["recommendations"]), 0)
 
         request_no_data = {"data_type": "evaluation_result"}
-        result_no_data = learner.process_request(request_no_data)
+        result_no_data = await learner.process_request(request_no_data) # await here
         self.assertEqual(result_no_data["status"], "Error: Missing data_type or data.")
         self.assertEqual(len(result_no_data["recommendations"]), 0)
 
@@ -586,7 +587,7 @@ class TestMetaLearnerAgent(unittest.TestCase):
 
 
     @patch.dict(GLOBAL_AGENT_SETTINGS, {"MetaLearner": {"persist_knowledge_on_update": True, "knowledge_file_path": "dummy.json"}}) # Corrected key
-    def test_persist_knowledge_on_update_true(self):
+    async def test_persist_knowledge_on_update_true(self):
         """Test save_knowledge is called if persist_knowledge_on_update is True."""
         mock_bus = MagicMock(spec=MessageBus)
         # Ensure __init__ doesn't fail trying to save due to file not found, if persist_on_update is True by default from code
@@ -598,11 +599,11 @@ class TestMetaLearnerAgent(unittest.TestCase):
         self.assertTrue(learner.persist_on_update) # Verify based on patched config
 
         with patch.object(learner, 'save_knowledge') as mock_save_in_process: # Renamed mock_save to avoid conflict
-            learner.process_request({"data_type": "test_event", "data": {"info": "test"}})
+            await learner.process_request({"data_type": "test_event", "data": {"info": "test"}})
             mock_save_in_process.assert_called_once()
 
     @patch.dict(GLOBAL_AGENT_SETTINGS, {"MetaLearner": {"persist_knowledge_on_update": False, "knowledge_file_path": "dummy.json"}}) # Corrected key
-    def test_persist_knowledge_on_update_false(self):
+    async def test_persist_knowledge_on_update_false(self):
         """Test save_knowledge is NOT called if persist_knowledge_on_update is False."""
         mock_bus = MagicMock(spec=MessageBus)
         # Ensure __init__ doesn't fail trying to save due to file not found
@@ -615,55 +616,61 @@ class TestMetaLearnerAgent(unittest.TestCase):
                          f"Learner's persist_on_update should be False due to patched config, but was {learner.persist_on_update}")
 
         with patch.object(learner, 'save_knowledge') as mock_save_in_process: # Renamed mock_save
-            learner.process_request({"data_type": "test_event", "data": {"info": "test"}})
+            await learner.process_request({"data_type": "test_event", "data": {"info": "test"}})
             mock_save_in_process.assert_not_called()
 
     # --- LLM Interaction Fallback Tests ---
-    @patch('prompthelix.agents.meta_learner.call_llm_api', side_effect=Exception("LLM API Error"))
-    def test_analyze_evaluation_data_llm_failure_falls_back(self, mock_call_llm_api):
+    @patch('prompthelix.agents.meta_learner.call_llm_api', new_callable=AsyncMock)
+    async def test_analyze_evaluation_data_llm_failure_falls_back(self, mock_call_llm_api):
         """Test _analyze_evaluation_data falls back on LLM failure."""
+        mock_call_llm_api.side_effect = Exception("LLM API Error") # AsyncMock handles side effect exceptions correctly
+
         mock_bus = MagicMock(spec=MessageBus)
         learner = MetaLearnerAgent(message_bus=mock_bus, knowledge_file_path=self.default_test_file_path)
+        learner.persist_on_update = False # Disable saving for this test unit
         prompt = PromptChromosome(genes=["Test gene"], fitness_score=0.0)
         eval_data = {"prompt_chromosome": prompt, "fitness_score": 0.8}
 
-        with patch.object(learner, '_fallback_analyze_evaluation_data') as mock_fallback:
-            with patch.object(learner, 'save_knowledge'): # Mock save_knowledge as it's not the focus here
-                 learner.process_request({"data_type": "evaluation_result", "data": eval_data})
+        with patch.object(learner, '_fallback_analyze_evaluation_data', new_callable=MagicMock) as mock_fallback:
+            await learner.process_request({"data_type": "evaluation_result", "data": eval_data})
 
-        mock_call_llm_api.assert_called_once()
+        mock_call_llm_api.assert_awaited_once() # Use assert_awaited_once for AsyncMock
         mock_fallback.assert_called_once_with(eval_data)
 
 
-    @patch('prompthelix.agents.meta_learner.call_llm_api', side_effect=Exception("LLM API Error"))
-    def test_analyze_critique_data_llm_failure_falls_back(self, mock_call_llm_api):
+    @patch('prompthelix.agents.meta_learner.call_llm_api', new_callable=AsyncMock)
+    async def test_analyze_critique_data_llm_failure_falls_back(self, mock_call_llm_api):
         """Test _analyze_critique_data falls back on LLM failure."""
+        mock_call_llm_api.side_effect = Exception("LLM API Error")
+
         mock_bus = MagicMock(spec=MessageBus)
         learner = MetaLearnerAgent(message_bus=mock_bus, knowledge_file_path=self.default_test_file_path)
+        learner.persist_on_update = False
         critique_data = {"feedback_points": ["Some feedback"]}
 
-        with patch.object(learner, '_fallback_analyze_critique_data') as mock_fallback:
-            with patch.object(learner, 'save_knowledge'):
-                learner.process_request({"data_type": "critique_result", "data": critique_data})
+        with patch.object(learner, '_fallback_analyze_critique_data', new_callable=MagicMock) as mock_fallback:
+            await learner.process_request({"data_type": "critique_result", "data": critique_data})
 
-        mock_call_llm_api.assert_called_once()
+        mock_call_llm_api.assert_awaited_once()
         mock_fallback.assert_called_once_with(critique_data)
 
-    @patch('prompthelix.agents.meta_learner.call_llm_api', side_effect=Exception("LLM API Error"))
-    def test_identify_system_patterns_llm_failure_falls_back(self, mock_call_llm_api):
+    @patch('prompthelix.agents.meta_learner.call_llm_api', new_callable=AsyncMock)
+    async def test_identify_system_patterns_llm_failure_falls_back(self, mock_call_llm_api):
         """Test _identify_system_patterns falls back on LLM failure."""
+        mock_call_llm_api.side_effect = Exception("LLM API Error")
+
         mock_bus = MagicMock(spec=MessageBus)
         learner = MetaLearnerAgent(message_bus=mock_bus, knowledge_file_path=self.default_test_file_path)
-        learner.knowledge_base["successful_prompt_features"].append({"feature": "dummy"})
-
-        with patch.object(learner, '_fallback_identify_system_patterns') as mock_fallback:
-             with patch.object(learner, 'save_knowledge'): # Mock save
-                # This call path is indirect through process_request's logic for data_log length
-                # To test directly:
-                learner._identify_system_patterns()
+        learner.persist_on_update = False
+        # Ensure there's some data to trigger the LLM call part of _identify_system_patterns
+        learner.knowledge_base["successful_prompt_features"] = [{"feature_description": "test", "count":1, "fitness":0.9}]
 
 
-        mock_call_llm_api.assert_called_once() # Called by _identify_system_patterns
+        with patch.object(learner, '_fallback_identify_system_patterns', new_callable=MagicMock) as mock_fallback:
+            await learner._identify_system_patterns()
+
+
+        mock_call_llm_api.assert_awaited_once()
         mock_fallback.assert_called_once()
 
     # --- Tests for analyze_generation method ---

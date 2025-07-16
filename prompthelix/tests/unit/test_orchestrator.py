@@ -215,60 +215,46 @@ class TestOrchestratorConfigPropagation(unittest.IsolatedAsyncioTestCase): # Cha
 
         # The FitnessEvaluator is dynamically imported. We mock import_module to control this.
         MockFitnessEvaluatorClass = MagicMock(spec=FitnessEvaluator)
+        MockFitnessEvaluatorClass.__name__ = "MockFitnessEvaluatorClass" # Added this line
         mock_fitness_eval_instance = MagicMock(spec=FitnessEvaluator)
         mock_fitness_eval_instance.evaluate = AsyncMock(return_value=0.75)
         MockFitnessEvaluatorClass.return_value = mock_fitness_eval_instance
 
-        # We need to store the original importlib.import_module to call it for non-target imports
-        # However, directly accessing importlib.import_module here would use the *real* one,
-        # not the one from the orchestrator's context if it were different (it's not here, but good practice).
-        # The mock_import_module itself will be called by the orchestrator.
-        original_import_module = importlib.import_module
+        # Store the real import_module before patching might occur if patch target is too broad.
+        # Store the real import_module before patching might occur if patch target is too broad.
+        # Here, we patch 'prompthelix.orchestrator.importlib.import_module', so inside the side_effect,
+        # a call to 'importlib.import_module' would be a call to the mock itself.
+        # We need to use the original system 'importlib.import_module'.
+        # Using unittest.mock.DEFAULT is the cleaner way to achieve this.
 
         def import_module_side_effect(name):
-            # Use global_config.settings from the main app, not the mocked 'mock_settings' for this path check
-            if name == global_config.settings.FITNESS_EVALUATOR_CLASS.rsplit('.', 1)[0] or \
-               name == global_config.settings.FITNESS_EVALUATOR_CLASS: # check full path or module path
+            # Determine the module and class name for FitnessEvaluator from config
+            # This must match how orchestrator.py determines it.
+            fitness_evaluator_config_path = global_config.settings.FITNESS_EVALUATOR_CLASS
+            target_module_name, target_class_name = fitness_evaluator_config_path.rsplit('.', 1)
 
-                # Ensure the dynamically imported module has the expected class attribute
-                mock_fe_module = MagicMock()
-                class_name_to_set = global_config.settings.FITNESS_EVALUATOR_CLASS.split('.')[-1]
-                setattr(mock_fe_module, class_name_to_set, MockFitnessEvaluatorClass)
+            if name == target_module_name:
+                # We are asked to import the module that supposedly contains FitnessEvaluatorClass
+                mock_fe_module = MagicMock(name=f"mock_module_{target_module_name}")
+                setattr(mock_fe_module, target_class_name, MockFitnessEvaluatorClass)
                 return mock_fe_module
 
-            # Allow actual import for strategies and other non-critical dynamic imports
-            if name.startswith("prompthelix.genetics.mutation_strategies") or \
-               name.startswith("prompthelix.genetics.selection_strategies") or \
-               name.startswith("prompthelix.genetics.crossover_strategies") or \
-               name.startswith("prompthelix.database"): # Allow database import
-                return original_import_module(name)
-
-            # Fallback for any other dynamic import that we haven't specifically mocked
-            # print(f"Warning: Unmocked dynamic import in test: {name} - returning generic mock")
-            # return MagicMock()
-            # More robust: if it's not one we specifically handle, let the original call attempt it
-            # This requires careful consideration of what 'name' might be.
-            # For this test, we are primarily concerned with the FitnessEvaluator.
-            # Using unittest.mock.DEFAULT will fall back to the original function if not handled.
-            # However, since we are patching 'prompthelix.orchestrator.importlib.import_module',
-            # we need to be careful not to create a loop if the original is needed.
-            # The safest is to explicitly call the real one for non-target paths.
-            # If the path isn't one of the above, it's an unexpected dynamic import for this test.
-            # Raise an error or return a generic mock. For now, let's assume other dynamic imports are not critical.
-            # print(f"TestOrchestrator: Passing through unhandled import: {name}")
-            return original_import_module(name)
-
+            # For any other module name, defer to the original import mechanism.
+            return unittest.mock.DEFAULT
 
         mock_import_module.side_effect = import_module_side_effect
 
         # --- Configure mock classes and their instances ---
+        mock_architect_cls.__name__ = "MockPromptArchitectAgent"
         mock_architect_instance = MagicMock(spec=PromptArchitectAgent)
         mock_architect_cls.return_value = mock_architect_instance
 
+        mock_results_eval_cls.__name__ = "MockResultsEvaluatorAgent"
         mock_results_eval_instance = MagicMock(spec=ResultsEvaluatorAgent)
         mock_results_eval_instance.process_request = AsyncMock(return_value={"fitness_score": 0.5, "detailed_metrics": {}})
         mock_results_eval_cls.return_value = mock_results_eval_instance
 
+        mock_style_opt_cls.__name__ = "MockStyleOptimizerAgent"
         mock_style_opt_instance = MagicMock(spec=StyleOptimizerAgent)
         mock_style_opt_cls.return_value = mock_style_opt_instance
 

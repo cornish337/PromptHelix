@@ -197,11 +197,35 @@ class TestResultsEvaluatorAgent(unittest.TestCase):
         self.assertEqual(metrics['llm_assessed_quality'], 0.0)
         self.assertIn("LLM API Error: RATE_LIMIT_ERROR", errors)
 
-    @patch('prompthelix.agents.results_evaluator.call_llm_api')
-    def test_analyze_content_unparseable_response(self, mock_call_llm_api):
+    @patch('prompthelix.agents.results_evaluator.call_llm_api', new_callable=AsyncMock)
+    async def test_analyze_content_api_error(self, mock_call_llm_api): # Made async
+        mock_call_llm_api.return_value = "RATE_LIMIT_ERROR" # This mock is for an async function, should return awaitable
+        # Let's assume call_llm_api itself returns a string in error cases directly, not a Future.
+        # If call_llm_api is async and could raise or return non-awaitable on error, this mock might need adjustment.
+        # For now, assuming direct string return on error is handled by _analyze_content's internal try/except.
+
+        with patch('prompthelix.agents.results_evaluator.logger.warning') as mock_log_warning:
+            metrics, errors = await self.evaluator._analyze_content( # Added await
+                llm_output="Some output",
+                task_desc=self.task_desc,
+                prompt_chromosome=self.test_prompt
+            )
+        self.assertEqual(mock_log_warning.call_count, 2) # One for API error, one for fallback
+        log_call_1_args = mock_log_warning.call_args_list[0][0]
+        self.assertIn(f"Agent '{self.evaluator.agent_id}': LLM call for content analysis failed with error code: RATE_LIMIT_ERROR", log_call_1_args[0])
+        log_call_2_args = mock_log_warning.call_args_list[1][0]
+        self.assertIn(f"Agent '{self.evaluator.agent_id}': Using fallback LLM metrics. Reason: LLM API Error: RATE_LIMIT_ERROR", log_call_2_args[0])
+
+        self.assertEqual(metrics['llm_analysis_status'], 'fallback_due_to_error')
+        self.assertIn("LLM API Error: RATE_LIMIT_ERROR", metrics['llm_assessment_feedback'])
+        self.assertEqual(metrics['llm_assessed_quality'], 0.0)
+        self.assertIn("LLM API Error: RATE_LIMIT_ERROR", errors)
+
+    @patch('prompthelix.agents.results_evaluator.call_llm_api', new_callable=AsyncMock)
+    async def test_analyze_content_unparseable_response(self, mock_call_llm_api):
         mock_call_llm_api.return_value = "This is not valid JSON {{{{ and not an API error."
         with patch('prompthelix.agents.results_evaluator.logger.warning') as mock_logger_warning:
-            metrics, errors = self.evaluator._analyze_content(
+            metrics, errors = await self.evaluator._analyze_content(
                 llm_output="Some output",
                 task_desc=self.task_desc,
                 prompt_chromosome=self.test_prompt
@@ -214,12 +238,12 @@ class TestResultsEvaluatorAgent(unittest.TestCase):
         self.assertEqual(metrics['llm_assessed_quality'], 0.0)
         self.assertTrue(any("LLM content analysis response was not in expected JSON format." in e for e in errors))
 
-    @patch('prompthelix.agents.results_evaluator.call_llm_api')
-    def test_analyze_content_json_decode_error(self, mock_call_llm_api):
-        mock_call_llm_api.return_value = "{'relevance_score': 0.8, 'coherence_score': 'not_a_float_actually_string}"
+    @patch('prompthelix.agents.results_evaluator.call_llm_api', new_callable=AsyncMock)
+    async def test_analyze_content_json_decode_error(self, mock_call_llm_api):
+        mock_call_llm_api.return_value = "{'relevance_score': 0.8, 'coherence_score': 'not_a_float_actually_string}" # Invalid JSON
         with patch('prompthelix.agents.results_evaluator.logger.error') as mock_log_error, \
              patch('prompthelix.agents.results_evaluator.logger.warning') as mock_log_warning:
-            metrics, errors = self.evaluator._analyze_content(
+            metrics, errors = await self.evaluator._analyze_content(
                 llm_output="Some output",
                 task_desc=self.task_desc,
                 prompt_chromosome=self.test_prompt
@@ -240,22 +264,22 @@ class TestResultsEvaluatorAgent(unittest.TestCase):
         self.assertTrue(any("JSON decoding failed" in e for e in errors))
         self.assertIn("JSON decoding failed", metrics['llm_assessment_feedback'])
 
-    @patch('prompthelix.agents.results_evaluator.call_llm_api')
-    def test_analyze_content_successful_response(self, mock_call_llm_api):
+    @patch('prompthelix.agents.results_evaluator.call_llm_api', new_callable=AsyncMock)
+    async def test_analyze_content_successful_response(self, mock_call_llm_api):
         mock_response_dict = {
             "relevance_score": 0.9, "coherence_score": 0.8, "completeness_score": 0.7,
             "accuracy_assessment": "Looks good.", "safety_score": 1.0,
             "overall_quality_score": 0.85, "feedback_text": "Excellent work."
         }
         mock_call_llm_api.return_value = f"Some text before json... {json.dumps(mock_response_dict)} ... and some after."
-        logging.disable(logging.NOTSET)
-        self.evaluator.logger.setLevel(logging.INFO)
-        metrics, errors = self.evaluator._analyze_content(
+        logging.disable(logging.NOTSET) # Ensure logs are not disabled by other tests
+        self.evaluator.logger.setLevel(logging.INFO) # Ensure agent logger is at a level that would show issues
+        metrics, errors = await self.evaluator._analyze_content(
             llm_output="Some output",
             task_desc=self.task_desc,
             prompt_chromosome=self.test_prompt
         )
-        logging.disable(logging.CRITICAL)
+        logging.disable(logging.CRITICAL) # Re-disable after test if needed
         self.assertEqual(metrics['llm_analysis_status'], 'success')
         self.assertEqual(metrics['llm_assessed_relevance'], 0.9)
         self.assertEqual(len(errors), 0)
