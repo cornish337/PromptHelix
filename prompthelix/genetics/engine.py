@@ -616,5 +616,3 @@ class PopulationManager:
 # Ensure other methods like pause_evolution, resume_evolution, stop_evolution, broadcast_ga_update if they call async methods, are also async.
 # For now, assuming they are simple state changes or their async calls are already handled.
 # The save_population and load_population are synchronous IO, which is fine if not called from deep within an async critical path without care.
-
-[end of prompthelix/genetics/engine.py]
