@@ -74,7 +74,7 @@ This section details the major functional blocks of the PromptHelix system.
 *   **Purpose**: Enables asynchronous execution of long-running tasks, such as GA experiments.
 *   **Key Modules/Files**:
     *   FastAPI `BackgroundTasks`: Used in `prompthelix/api/routes.py` for running GA experiments asynchronously when triggered via the API.
-    *   `prompthelix/celery_app.py`: Contains setup for Celery, suggesting its availability for more distributed task queuing, though its active integration level for core GA runs triggered via API seems to have shifted to `BackgroundTasks`.
+    *   `BackgroundTasks` from FastAPI handles asynchronous GA experiments. Earlier Celery prototypes have been removed, though the project could integrate Celery in the future if distributed workers become necessary.
 
 ### 2.10. Command-Line Interface (CLI)
 *   **Purpose**: Offers a command-line tool for interacting with the system, primarily for running GA experiments, tests, and utility functions.
@@ -223,8 +223,7 @@ This section explains how the application is configured.
     *   Database connection URL (`DATABASE_URL`).
     *   API keys for LLM services (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.). These can also be fetched from the database if stored there.
     *   Debug mode (`DEBUG` or `PROMPTHELIX_DEBUG`).
-    *   Redis connection details (`REDIS_HOST`, `REDIS_PORT`) for caching or Celery.
-    *   Celery broker and backend URLs (`CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND`).
+    *   Redis connection details (`REDIS_HOST`, `REDIS_PORT`) for caching.
     *   Default GA parameters (population size, mutation rate, etc.).
     *   Paths for knowledge persistence (`KNOWLEDGE_DIR`), log files (`LOG_DIR`).
     *   Agent-specific settings (default models, file paths, behavior flags) in `AGENT_SETTINGS`.
@@ -284,7 +283,7 @@ This section lists observations about parts of the codebase that might be redund
 ### 6.3. GA Concurrency and State Management
 1.  **Global GA Runner (`ph_globals.active_ga_runner`)**:
     *   API routes for controlling GA experiments (`/api/ga/pause`, `/resume`, `/cancel`, `/status`) rely on a single global `active_ga_runner` instance. This will not work correctly if multiple GA experiments are intended to run concurrently and be controlled independently (e.g., if multiple users trigger background GA tasks).
-    *   **Suggestion**: Each GA task (e.g., managed by FastAPI `BackgroundTasks` or Celery) should have its own `GeneticAlgorithmRunner` instance. A mechanism to map `task_id` to its corresponding runner/status would be needed for the control API endpoints. This might involve a shared dictionary (with appropriate locking) or storing task status/control information in the database.
+    *   **Suggestion**: Each GA task should have its own `GeneticAlgorithmRunner` instance. When using `BackgroundTasks` (or a future Celery setup), a mechanism to map `task_id` to its runner/state would be required. This might involve a shared dictionary (with appropriate locking) or persisting task status in the database.
 
 ### 6.4. Database Session Management in Orchestrator
 1.  **`SessionLocal` in `prompthelix.orchestrator.py`**:
@@ -300,9 +299,7 @@ This section lists observations about parts of the codebase that might be redund
     *   **Suggestion**: Clarify if the `FitnessEvaluator`'s role includes invoking the LLM or if it strictly evaluates a provided `llm_output`. If the former, it should handle LLM calls in `REAL` mode.
 
 ### 6.6. Task Queuing Strategy
-1.  **`BackgroundTasks` vs. Celery**:
-    *   The API uses FastAPI's `BackgroundTasks` for GA experiments. `celery_app.py` suggests Celery is also available.
-    *   **Suggestion**: Clarify the intended roles. `BackgroundTasks` is simpler for in-process background work. Celery is more robust for distributed, multi-worker setups. If Celery is the long-term goal for scalability, GA tasks might eventually migrate to it. For now, `BackgroundTasks` is a reasonable start.
+`BackgroundTasks` from FastAPI currently runs GA experiments asynchronously within the same process. Previous Celery experiments were removed. Celery could be reintroduced later if distributed processing becomes a requirement.
 
 ## 7. Directory Structure Overview
 
